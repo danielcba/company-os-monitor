@@ -1,0 +1,1 @@
+# Cognitive Core - Shared contracts and utilities

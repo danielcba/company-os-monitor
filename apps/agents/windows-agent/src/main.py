@@ -1,0 +1,67 @@
+"""Windows Agent Entry Point - Observation Capturer (WMI over WinRM)."""
+import asyncio
+import os
+import uuid
+
+import winrm
+from libs.cognitive_core.observation_bus import Observation, ObservationBus
+from redis.asyncio import Redis
+
+from src.collector import WindowsCollector
+from src.health import HealthServer
+
+
+def build_session() -> winrm.Session:
+    host = os.getenv("WINRM_HOST", "localhost")
+    port = int(os.getenv("WINRM_PORT", "5986"))
+    user = os.getenv("WINRM_USER", "")
+    password = os.getenv("WINRM_PASSWORD", "")
+    transport = os.getenv("WINRM_TRANSPORT", "ntlm")
+    cert_validation = os.getenv("WINRM_SERVER_CERT_VALIDATION", "validate")
+    return winrm.Session(
+        f"{host}:{port}",
+        auth=(user, password),
+        transport=transport,
+        server_cert_validation=cert_validation,
+    )
+
+
+async def main():
+    redis_url = os.getenv("OBSERVATION_BUS_URL", "redis://localhost:6379")
+    redis = Redis.from_url(redis_url, decode_responses=True)
+    bus = ObservationBus(redis)
+
+    tenant_id = uuid.UUID(os.getenv("TENANT_ID", "00000000-0000-0000-0000-000000000001"))
+    source_id = uuid.UUID(os.getenv("SOURCE_ID", "00000000-0000-0000-0000-000000000001"))
+    interval = int(os.getenv("COLLECTION_INTERVAL_SECONDS", "60"))
+
+    collector = WindowsCollector(tenant_id, source_id, build_session())
+    health = HealthServer(collector)
+
+    await health.start()
+
+    while True:
+        try:
+            observations = collector.capture_all()
+            for obs in observations:
+                full_obs = Observation(
+                    id=uuid.uuid4(),
+                    tenant_id=obs.tenant_id,
+                    source_id=obs.source_id,
+                    source_type=obs.source_type,
+                    fact_type=obs.fact_type,
+                    fact_value=obs.fact_value,
+                    unit=obs.unit,
+                    quality_class=obs.quality_class,
+                    raw_payload=obs.raw_payload,
+                )
+                await bus.publish(full_obs)
+                health.record_capture()
+        except Exception as e:
+            health.record_error(e)
+
+        await asyncio.sleep(interval)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

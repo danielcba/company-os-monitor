@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytype/
+.coverage
+htmlcov/
+.coverage.*
+cov.xml
+*.coverage
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing / caching
+.pytest_cache/
+.ruff_cache/
+
+# Environment / secrets (committed: .env.example)
+.env
+.env.*
+!.env.example
+
+# Builds
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/

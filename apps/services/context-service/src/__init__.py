@@ -1,0 +1,1 @@
+"""Context Service - Perception Layer: Context Activation (Explain)."""

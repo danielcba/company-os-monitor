@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>{{ report.title }}</title>
+<style>
+  @page { size: A4; margin: 1.8cm; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #222; font-size: 10pt; line-height: 1.35; }
+  h1 { font-size: 16pt; margin: 0 0 2px; color: #111; }
+  .meta { color: #666; font-size: 9pt; margin-bottom: 10px; }
+  .section-title { font-size: 11.5pt; font-weight: bold; margin-top: 16px; border-bottom: 2px solid #333; padding-bottom: 3px; color: #111; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  th { background: #f2f2f2; font-size: 9pt; }
+  .empty { color: #888; font-style: italic; }
+  ul { margin: 4px 0 4px 16px; }
+</style>
+</head>
+<body>
+  <h1>{{ report.title }}</h1>
+  <div class="meta">
+    Tenant: {{ report.tenant.name }} &nbsp;|&nbsp; Period: {{ report.period.start }} to {{ report.period.end }} &nbsp;|&nbsp; Generated: {{ report.generated_at }} &nbsp;|&nbsp; Decisions: {{ report.decision_count }}
+  </div>
+
+  <div class="section-title">TOP {{ report.top_decisions|length }} CRITICAL DECISIONS</div>
+  {% if report.top_decisions %}
+  <table>
+    <thead>
+      <tr><th>Decision</th><th>Commitment</th><th>Risk</th><th>Confidence</th><th>Expected outcomes</th></tr>
+    </thead>
+    <tbody>
+      {% for d in report.top_decisions %}
+      <tr>
+        <td>{{ d.decision_id }}</td>
+        <td>{{ d.commitment }}</td>
+        <td>{{ d.risk_tolerance }}</td>
+        <td>{{ '%.0f%%'|format((d.confidence or 0) * 100) }}</td>
+        <td>{{ d.expected_outcome_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No committed decisions in this period.</p>
+  {% endif %}
+
+  <div class="section-title">TOP FUTURE RISKS (Hypotheses with Confidence above threshold)</div>
+  {% if report.future_risks %}
+  <ul>
+    {% for r in report.future_risks %}
+    <li>{{ r.description }} — confidence {{ '%.0f%%'|format(r.confidence * 100) }} ({{ r.status }})</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">No hypothesis above the confidence threshold.</p>
+  {% endif %}
+
+  <div class="section-title">DECISIONS REQUIRING YOUR AUTHORITY</div>
+  {% if report.pending_authority %}
+  <table>
+    <thead>
+      <tr><th>Decision</th><th>Commitment</th><th>Risk</th></tr>
+    </thead>
+    <tbody>
+      {% for d in report.pending_authority %}
+      <tr>
+        <td>{{ d.decision_id }}</td>
+        <td>{{ d.commitment }}</td>
+        <td>{{ d.risk_tolerance }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No decision currently requires authority.</p>
+  {% endif %}
+</body>
+</html>

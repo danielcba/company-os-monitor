@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>{{ report.title }}</title>
+<style>
+  @page { size: A4; margin: 1.8cm; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #222; font-size: 9.5pt; line-height: 1.35; }
+  h1 { font-size: 15pt; margin: 0 0 2px; color: #111; }
+  .meta { color: #666; font-size: 9pt; margin-bottom: 10px; }
+  .section { margin-top: 14px; }
+  .section-title { font-size: 11pt; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 3px; color: #111; }
+  .decision-id { font-size: 9.5pt; font-weight: bold; color: #444; margin: 10px 0 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+  th, td { text-align: left; padding: 3px 5px; border-bottom: 1px solid #eee; vertical-align: top; }
+  th { background: #f5f5f5; font-size: 8.5pt; }
+  pre { background: #f7f7f7; border: 1px solid #ddd; padding: 6px; font-size: 8pt; white-space: pre-wrap; }
+  .empty { color: #888; font-style: italic; }
+</style>
+</head>
+<body>
+  <h1>{{ report.title }}</h1>
+  <div class="meta">
+    Tenant: {{ report.tenant.name }} &nbsp;|&nbsp; Period: {{ report.period.start }} to {{ report.period.end }} &nbsp;|&nbsp; Generated: {{ report.generated_at }} &nbsp;|&nbsp; Decisions: {{ report.decision_count }}
+  </div>
+
+  {% for trace in report.decision_traces %}
+  <div class="section">
+    <div class="section-title">SECTION 1: COGNITIVE TRACE</div>
+    {% if trace.decision %}
+    <table>
+      <tr><th>Decision ID</th><td>{{ trace.decision.id }}</td></tr>
+      <tr><th>Authority</th><td>{{ trace.decision.authority_id }}</td></tr>
+      <tr><th>Risk tolerance</th><td>{{ trace.decision.risk_tolerance }}</td></tr>
+      <tr><th>Status</th><td>{{ trace.decision.status }}</td></tr>
+      <tr><th>Committed at</th><td>{{ trace.decision.committed_at }}</td></tr>
+      <tr><th>Confidence</th><td>{{ trace.confidence.confidence_score if trace.confidence else 'n/a' }}</td></tr>
+    </table>
+    {% else %}
+    <p class="empty">No decision data.</p>
+    {% endif %}
+
+    <div class="section-title">SECTION 2: EVIDENCE CHAIN</div>
+    {% if trace.evidence %}
+    <table>
+      <thead><tr><th>Evidence</th><th>Organization type</th><th>Quality</th><th>Weight</th><th>Context</th></tr></thead>
+      <tbody>
+        {% for e in trace.evidence %}
+        <tr>
+          <td>{{ e.id }}</td>
+          <td>{{ e.organization_type }}</td>
+          <td>{{ e.quality_class }}</td>
+          <td>{{ e.weight }}</td>
+          <td>{{ trace.contexts[0].mental_model_id if trace.contexts else '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="meta">Observations backing this decision: {{ trace.observations|length }}</p>
+    {% else %}
+    <p class="empty">No evidence chain.</p>
+    {% endif %}
+
+    <div class="section-title">SECTION 3: REASONING CHAIN</div>
+    {% if trace.hypothesis %}
+    <table>
+      <tr><th>Hypothesis</th><td>{{ trace.hypothesis.id }}</td></tr>
+      <tr><th>Description</th><td>{{ trace.hypothesis.description }}</td></tr>
+      <tr><th>Status</th><td>{{ trace.hypothesis.status }}</td></tr>
+      <tr><th>Falsification criterion</th><td>{{ trace.hypothesis.falsification_criterion }}</td></tr>
+    </table>
+    <p class="meta">Anomalies: {{ trace.anomalies|length }} | Patterns: {{ trace.patterns|length }}</p>
+    {% else %}
+    <p class="empty">No reasoning chain.</p>
+    {% endif %}
+
+    <div class="section-title">SECTION 4: CONFIDENCE CALIBRATION</div>
+    {% if trace.confidence %}
+    <table>
+      <tr><th>S (evidential support)</th><td>{{ trace.confidence.evidential_support }}</td></tr>
+      <tr><th>C (explanatory coherence)</th><td>{{ trace.confidence.explanatory_coherence }}</td></tr>
+      <tr><th>1-ECE (historical calibration)</th><td>{{ trace.confidence.historical_calibration }}</td></tr>
+      <tr><th>C_final</th><td>{{ trace.confidence.confidence_score }}</td></tr>
+      <tr><th>alpha</th><td>{{ trace.confidence.alpha }}</td></tr>
+      <tr><th>Calibration error estimate (ECE)</th><td>{{ trace.confidence.calibration_error_estimate }}</td></tr>
+    </table>
+    {% else %}
+    <p class="empty">No calibrated confidence.</p>
+    {% endif %}
+
+    <div class="section-title">SECTION 5: RECOMMENDATION &amp; ALTERNATIVES</div>
+    {% if trace.recommendation %}
+    <table>
+      <tr><th>Recommendation</th><td>{{ trace.recommendation.id }}</td></tr>
+      <tr><th>Action</th><td>{{ trace.recommendation.action_description }}</td></tr>
+      <tr><th>Rationale</th><td>{{ trace.recommendation.rationale }}</td></tr>
+      <tr><th>Confidence</th><td>{{ trace.recommendation.confidence_score }}</td></tr>
+    </table>
+    <p class="meta">Alternatives considered: {{ trace.recommendation.alternatives_considered|length }}</p>
+    {% else %}
+    <p class="empty">No recommendation.</p>
+    {% endif %}
+
+    <div class="section-title">SECTION 6: DECISION &amp; EXPECTED OUTCOMES (Falsifiable)</div>
+    {% if trace.decision %}
+    <p>{{ trace.decision.commitment }}</p>
+    <pre>{{ trace.decision.expected_outcomes }}</pre>
+    {% else %}
+    <p class="empty">No decision data.</p>
+    {% endif %}
+
+    <div class="section-title">SECTION 7: LEARNING LOOP (Post-Execution)</div>
+    <p class="empty">To be populated after deadline: expected vs actual comparison, Brier score update, ECE recalibration.</p>
+  </div>
+  {% endfor %}
+</body>
+</html>

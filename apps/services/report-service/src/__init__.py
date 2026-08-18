@@ -1,0 +1,1 @@
+# Report Service - non-canonical output capability (ADR-0002)

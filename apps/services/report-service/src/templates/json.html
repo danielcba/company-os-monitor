@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>{{ report.title }}</title>
+<style>
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #222; font-size: 9.5pt; }
+  h1 { font-size: 14pt; }
+  pre { background: #f7f7f7; border: 1px solid #ddd; padding: 8px; font-size: 8pt; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h1>{{ report.title }}</h1>
+  <p>Tenant: {{ report.tenant.name }} &nbsp;|&nbsp; Period: {{ report.period.start }} to {{ report.period.end }} &nbsp;|&nbsp; Decisions: {{ report.decision_count }}</p>
+  <pre>{{ report_json }}</pre>
+</body>
+</html>

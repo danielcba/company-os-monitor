@@ -1,0 +1,1 @@
+"""Auth package: security (JWT/bcrypt) + RBAC facade for the user-service."""
