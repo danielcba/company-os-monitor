@@ -40,6 +40,8 @@ from src.boundary import (
     ACTIONS,
     check_boundary,
 )
+from src.observations import ObservationReadStore
+from src.summary import CognitiveSummaryStore
 
 # Default pipeline service health targets (canonical ports; override via env).
 DEFAULT_SERVICE_HEALTH: dict[str, str] = {
@@ -62,11 +64,17 @@ class GatewayService:
         jwt: JwtService,
         decision_store=None,
         report_store=None,
+        observation_store=None,
+        cognitive_summary_store=None,
         service_health: dict[str, str] | None = None,
+        dsn: str | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
         self.report_store = report_store
+        self._observation_store = observation_store
+        self._cognitive_summary_store = cognitive_summary_store
+        self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
         self.total_requests = 0
         self.total_rejected_401 = 0
@@ -180,6 +188,67 @@ class GatewayService:
         self.ensure_tenant_access(token, tenant_id)
         reports = await self.report_store.list_reports(tenant_id=uuid.UUID(tenant_id))
         return [_report_payload(r) for r in reports]
+
+    async def list_observations(
+        self,
+        token: TokenPayload,
+        tenant_id: str,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        fact_type: str | None = None,
+        source_type: str | None = None,
+        quality_class: str | None = None,
+        sort: str = "captured_at_desc",
+    ) -> dict[str, Any]:
+        """READ observations within the token's tenant scope (viewer+)."""
+        if self._observation_store is None:
+            raise RuntimeError("observation_store not configured in gateway")
+        self.ensure_tenant_access(token, tenant_id)
+        observations = await self._observation_store.list_observations(
+            tenant_id=uuid.UUID(tenant_id),
+            limit=limit,
+            offset=offset,
+            fact_type=fact_type,
+            source_type=source_type,
+            quality_class=quality_class,
+            sort=sort,
+        )
+        return observations
+
+    async def cognitive_summary(self, *, tenant_id: str) -> dict[str, Any]:
+        """READ cognitive summary counts per concept for a tenant (viewer+)."""
+        if self._cognitive_summary_store is not None:
+            return await self._cognitive_summary_store.tenant_summary(
+                tenant_id=uuid.UUID(tenant_id)
+            )
+        if self._dsn is not None:
+            store = CognitiveSummaryStore(self._dsn)
+            result = await store.tenant_summary(tenant_id=uuid.UUID(tenant_id))
+            await store.close()
+            return result
+        # No store configured; return empty summary for testing
+        return {
+            "totals": {
+                "observations": 0,
+                "evidence": 0,
+                "contexts": 0,
+                "active_contexts": 0,
+                "patterns": 0,
+                "anomalies": 0,
+                "hypotheses": 0,
+                "confidence_scores": 0,
+                "recommendations": 0,
+                "decisions": 0,
+                "reports": 0,
+                "servers": 0,
+            },
+            "status": {
+                "hypotheses": {},
+                "recommendations": {},
+                "decisions": {},
+            },
+        }
 
     # ---------------------------------------------------------------- probe
     async def check_service_health(

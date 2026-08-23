@@ -13,9 +13,10 @@ All user endpoints are tenant-isolated: a user only sees its own tenant
 (multi-tenant); cross-tenant access requires superadmin authority.
 """
 import uuid
-from typing import Any
 
 from aiohttp import web
+from aiohttp_cors import ResourceOptions, setup as cors_setup
+
 from libs.access.errors import (
     AccessError,
     InvalidTokenError,
@@ -31,6 +32,7 @@ class UserServer:
         self.service = service
         self.jwt = jwt
         self.app = web.Application()
+        self._setup_cors()
         self.app.router.add_get("/health", self.health_handler)
         self.app.router.add_get("/metrics", self.metrics_handler)
         self.app.router.add_post("/api/v1/auth/login", self.login_handler)
@@ -39,6 +41,21 @@ class UserServer:
         self.app.router.add_get("/api/v1/me", self.me_handler)
         self.app.router.add_get("/api/v1/users", self.list_users_handler)
         self.runner = None
+
+    def _setup_cors(self) -> None:
+        cors = cors_setup(
+            self.app,
+            defaults={
+                "*": ResourceOptions(
+                    allow_credentials=True,
+                    allow_methods=["GET", "POST", "OPTIONS"],
+                    allow_headers=["Authorization", "Content-Type"],
+                    expose_headers=["Authorization"],
+                )
+            },
+        )
+        for route in self.app.router.routes():
+            cors.add(route)
 
     async def start(self, port: int = 8099):
         self.runner = web.AppRunner(self.app)
