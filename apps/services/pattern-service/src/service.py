@@ -7,6 +7,7 @@ idempotent dedup. This component never writes to ``contexts``/``evidence``/
 ``observations`` (P1), never reads the observation bus, and never triggers
 actions or alerts (R3: cognitive boundary; no action without Confidence, R4).
 """
+import asyncio
 from collections import Counter
 from datetime import UTC, datetime
 
@@ -38,24 +39,37 @@ class PatternService:
         self.last_run_at: datetime | None = None
 
     async def run_detection_cycle(self) -> int:
-        """Detect patterns for every tenant with a Context stream."""
+        """Detect patterns for every tenant with a Context stream.
+
+        Processes tenants in parallel using asyncio.gather for horizontal
+        scalability (each tenant is an independent data domain).
+        """
         tenants = await self.context_store.list_tenant_ids()
-        for tenant_id in tenants:
-            try:
-                contexts = await self.context_store.list_contexts(tenant_id=tenant_id)
-                result = detect(
-                    contexts,
-                    library=self.library,
-                    window_days=self.window_days,
-                    tenant_id=tenant_id,
-                )
-                self.total_below_threshold += result.below_threshold
-                for candidate in result.candidates:
-                    await self._persist(tenant_id, candidate)
-            except Exception:  # noqa: BLE001 - deliberate robustness per repo pattern
+        results = await asyncio.gather(
+            *[self._detect_tenant(tenant_id) for tenant_id in tenants],
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Exception):
                 self.errors += 1
         self.last_run_at = datetime.now(UTC)
         return self.total_patterns
+
+    async def _detect_tenant(self, tenant_id) -> None:
+        """Detect patterns for a single tenant."""
+        try:
+            contexts = await self.context_store.list_contexts(tenant_id=tenant_id)
+            result = detect(
+                contexts,
+                library=self.library,
+                window_days=self.window_days,
+                tenant_id=tenant_id,
+            )
+            self.total_below_threshold += result.below_threshold
+            for candidate in result.candidates:
+                await self._persist(tenant_id, candidate)
+        except Exception:  # noqa: BLE001 - deliberate robustness per repo pattern
+            self.errors += 1
 
     async def _persist(self, tenant_id, candidate) -> None:
         """Persist one Candidate Pattern (idempotent dedup, never an UPDATE)."""

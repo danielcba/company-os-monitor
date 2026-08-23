@@ -5,6 +5,9 @@ generate/list endpoints plus operational metrics (no rule numbers). The
 generate endpoint accepts ``type`` (executive/technical/json) and an optional
 ``tenant_id``; without a tenant it generates for every tenant that has
 committed Decisions.
+
+Protected endpoints require a valid Bearer JWT token (enforced by the
+jwt_auth_middleware from libs.access.middleware).
 """
 import uuid
 from typing import Any

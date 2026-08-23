@@ -8,6 +8,7 @@ cognitive judgments and never runs the pipeline. Port USER_HEALTH_PORT (8099).
 import asyncio
 import os
 
+from libs.access.token_blacklist import TokenBlacklist
 from libs.access.users import UserStore
 
 from src.auth.security import build_jwt_service_from_env
@@ -21,12 +22,14 @@ async def main():
         "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
     )
     port = int(os.getenv("USER_HEALTH_PORT", "8099"))
+    redis_url = os.getenv("JWT_REDIS_URL", "redis://localhost:6379/1")
 
     user_store = UserStore(dsn)
     await user_store.verify_connection()
 
     jwt = build_jwt_service_from_env()
-    service = AuthService(user_store, jwt)
+    blacklist = TokenBlacklist.from_url(redis_url)
+    service = AuthService(user_store, jwt, blacklist=blacklist)
     server = UserServer(service, jwt)
 
     await server.start(port)

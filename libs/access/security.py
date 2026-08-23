@@ -17,7 +17,13 @@ uses RS256 with ``JWT_PRIVATE_KEY`` (signing) and ``JWT_PUBLIC_KEY`` (verify).
 Access tokens expire in minutes, refresh tokens in days; both carry the
 Decision Authority claim (role) and the tenant scope so every authorized action
 has an auditable authority binding (R5).
+
+Token revocation: Each token carries a unique ``jti`` (JWT ID) claim. The
+user-service can blacklist a jti via Redis (token_blacklist module) to revoke
+a token before its natural expiry. The gateway checks the blacklist on every
+authentication attempt.
 """
+import uuid as _uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -42,6 +48,7 @@ CLAIM_ROLE = "role"
 CLAIM_TYPE = "token_type"
 CLAIM_EXP = "exp"
 CLAIM_IAT = "iat"
+CLAIM_JTI = "jti"  # unique token identifier for revocation
 
 
 def hash_password(password: str) -> str:
@@ -72,6 +79,7 @@ class TokenPayload:
     role: str
     token_type: str
     exp: int
+    jti: str = ""
 
     @property
     def is_refresh(self) -> bool:
@@ -144,6 +152,7 @@ class JwtService:
             CLAIM_TYPE: token_type,
             CLAIM_IAT: int(now.timestamp()),
             CLAIM_EXP: int((now + expires_delta).timestamp()),
+            CLAIM_JTI: str(_uuid.uuid4()),
         }
         return self._sign(claims)
 
@@ -212,6 +221,7 @@ class JwtService:
                 role=str(claims[CLAIM_ROLE]),
                 token_type=str(claims[CLAIM_TYPE]),
                 exp=int(claims[CLAIM_EXP]),
+                jti=str(claims.get(CLAIM_JTI, "")),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise InvalidTokenError(  # noqa: TRY003 - declarative, one message

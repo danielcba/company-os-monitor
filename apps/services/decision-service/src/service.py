@@ -17,6 +17,7 @@ capability - Commit) and NEVER executes real-world actions or triggers alerts
 and authorization are future phases). ``executed_at``/``actual_outcomes`` stay
 NULL: the expected vs actual comparison is the Learning loop (P7, future).
 """
+import asyncio
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
@@ -77,12 +78,18 @@ class DecisionService:
         self.last_run_at: datetime | None = None
 
     async def run_decision_cycle(self) -> int:
-        """Commit Decisions for every tenant with proposed Recommendations."""
+        """Commit Decisions for every tenant with proposed Recommendations.
+
+        Processes tenants in parallel using asyncio.gather for horizontal
+        scalability (each tenant is an independent data domain).
+        """
         tenants = await self.recommendation_store.list_tenant_ids()
-        for tenant_id in tenants:
-            try:
-                await self._commit_tenant(tenant_id)
-            except Exception:  # noqa: BLE001 - deliberate robustness per repo pattern
+        results = await asyncio.gather(
+            *[self._commit_tenant(tenant_id) for tenant_id in tenants],
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Exception):
                 self.errors += 1
         self.last_run_at = datetime.now(UTC)
         return self.total_decisions

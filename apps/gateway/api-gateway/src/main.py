@@ -5,10 +5,13 @@ routes pipeline access; it NEVER reimplements cognitive logic. Port
 GATEWAY_HEALTH_PORT (8100).
 """
 import asyncio
+import logging
 import os
 
 from src.health import GatewayServer
 from src.service import DEFAULT_SERVICE_HEALTH, GatewayService
+
+logger = logging.getLogger(__name__)
 
 
 def _build_service_health() -> dict[str, str]:
@@ -25,18 +28,27 @@ def _build_service_health() -> dict[str, str]:
 
 
 async def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     dsn = os.getenv(
         "DATABASE_URL",
         "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
     )
     port = int(os.getenv("GATEWAY_HEALTH_PORT", "8100"))
+    redis_url = os.getenv("JWT_REDIS_URL", "redis://localhost:6379/1")
 
     from libs.access.security import JwtService
+    from libs.access.token_blacklist import TokenBlacklist
     from libs.action.decision import DecisionStore
     from libs.action.report import ReportStore
     from libs.cognitive_core.summary import CognitiveSummaryStore
+    from libs.shared.db import create_shared_engine
+    from src.audit import AuditLogReadStore
+    from src.confidence import ConfidenceReadStore
+    from src.decisions import DecisionReadStore
+    from src.hypotheses import HypothesisReadStore
+    from src.insights import InsightReadStore
     from src.observations import ObservationReadStore
-    from sqlalchemy.ext.asyncio import create_async_engine
+    from src.recommendations import RecommendationReadStore
 
     algorithm = os.getenv("JWT_ALGORITHM", "HS256")
     jwt = JwtService(
@@ -48,17 +60,39 @@ async def main():
         refresh_expire_days=int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7")),
     )
 
-    # Create async engine once and share across stores
-    engine = create_async_engine(dsn)
+    # Create one shared async engine with production-ready pool settings
+    engine = create_shared_engine(dsn)
 
-    # READ routes read pipeline data directly (viewer+): decisions + reports + observations.
+    # Redis-backed JWT blacklist for token revocation
+    blacklist = TokenBlacklist.from_url(redis_url)
+
+    # READ routes read pipeline data directly (viewer+): decisions + reports + observations + audit + insights.
     decision_store = DecisionStore(dsn)
     report_store = ReportStore(dsn)
-    observation_store = ObservationReadStore(dsn, pool_size=10, max_overflow=20)
+    observation_store = ObservationReadStore(engine=engine)
+    audit_store = AuditLogReadStore(engine=engine)
+    insight_store = InsightReadStore(engine=engine)
     summary_store = CognitiveSummaryStore(engine)
+
+    # Detail stores for decision/recommendation desglose
+    hypothesis_store = HypothesisReadStore(engine=engine)
+    confidence_store = ConfidenceReadStore(engine=engine, hypothesis_store=hypothesis_store)
+    recommendation_read_store = RecommendationReadStore(
+        engine=engine, hypothesis_store=hypothesis_store, confidence_store=confidence_store
+    )
+    decision_read_store = DecisionReadStore(
+        engine=engine, recommendation_store=recommendation_read_store, confidence_store=confidence_store
+    )
+
     await decision_store.verify_connection()
     await report_store.verify_connection()
     await observation_store.verify_connection()
+    await audit_store.verify_connection()
+    await insight_store.verify_connection()
+    await hypothesis_store.verify_connection()
+    await confidence_store.verify_connection()
+    await recommendation_read_store.verify_connection()
+    await decision_read_store.verify_connection()
 
     service = GatewayService(
         jwt,
@@ -66,8 +100,13 @@ async def main():
         report_store=report_store,
         observation_store=observation_store,
         cognitive_summary_store=summary_store,
+        audit_store=audit_store,
+        insight_store=insight_store,
+        decision_read_store=decision_read_store,
+        recommendation_read_store=recommendation_read_store,
         service_health=_build_service_health(),
         dsn=dsn,
+        blacklist=blacklist,
     )
     server = GatewayServer(service, jwt)
 
@@ -78,10 +117,9 @@ async def main():
             await asyncio.sleep(3600)
     finally:
         await server.stop()
+        await engine.dispose()
         await decision_store.close()
         await report_store.close()
-        await observation_store.close()
-        await summary_store.close()
 
 
 if __name__ == "__main__":

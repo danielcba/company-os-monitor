@@ -14,6 +14,7 @@ Propose) and NEVER executes actions or triggers alerts (P6: a Recommendation is
 an offer, advisory and reversible; commitment and authority belong to the
 Decision layer, Sprint 10).
 """
+import asyncio
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
@@ -69,12 +70,18 @@ class RecommendationService:
         self.last_run_at: datetime | None = None
 
     async def run_recommendation_cycle(self) -> int:
-        """Formulate Recommendations for every tenant with Hypotheses."""
+        """Formulate Recommendations for every tenant with Hypotheses.
+
+        Processes tenants in parallel using asyncio.gather for horizontal
+        scalability (each tenant is an independent data domain).
+        """
         tenants = await self.hypothesis_store.list_tenant_ids()
-        for tenant_id in tenants:
-            try:
-                await self._formulate_tenant(tenant_id)
-            except Exception:  # noqa: BLE001 - deliberate robustness per repo pattern
+        results = await asyncio.gather(
+            *[self._formulate_tenant(tenant_id) for tenant_id in tenants],
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Exception):
                 self.errors += 1
         self.last_run_at = datetime.now(UTC)
         return self.total_recommendations

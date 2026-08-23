@@ -28,6 +28,11 @@ env/
 dist/
 build/
 
+# Runtime artifacts
+.runtime/
+logs/
+reports/
+
 # OS
 .DS_Store
 Thumbs.db

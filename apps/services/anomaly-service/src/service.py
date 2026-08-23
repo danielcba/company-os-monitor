@@ -9,6 +9,7 @@ never reads the observation bus, and never triggers actions or alerts (R3:
 cognitive boundary; no action without Confidence, R4). It only signals a
 measured deviation - it never explains it (that is Hypothesis).
 """
+import asyncio
 from collections import Counter
 from datetime import UTC, datetime
 
@@ -45,28 +46,41 @@ class AnomalyService:
         self.last_run_at: datetime | None = None
 
     async def run_detection_cycle(self) -> int:
-        """Detect deviations for every tenant with a Context stream."""
+        """Detect deviations for every tenant with a Context stream.
+
+        Processes tenants in parallel using asyncio.gather for horizontal
+        scalability (each tenant is an independent data domain).
+        """
         tenants = await self.context_store.list_tenant_ids()
-        for tenant_id in tenants:
-            try:
-                stream = await self.context_store.list_contexts(tenant_id=tenant_id)
-                active = await self.context_store.list_active_contexts(tenant_id=tenant_id)
-                patterns = await self.pattern_store.list_patterns(tenant_id=tenant_id)
-                result = detect(
-                    stream,
-                    patterns,
-                    self.tolerances,
-                    active_contexts=active,
-                    tenant_id=tenant_id,
-                )
-                self.total_contexts_without_pattern += result.contexts_without_pattern
-                self.total_contexts_without_tolerance += result.contexts_without_tolerance
-                for candidate in result.candidates:
-                    await self._persist(tenant_id, candidate)
-            except Exception:  # noqa: BLE001 - deliberate robustness per repo pattern
+        results = await asyncio.gather(
+            *[self._detect_tenant(tenant_id) for tenant_id in tenants],
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Exception):
                 self.errors += 1
         self.last_run_at = datetime.now(UTC)
         return self.total_anomalies
+
+    async def _detect_tenant(self, tenant_id) -> None:
+        """Detect anomalies for a single tenant."""
+        try:
+            stream = await self.context_store.list_contexts(tenant_id=tenant_id)
+            active = await self.context_store.list_active_contexts(tenant_id=tenant_id)
+            patterns = await self.pattern_store.list_patterns(tenant_id=tenant_id)
+            result = detect(
+                stream,
+                patterns,
+                self.tolerances,
+                active_contexts=active,
+                tenant_id=tenant_id,
+            )
+            self.total_contexts_without_pattern += result.contexts_without_pattern
+            self.total_contexts_without_tolerance += result.contexts_without_tolerance
+            for candidate in result.candidates:
+                await self._persist(tenant_id, candidate)
+        except Exception:  # noqa: BLE001 - deliberate robustness per repo pattern
+            self.errors += 1
 
     async def _persist(self, tenant_id, candidate) -> None:
         """Persist one Candidate Anomaly (idempotent dedup, never an UPDATE)."""

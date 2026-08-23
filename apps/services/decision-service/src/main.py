@@ -11,17 +11,22 @@ alerts (P6: the Decision is recorded with its falsifiable expected outcomes;
 execution and authorization belong to future phases).
 """
 import asyncio
+import logging
 import os
 
 from libs.action.decision import DecisionStore
 from libs.action.recommendation import RecommendationStore
 from libs.learning.confidence import ConfidenceStore
+from libs.shared.graceful_shutdown import GracefulShutdown
 
 from src.health import HealthServer
 from src.service import DecisionService
 
+logger = logging.getLogger(__name__)
+
 
 async def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     dsn = os.getenv(
         "DATABASE_URL",
         "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
@@ -51,8 +56,14 @@ async def main():
 
     await health.start(port)
 
-    while True:
-        await service.run_decision_cycle()
+    shutdown = GracefulShutdown()
+    shutdown.install()
+
+    while not shutdown.should_exit.is_set():
+        try:
+            await service.run_decision_cycle()
+        except Exception:
+            logger.exception("Error in decision cycle")
         await asyncio.sleep(cycle_seconds)
 
 

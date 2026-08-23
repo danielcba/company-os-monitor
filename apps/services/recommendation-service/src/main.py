@@ -10,6 +10,7 @@ never executes actions or triggers alerts (P6: a Recommendation is advisory and
 reversible - the Decision layer, Sprint 10, is where commitment lives).
 """
 import asyncio
+import logging
 import os
 
 from libs.action.recommendation import RecommendationStore
@@ -21,9 +22,12 @@ from libs.procedural_memory.action_space import (
 )
 from libs.reasoning.anomaly import AnomalyStore
 from libs.reasoning.hypothesis import HypothesisStore
+from libs.shared.graceful_shutdown import GracefulShutdown
 
 from src.health import HealthServer
 from src.service import RecommendationService
+
+logger = logging.getLogger(__name__)
 
 
 def load_action_space() -> tuple:
@@ -39,6 +43,7 @@ def load_action_space() -> tuple:
 
 
 async def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     dsn = os.getenv(
         "DATABASE_URL",
         "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
@@ -69,8 +74,14 @@ async def main():
 
     await health.start(port)
 
-    while True:
-        await service.run_recommendation_cycle()
+    shutdown = GracefulShutdown()
+    shutdown.install()
+
+    while not shutdown.should_exit.is_set():
+        try:
+            await service.run_recommendation_cycle()
+        except Exception:
+            logger.exception("Error in recommendation cycle")
         await asyncio.sleep(cycle_seconds)
 
 

@@ -6,16 +6,21 @@ declarative Pattern Library over it, and writes Candidate Patterns into
 ``patterns`` (append-only, idempotent dedup).
 """
 import asyncio
+import logging
 import os
 
 from libs.perception.context import ContextStore
 from libs.reasoning.pattern import PatternStore
+from libs.shared.graceful_shutdown import GracefulShutdown
 
 from src.health import HealthServer
 from src.service import PatternService
 
+logger = logging.getLogger(__name__)
+
 
 async def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     dsn = os.getenv(
         "DATABASE_URL",
         "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
@@ -38,8 +43,14 @@ async def main():
 
     await health.start(port)
 
-    while True:
-        await service.run_detection_cycle()
+    shutdown = GracefulShutdown()
+    shutdown.install()
+
+    while not shutdown.should_exit.is_set():
+        try:
+            await service.run_detection_cycle()
+        except Exception:
+            logger.exception("Error in detection cycle")
         await asyncio.sleep(cycle_seconds)
 
 

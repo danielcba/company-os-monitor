@@ -72,6 +72,45 @@ SELECT_USERS_BY_TENANT_ROLE = text(
     """
 )
 
+SELECT_ALL_TENANTS = text(
+    """
+    SELECT id, name, slug, plan, settings, created_at, updated_at
+    FROM tenants
+    ORDER BY created_at, name
+    """
+)
+
+SELECT_TENANT_BY_ID = text(
+    """
+    SELECT id, name, slug, plan, settings, created_at, updated_at
+    FROM tenants
+    WHERE id = :id
+    """
+)
+
+UPDATE_USER = text(
+    """
+    UPDATE users
+    SET name = COALESCE(:name, name),
+        role = COALESCE(:role, role),
+        is_active = COALESCE(:is_active, is_active),
+        updated_at = now()
+    WHERE id = :id
+    RETURNING id, tenant_id, email, password_hash, name, role, is_active,
+              created_at, updated_at
+    """
+)
+
+DEACTIVATE_USER = text(
+    """
+    UPDATE users
+    SET is_active = FALSE, updated_at = now()
+    WHERE id = :id
+    RETURNING id, tenant_id, email, password_hash, name, role, is_active,
+              created_at, updated_at
+    """
+)
+
 
 class User(BaseModel):
     """A tenant-scoped identity with its Decision Authority role (external)."""
@@ -83,6 +122,20 @@ class User(BaseModel):
     name: str | None = None
     role: str = "viewer"
     is_active: bool = True
+    created_at: datetime = datetime.now(UTC)
+    updated_at: datetime = datetime.now(UTC)
+
+    model_config = ConfigDict(frozen=True)
+
+
+class Tenant(BaseModel):
+    """A tenant scope for multi-tenant isolation."""
+
+    id: uuid.UUID
+    name: str
+    slug: str
+    plan: str
+    settings: dict = {}
     created_at: datetime = datetime.now(UTC)
     updated_at: datetime = datetime.now(UTC)
 
@@ -151,6 +204,45 @@ class UserStore:
                 SELECT_USERS_BY_TENANT_ROLE, {"tenant_id": tenant_id}
             )
             return {row["role"]: row["n"] for row in result.mappings()}
+
+    async def list_tenants(self) -> list[Tenant]:
+        """List all tenants (superadmin only)."""
+        async with self._session_factory() as session:
+            result = await session.execute(SELECT_ALL_TENANTS)
+            return [Tenant(**dict(row)) for row in result.mappings()]
+
+    async def get_tenant_by_id(self, *, id: uuid.UUID) -> Tenant | None:
+        """Get a single tenant by ID."""
+        async with self._session_factory() as session:
+            result = await session.execute(SELECT_TENANT_BY_ID, {"id": id})
+            row = result.mappings().one_or_none()
+            return Tenant(**dict(row)) if row is not None else None
+
+    async def update_user(
+        self,
+        *,
+        id: uuid.UUID,
+        name: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+    ) -> User | None:
+        """Update user fields (admin/superadmin only)."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                UPDATE_USER,
+                {"id": id, "name": name, "role": role, "is_active": is_active},
+            )
+            await session.commit()
+            row = result.mappings().one_or_none()
+            return self._row_to_user(row) if row is not None else None
+
+    async def deactivate_user(self, *, id: uuid.UUID) -> User | None:
+        """Soft-deactivate a user (admin/superadmin only)."""
+        async with self._session_factory() as session:
+            result = await session.execute(DEACTIVATE_USER, {"id": id})
+            await session.commit()
+            row = result.mappings().one_or_none()
+            return self._row_to_user(row) if row is not None else None
 
     async def verify_connection(self) -> None:
         async with self._engine.connect() as conn:

@@ -292,6 +292,56 @@ class DecisionStore:
             result = await session.execute(SELECT_TENANT_IDS)
             return [row[0] for row in result.all()]
 
+    async def update_outcomes(
+        self,
+        *,
+        id: uuid.UUID,
+        actual_outcomes: list[dict[str, Any]],
+        executed_at: datetime | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Update lifecycle fields for a decision (actual outcomes and execution time).
+
+        Only updates lifecycle fields (actual_outcomes, executed_at, status);
+        content columns are immutable (P1, blocked by content trigger).
+        Returns the updated decision row, or None if not found.
+        """
+        set_parts: list[str] = []
+        params: dict[str, Any] = {"id": id}
+
+        if actual_outcomes is not None:
+            set_parts.append("actual_outcomes = :actual_outcomes")
+            params["actual_outcomes"] = json.dumps(actual_outcomes, default=str)
+
+        if executed_at is not None:
+            set_parts.append("executed_at = :executed_at")
+            params["executed_at"] = executed_at
+
+        if status is not None:
+            set_parts.append("status = :status")
+            params["status"] = status
+
+        if not set_parts:
+            return None
+
+        set_clause = ", ".join(set_parts)
+        update_sql = text(
+            f"""
+            UPDATE decisions
+            SET {set_clause}
+            WHERE id = :id
+            RETURNING id, tenant_id, recommendation_id, confidence_id, authority_id,
+                      commitment, expected_outcomes, risk_tolerance, status, committed_at,
+                      executed_at, actual_outcomes
+            """
+        )
+
+        async with self._session_factory() as session:
+            result = await session.execute(update_sql, params)
+            await session.commit()
+            row = result.mappings().one_or_none()
+            return dict(row) if row is not None else None
+
     async def verify_connection(self) -> None:
         """Fail fast if the database is unreachable."""
         async with self._engine.connect() as conn:
@@ -308,3 +358,131 @@ class DecisionStore:
         if isinstance(row["actual_outcomes"], str):
             row["actual_outcomes"] = json.loads(row["actual_outcomes"])
         return Decision(**row)
+
+
+def _outcome_prediction_and_metric(
+    expected_outcome: dict[str, str], actual_outcome: dict[str, Any] | None
+) -> tuple[float, str | None]:
+    """Extract the predicted probability and metric name from an outcome dict.
+
+    Returns (prediction_probability, verifiable_metric) or (0.0, None) when data
+    is missing. The prediction is expected to be a string-represented float in
+    [0, 1]; the metric is the ``verifiable_by`` field.
+    """
+    prediction = expected_outcome.get("prediction", "")
+    metric = expected_outcome.get("verifiable_by")
+    try:
+        prob = float(prediction)
+    except (ValueError, TypeError):
+        prob = 0.0
+    return prob, metric
+
+
+def compare_expected_actual_outcomes(
+    expected_outcomes: list[dict[str, Any]],
+    actual_outcomes: list[dict[str, Any]] | None,
+    params: "CalibrationParams | None" = None,
+) -> dict[str, Any]:
+    """Compare expected vs actual outcomes and compute learning signals.
+
+    Returns a dict with:
+    - ``brier_score``: Mean squared error between predicted probabilities and
+      actual outcomes (0 = perfectly calibrated, higher = less calibrated).
+    - ``ece``: Updated ECE measured from the actual outcomes.
+    - ``historical_calibration``: New historical calibration factor (= 1 - ECE).
+    - ``confidence_adjustment``: Change in the (1-ECE) confidence adjustment factor.
+    - ``original_confidence``: Placeholder (caller must provide the original C_final).
+    - ``adjusted_confidence``: Placeholder (caller applies: C_final * historical_calibration).
+    - ``outcome_count``: Number of expected outcomes processed.
+    - ``details``: Per-outcome breakdown with metric, prediction, actual, and match status.
+    """
+    from libs.cognitive_core.calibration_model import (
+        CalibrationParams as _CalibrationParams,
+        brier_score as _brier,
+        ece_score as _ece,
+    )
+
+    if params is None:
+        params = _CalibrationParams()
+
+    if not expected_outcomes:
+        return {
+            "brier_score": 0.0,
+            "ece": 0.0,
+            "historical_calibration": 1.0,
+            "confidence_adjustment": 0.0,
+            "original_confidence": 0.0,
+            "adjusted_confidence": 0.0,
+            "outcome_count": 0,
+            "details": [],
+        }
+
+    # Build lookup of actual outcomes by metric name
+    actual_by_metric: dict[str, dict[str, Any]] = {}
+    if actual_outcomes:
+        for ao in actual_outcomes:
+            metric = ao.get("verifiable_by")
+            if metric:
+                actual_by_metric[metric] = ao
+
+    predictions: list[float] = []
+    outcomes: list[int] = []
+    details: list[dict[str, Any]] = []
+
+    for eo in expected_outcomes:
+        prediction, metric = _outcome_prediction_and_metric(eo, None)
+        if metric is None:
+            continue
+
+        actual = actual_by_metric.get(metric)
+        if actual is not None:
+            # Convert actual outcome to binary (1 = success, 0 = failure)
+            actual_value = actual.get("value")
+            if isinstance(actual_value, bool):
+                outcome_int = 1 if actual_value else 0
+            elif isinstance(actual_value, (int, float)):
+                outcome_int = 1 if actual_value else 0
+            else:
+                outcome_int = 0
+            predictions.append(prediction)
+            outcomes.append(outcome_int)
+            details.append(
+                {
+                    "metric": metric,
+                    "prediction": prediction,
+                    "actual": outcome_int,
+                    "matches": prediction >= 0.5 and outcome_int == 1,
+                }
+            )
+        else:
+            # No actual outcome available for this metric; use 0 as placeholder
+            # but mark it as unavailable so the UI can distinguish.
+            outcomes.append(0)  # type: ignore[arg-type]
+            details.append(
+                {
+                    "metric": metric,
+                    "prediction": prediction,
+                    "actual": None,
+                    "available": False,
+                }
+            )
+
+    brier = _brier(predictions, outcomes) if predictions else 0.0
+    ece = _ece(predictions, outcomes, params.M) if predictions else 0.0
+    hist = max(0.0, min(1.0, 1.0 - ece))
+
+    # Compute confidence adjustment: the C_final factor changes from (1-0) to (1-ECE)
+    # since old ECE was 0.0 (first data, no history). The adjustment in the
+    # (1-ECE) factor is hist - 1.0.
+    adj = hist - 1.0
+
+    return {
+        "brier_score": round(brier, 4),
+        "ece": round(ece, 4),
+        "historical_calibration": round(hist, 4),
+        "confidence_adjustment": round(adj, 4),
+        "original_confidence": 0.0,  # caller must provide the original confidence
+        "adjusted_confidence": 0.0,  # caller applies: C_final * hist
+        "outcome_count": len(expected_outcomes),
+        "details": details,
+    }

@@ -40,6 +40,7 @@ SELECT_OBSERVATIONS = text(
     FROM observations
     WHERE tenant_id = :tenant_id
     ORDER BY captured_at, id
+    LIMIT :limit OFFSET :offset
     """
 )
 
@@ -89,7 +90,9 @@ class ObservationStore:
             )
             return result.scalar() is not None
 
-    async def list_observations(self, *, tenant_id: uuid.UUID) -> list[dict[str, Any]]:
+    async def list_observations(
+        self, *, tenant_id: uuid.UUID, limit: int = 500, offset: int = 0
+    ) -> list[dict[str, Any]]:
         """Read-only load of the immutable observation rows for a tenant.
 
         Exposed for the Report service (Sprint 11): the Technical report's
@@ -99,7 +102,8 @@ class ObservationStore:
         """
         async with self._session_factory() as session:
             result = await session.execute(
-                SELECT_OBSERVATIONS, {"tenant_id": tenant_id}
+                SELECT_OBSERVATIONS,
+                {"tenant_id": tenant_id, "limit": limit, "offset": offset},
             )
             rows = []
             for mapping in result.mappings():

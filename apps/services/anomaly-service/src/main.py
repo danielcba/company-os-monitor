@@ -12,6 +12,7 @@ them per deployment via ``TOLERANCE_*_THRESHOLD`` env vars (documented in
 ``libs/procedural_memory/tolerance_library.py``.
 """
 import asyncio
+import logging
 import os
 from dataclasses import replace
 
@@ -22,9 +23,12 @@ from libs.procedural_memory.tolerance_library import (
 )
 from libs.reasoning.anomaly import AnomalyStore
 from libs.reasoning.pattern import PatternStore
+from libs.shared.graceful_shutdown import GracefulShutdown
 
 from src.health import HealthServer
 from src.service import AnomalyService
+
+logger = logging.getLogger(__name__)
 
 # env var name -> tolerance_id it overrides (threshold, auditable per deployment).
 TOLERANCE_ENV_OVERRIDES: dict[str, str] = {
@@ -56,6 +60,7 @@ def tolerances_from_env(
 
 
 async def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     dsn = os.getenv(
         "DATABASE_URL",
         "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
@@ -80,8 +85,14 @@ async def main():
 
     await health.start(port)
 
-    while True:
-        await service.run_detection_cycle()
+    shutdown = GracefulShutdown()
+    shutdown.install()
+
+    while not shutdown.should_exit.is_set():
+        try:
+            await service.run_detection_cycle()
+        except Exception:
+            logger.exception("Error in anomaly detection cycle")
         await asyncio.sleep(cycle_seconds)
 
 

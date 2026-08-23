@@ -5,17 +5,22 @@ Postgres, runs the explanatory coherence competition per tenant + purpose (P2),
 and writes the selected Active Context into ``contexts``.
 """
 import asyncio
+import logging
 import os
 
 from libs.perception.context import ContextStore
 from libs.perception.evidence import EvidenceStore
+from libs.shared.graceful_shutdown import GracefulShutdown
 
 from src.activator import ActivatorEngine
 from src.health import HealthServer
 from src.service import ContextService
 
+logger = logging.getLogger(__name__)
+
 
 async def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     dsn = os.getenv(
         "DATABASE_URL",
         "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
@@ -37,8 +42,14 @@ async def main():
 
     await health.start(port)
 
-    while True:
-        await service.run_activation_cycle()
+    shutdown = GracefulShutdown()
+    shutdown.install()
+
+    while not shutdown.should_exit.is_set():
+        try:
+            await service.run_activation_cycle()
+        except Exception:
+            logger.exception("Error in context activation cycle")
         await asyncio.sleep(cycle_seconds)
 
 

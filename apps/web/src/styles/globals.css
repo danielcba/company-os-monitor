@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --background: 220 14% 96%;
+  --foreground: 220 15% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 220 15% 12%;
+  --muted: 220 12% 90%;
+  --muted-foreground: 220 10% 42%;
+  --border: 220 12% 82%;
+  --input: 220 12% 82%;
+  --ring: 222 60% 38%;
+  --accent: 222 60% 38%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 70% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 150 45% 32%;
+  --warning: 38 70% 42%;
+  --sidebar: 222 30% 14%;
+  --sidebar-foreground: 220 15% 88%;
+  --sidebar-border: 222 22% 22%;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: 222 28% 8%;
+  --foreground: 220 15% 92%;
+  --card: 222 26% 12%;
+  --card-foreground: 220 15% 92%;
+  --muted: 222 24% 18%;
+  --muted-foreground: 220 12% 64%;
+  --border: 222 22% 22%;
+  --input: 222 22% 24%;
+  --ring: 222 60% 62%;
+  --accent: 222 60% 62%;
+  --accent-foreground: 222 40% 10%;
+  --destructive: 0 65% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 150 45% 55%;
+  --warning: 38 80% 60%;
+  --sidebar: 222 32% 10%;
+  --sidebar-foreground: 220 15% 88%;
+  --sidebar-border: 222 22% 20%;
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}

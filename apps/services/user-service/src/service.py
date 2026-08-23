@@ -7,8 +7,9 @@ Authority issuer for COS-Monitor:
   issues an access + refresh token pair. Every token carries the identity, the
   tenant scope and the Decision Authority role (core-concepts/decision.md: the
   commitment authority under which a Decision is taken).
-- ``refresh`` re-issues an access token from a valid refresh token (stateless
-  JWT strategy, documented; no refresh_tokens table / Redis token store).
+- ``refresh`` rotates the refresh token: blacklists the old one and issues a
+  new access+refresh pair (stateless JWT strategy with Redis-backed revocation).
+- ``logout`` blacklists the refresh token to revoke access immediately.
 - ``create_user``/``list_users`` enforce multi-tenant isolation: a role only
   sees its own tenant unless it holds cross-tenant authority (superadmin).
 - ``authorize`` decides whether a role may execute an action (RBAC -> Decision
@@ -41,7 +42,8 @@ from libs.access.security import (
     hash_password,
     verify_password,
 )
-from libs.access.users import User, UserStore
+from libs.access.token_blacklist import TokenBlacklist
+from libs.access.users import User, UserStore, Tenant
 
 from src.auth.rbac import validate_role
 
@@ -49,12 +51,19 @@ from src.auth.rbac import validate_role
 class AuthService:
     """Orchestrates identity verification, tokens and authority checks."""
 
-    def __init__(self, user_store: UserStore, jwt: JwtService):
+    def __init__(
+        self,
+        user_store: UserStore,
+        jwt: JwtService,
+        blacklist: TokenBlacklist | None = None,
+    ):
         self.user_store = user_store
         self.jwt = jwt
+        self.blacklist = blacklist
         self.total_logins = 0
         self.total_login_failures = 0
         self.total_tokens_issued = 0
+        self.total_tokens_revoked = 0
         self.total_errors = 0
         self.total_users_created = 0
         self.users_by_role: Counter[str] = Counter()
@@ -91,23 +100,52 @@ class AuthService:
         return self._issue_token_pair(user)
 
     async def refresh(self, *, refresh_token: str) -> dict[str, Any]:
-        """Re-issue an access token from a valid refresh token (stateless).
+        """Rotate the refresh token: blacklist old + issue new access+refresh pair.
 
         The refresh token is verified by signature + type + expiry; the
-        referenced user must still exist and be active.
+        referenced user must still exist and be active. The old refresh token
+        is blacklisted to prevent reuse (token rotation).
         """
         payload = self.jwt.verify_refresh_token(refresh_token)
+        if self.blacklist and payload.jti:
+            is_revoked = await self.blacklist.is_revoked(jti=payload.jti)
+            if is_revoked:
+                self.total_errors += 1
+                raise AuthenticationError("refresh token has been revoked")
         user = await self.user_store.get_by_id(id=uuid.UUID(payload.user_id))
         if user is None or not user.is_active:
             self.total_errors += 1
             raise AuthenticationError("refresh token references an unknown user")
+        if self.blacklist and payload.jti:
+            await self.blacklist.revoke(jti=payload.jti, expires_at=payload.exp)
         access_token = self._access_token(user)
-        self.total_tokens_issued += 1
+        new_refresh_token = self.jwt.create_refresh_token(
+            user_id=str(user.id),
+            tenant_id=str(user.tenant_id),
+            email=user.email,
+            role=user.role,
+        )
+        self.total_tokens_issued += 2
         return {
             "access_token": access_token,
+            "refresh_token": new_refresh_token,
             "token_type": "bearer",
             "expires_in": self.jwt.access_expire_minutes * 60,
         }
+
+    async def logout(self, *, refresh_token: str) -> None:
+        """Blacklist the refresh token to revoke access immediately.
+
+        The access token (15 min TTL) will expire naturally; the refresh
+        token is blacklisted to prevent further token renewal.
+        """
+        try:
+            payload = self.jwt.verify_refresh_token(refresh_token)
+            if self.blacklist and payload.jti:
+                await self.blacklist.revoke(jti=payload.jti, expires_at=payload.exp)
+                self.total_tokens_revoked += 1
+        except Exception:
+            pass  # Best-effort: even if token is invalid, logout succeeds
 
     async def create_user(
         self,
@@ -167,6 +205,75 @@ class AuthService:
             )
         target = tenant_scope(actor.role, actor.tenant_id, tenant_id)
         return await self.user_store.list_by_tenant(tenant_id=uuid.UUID(target))
+
+    async def list_tenants(self, *, actor: TokenPayload) -> list[Tenant]:
+        """List all tenants (superadmin only)."""
+        if actor.role != ROLE_SUPERADMIN:
+            self.total_errors += 1
+            raise AuthorizationError(
+                f"role {actor.role!r} may not list tenants (superadmin only)"
+            )
+        return await self.user_store.list_tenants()
+
+    async def get_tenant(
+        self, *, actor: TokenPayload, tenant_id: str
+    ) -> Tenant | None:
+        """Get a tenant by ID (superadmin only)."""
+        if actor.role != ROLE_SUPERADMIN:
+            self.total_errors += 1
+            raise AuthorizationError(
+                f"role {actor.role!r} may not read tenants (superadmin only)"
+            )
+        return await self.user_store.get_tenant_by_id(id=uuid.UUID(tenant_id))
+
+    async def update_user(
+        self,
+        *,
+        actor: TokenPayload,
+        user_id: str,
+        name: str | None = None,
+        role: str | None = None,
+    ) -> User:
+        """Update a user (admin/superadmin only, same tenant)."""
+        if not _can_create(actor.role):
+            self.total_errors += 1
+            raise AuthorizationError(
+                f"role {actor.role!r} may not update users (admin/superadmin only)"
+            )
+        target_user = await self.user_store.get_by_id(id=uuid.UUID(user_id))
+        if target_user is None:
+            raise AccessError("user not found")
+        if str(target_user.tenant_id) != actor.tenant_id and actor.role != ROLE_SUPERADMIN:
+            self.total_errors += 1
+            raise AuthorizationError("cannot update users in another tenant")
+        if role is not None:
+            validate_role(role)
+        updated = await self.user_store.update_user(
+            id=uuid.UUID(user_id), name=name, role=role
+        )
+        if updated is None:
+            raise AccessError("user not found")
+        return updated
+
+    async def deactivate_user(
+        self, *, actor: TokenPayload, user_id: str
+    ) -> User:
+        """Soft-deactivate a user (admin/superadmin only, same tenant)."""
+        if not _can_create(actor.role):
+            self.total_errors += 1
+            raise AuthorizationError(
+                f"role {actor.role!r} may not deactivate users (admin/superadmin only)"
+            )
+        target_user = await self.user_store.get_by_id(id=uuid.UUID(user_id))
+        if target_user is None:
+            raise AccessError("user not found")
+        if str(target_user.tenant_id) != actor.tenant_id and actor.role != ROLE_SUPERADMIN:
+            self.total_errors += 1
+            raise AuthorizationError("cannot deactivate users in another tenant")
+        deactivated = await self.user_store.deactivate_user(id=uuid.UUID(user_id))
+        if deactivated is None:
+            raise AccessError("user not found")
+        return deactivated
 
     def authorize(
         self,
@@ -232,6 +339,7 @@ class AuthService:
             "total_logins": self.total_logins,
             "total_login_failures": self.total_login_failures,
             "total_tokens_issued": self.total_tokens_issued,
+            "total_tokens_revoked": self.total_tokens_revoked,
             "total_errors": self.total_errors,
             "total_users_created": self.total_users_created,
             "users_by_role": dict(self.users_by_role),
