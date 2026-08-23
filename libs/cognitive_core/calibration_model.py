@@ -38,16 +38,26 @@ QUALITY_CLASS_RANGES: dict[str, tuple[float, float]] = {
 }
 
 def quality_class_to_weight(qc: str) -> float:
-    """Convert quality class to mid-point weight for calibration."""
-    low, high = QUALITY_CLASS_RANGES.get(qc, (0.0, 0.25))
+    """Convert quality class to mid-point weight for calibration.
+
+    Raises:
+        ValueError: If quality class is not one of Q1, Q2, Q3, Q4.
+    """
+    try:
+        low, high = QUALITY_CLASS_RANGES[qc]
+    except KeyError:
+        raise ValueError(f"Unknown quality class: {qc!r}. Expected one of {sorted(QUALITY_CLASS_RANGES)}")
     return (low + high) / 2
 
 def evidential_support(evidence_weights: list[float], signs: list[int], L0: float = 0.0) -> float:
-    """S(H|E) = 1 / (1 + e^-L), L = L0 + sum(w_i * e_i)"""
-    L = L0 + sum(w * e for w, e in zip(evidence_weights, signs, strict=False))
+    """S(H|E) = 1 / (1 + e^-L), L = L0 + sum(w_i * e_i)
+
+    Uses strict=True to catch length mismatches (Python 3.10+).
+    """
+    L = L0 + sum(w * e for w, e in zip(evidence_weights, signs, strict=True))
     return 1.0 / (1.0 + exp(-L))
 
-def explanatory_coherence(hypothesis: str, evidence: list[str], constraints: dict) -> float:
+def explanatory_coherence(evidence: list[str], constraints: dict) -> float:
     """C(H) - normalized constraint satisfaction (Thagard, 1989), real implementation.
 
     The coherence score C(H) in [0, 1] is computed as normalized constraint
@@ -69,15 +79,14 @@ def explanatory_coherence(hypothesis: str, evidence: list[str], constraints: dic
                            (negative hypothesis-to-hypothesis constraint).
 
     ``evidence`` is the scope evidence present in the batch (the current data),
-    as organization_type / fact labels. ``hypothesis`` is the judgment text,
-    carried for traceability (the justification that uses C references it).
+    as organization_type / fact labels.
 
     MVP normalization (documented simplification):
         C(H) = P / (P + N + U)
     where
         P = |explains ∩ scope| + |coherent_with|   (satisfied positive constraints)
         N = |contradicts ∩ scope| + |incoherent_with| (violated negative constraints)
-        U = |scope \\ explains|                    (scope evidence H does not explain)
+        U = |scope \\ (explains ∪ contradicts)|     (scope evidence H neither explains nor contradicts)
     Clamped to [0, 1]. A hypothesis that explains its full scope and contradicts
     nothing scores 1.0; one that contradicts everything and explains nothing
     scores 0.0. With no scope evidence the score is the neutral 0.5 (no facts to
@@ -93,7 +102,8 @@ def explanatory_coherence(hypothesis: str, evidence: list[str], constraints: dic
 
     explained = len(explains & scope)
     contradicted = len(contradicts & scope)
-    unexplained = len(scope - explains)
+    # U = scope evidence that H neither explains nor contradicts
+    unexplained = len(scope - (explains | contradicts))
     positive = explained + len(coherent_with)
     negative = contradicted + len(incoherent_with)
     total = positive + negative + unexplained
@@ -104,7 +114,7 @@ def explanatory_coherence(hypothesis: str, evidence: list[str], constraints: dic
 def brier_score(predictions: list[float], outcomes: list[int]) -> float:
     if not predictions:
         return 0.0
-    return sum((p - o) ** 2 for p, o in zip(predictions, outcomes, strict=False)) / len(predictions)
+    return sum((p - o) ** 2 for p, o in zip(predictions, outcomes, strict=True)) / len(predictions)
 
 def ece_score(predictions: list[float], outcomes: list[int], M: int = 10) -> float:
     """ECE over M bins. The last bin includes p == 1.0 (a prediction of exactly
@@ -126,7 +136,7 @@ def ece_score(predictions: list[float], outcomes: list[int], M: int = 10) -> flo
             continue
         bin_outcomes = [
             o
-            for p, o in zip(predictions, outcomes, strict=False)
+            for p, o in zip(predictions, outcomes, strict=True)
             if lower <= p and (p < upper or (last and p <= upper))
         ]
         acc = sum(bin_outcomes) / len(bin_outcomes)
@@ -135,5 +145,16 @@ def ece_score(predictions: list[float], outcomes: list[int], M: int = 10) -> flo
     return ece
 
 def final_confidence(S: float, C: float, ECE: float, alpha: float = 0.5) -> float:
-    """C_final = [alpha*S + (1-alpha)*C] * (1 - ECE)"""
-    return (alpha * S + (1 - alpha) * C) * (1 - ECE)
+    """C_final = [alpha*S + (1-alpha)*C] * (1 - ECE)
+
+    Validates and clamps inputs to [0, 1] range.
+    """
+    if not 0.0 <= S <= 1.0:
+        raise ValueError(f"S (evidential_support) must be in [0, 1], got {S}")
+    if not 0.0 <= C <= 1.0:
+        raise ValueError(f"C (explanatory_coherence) must be in [0, 1], got {C}")
+    if not 0.0 <= ECE <= 1.0:
+        raise ValueError(f"ECE must be in [0, 1], got {ECE}")
+    if not 0.0 <= alpha <= 1.0:
+        raise ValueError(f"alpha must be in [0, 1], got {alpha}")
+    return max(0.0, min(1.0, (alpha * S + (1 - alpha) * C) * (1 - ECE)))

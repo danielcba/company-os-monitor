@@ -36,18 +36,28 @@ from libs.reasoning.hypothesis import Hypothesis
 TARGET_TYPE_HYPOTHESIS = "hypothesis"
 
 
-def _sign(evidence_type: str, coherence_inputs: dict) -> int:
+def _sign(evidence_type: str, explains: set[str], contradicts: set[str]) -> int:
     """Evidential sign of one evidence for the judgment (documented scheme).
 
     +1 when the organization_type is declared in ``explains`` (supports),
     -1 when in ``contradicts`` (opposes), 0 otherwise (neutral: not all tenant
     evidence is relevant to a given judgment).
+
+    Uses pre-computed sets for O(1) lookup.
     """
-    if evidence_type in coherence_inputs.get("explains", []):
+    if evidence_type in explains:
         return 1
-    if evidence_type in coherence_inputs.get("contradicts", []):
+    if evidence_type in contradicts:
         return -1
     return 0
+
+
+def _get_sign_sets(coherence_inputs: dict) -> tuple[set[str], set[str]]:
+    """Extract and convert explains/contradicts to sets for O(1) lookup."""
+    return (
+        set(coherence_inputs.get("explains", [])),
+        set(coherence_inputs.get("contradicts", [])),
+    )
 
 
 def evidential_support_score(
@@ -61,10 +71,11 @@ def evidential_support_score(
     Model derives w_i from the Quality Class. With no contributing evidence
     S = 0.5 (uniform prior, L = L0 = 0).
     """
+    explains, contradicts = _get_sign_sets(coherence_inputs)
     weights: list[float] = []
     signs: list[int] = []
     for item in evidence:
-        sign = _sign(item.organization_type, coherence_inputs)
+        sign = _sign(item.organization_type, explains, contradicts)
         if sign == 0:
             continue
         weights.append(quality_class_to_weight(item.quality_class.value))
@@ -73,11 +84,11 @@ def evidential_support_score(
 
 
 def coherence_score(
-    judgment: str, evidence: Sequence[Evidence], coherence_inputs: dict
+    judgment: str, scope: Sequence[Evidence], coherence_inputs: dict
 ) -> float:
     """C(H) - explanatory coherence of the judgment over the scope evidence."""
     return explanatory_coherence(
-        judgment, [item.organization_type for item in evidence], coherence_inputs
+        [item.organization_type for item in scope], coherence_inputs
     )
 
 
@@ -172,6 +183,7 @@ def _justification(
 def calibrate(
     hypothesis: Hypothesis,
     evidence: Sequence[Evidence],
+    scope: Sequence[Evidence],
     coherence_inputs: dict,
     params: CalibrationParams,
     historical: Sequence[tuple[float, int]] | None,
@@ -184,16 +196,35 @@ def calibrate(
     is taken from the ``hypothesis`` object. Action Layer targets
     (recommendation/decision, Sprints 9/10) reuse the same components through
     the same ConfidenceCreate/ConfidenceStore path (the API is target-ready).
+
+    The ``historical`` parameter is reserved for future outcome-based calibration
+    (Sprint 9+). Currently always None; when available, it should contain
+    (reported_confidence, outcome) pairs where outcome in {0, 1}.
     """
+    # Input validation
+    if hypothesis is None:
+        raise ValueError("hypothesis must not be None")
+    if not evidence:
+        raise ValueError("evidence sequence must not be empty")
+    if not scope:
+        raise ValueError("scope sequence must not be empty")
+    if params is None:
+        raise ValueError("params must not be None")
+    if not 0.0 <= params.alpha <= 1.0:
+        raise ValueError(f"params.alpha must be in [0, 1], got {params.alpha}")
+    if params.M <= 0:
+        raise ValueError(f"params.M must be positive, got {params.M}")
+
     S = evidential_support_score(evidence, coherence_inputs, params.L0)
-    C = coherence_score(hypothesis.description, evidence, coherence_inputs)
+    C = coherence_score(hypothesis.description, scope, coherence_inputs)
     hist, ece = historical_calibration_factor(historical, params.M)
     c_final = final_confidence(S, C, ece, params.alpha)
+    explains, contradicts = _get_sign_sets(coherence_inputs)
     supporting = [
-        item for item in evidence if _sign(item.organization_type, coherence_inputs) == 1
+        item for item in evidence if _sign(item.organization_type, explains, contradicts) == 1
     ]
     opposing = [
-        item for item in evidence if _sign(item.organization_type, coherence_inputs) == -1
+        item for item in evidence if _sign(item.organization_type, explains, contradicts) == -1
     ]
     justification = _justification(
         hypothesis.description,

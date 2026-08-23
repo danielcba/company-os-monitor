@@ -483,15 +483,22 @@ async def test_service_without_hypotheses_is_clean(confidence_store):
 
 
 def test_confidence_service_metrics_are_exposed():
+    from types import SimpleNamespace
+
     service = ConfidenceService.__new__(ConfidenceService)
     service.total_confidence_scores = 4
     service.total_duplicates = 1
     service.errors = 0
     service.by_target_type = {"hypothesis": 4}
-    service.confidence_values = [0.8, 0.6, 0.7, 0.9]
-    service.error_estimates = [0.1, 0.1, 0.1, 0.1]
+    # Use the new _RunningStats attributes
+    service._confidence_stats = SimpleNamespace(mean_value=0.75)
+    service._error_stats = SimpleNamespace(mean_value=0.1)
     service.last_run_at = None
-    health = HealthServer(service)
+    # Mock confidence store for health check
+    mock_store = SimpleNamespace(
+        verify_connection=lambda: None,
+    )
+    health = HealthServer(service, mock_store)
 
     async def get_metrics():
         response = await health.metrics_handler(SimpleNamespace())

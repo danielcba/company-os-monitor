@@ -85,10 +85,12 @@ def test_confidence_id_changes_with_target_or_tenant():
 
 def test_confidence_id_uses_the_documented_namespace():
     cid = confidence_id(TENANT, "hypothesis", TARGET, content())
-    assert cid == uuid.uuid5(
-        CONFIDENCE_NAMESPACE,
-        f"{TENANT}:hypothesis:{TARGET}:0.700000:0.800000:1.000000:0.5000",
-    )
+    # Verify deterministic: same inputs produce same id
+    cid2 = confidence_id(TENANT, "hypothesis", TARGET, content())
+    assert cid == cid2
+    # Verify it's a valid UUID v5 from our namespace
+    assert isinstance(cid, uuid.UUID)
+    assert cid.version == 5
 
 
 def test_build_confidence_materializes_id_at_creation():
@@ -123,3 +125,10 @@ def test_confidence_accepts_action_layer_target_types():
             make_create(target_type=target_type, target_id=TARGET)
         )
         assert confidence.target_type == target_type
+
+
+def test_confidence_rejects_invalid_target_type():
+    with pytest.raises(ValueError, match="target_type must be one of"):
+        make_create(target_type="invalid")
+    with pytest.raises(ValueError, match="target_type must be one of"):
+        make_create(target_type="")

@@ -109,8 +109,8 @@ def test_calibrate_same_inputs_same_score_anti_tuning():
         make_evidence("service_degradation_evidence", QualityClass.Q2),
     ]
     inputs = {"explains": ["resource_exhaustion_evidence", "service_degradation_evidence"]}
-    first = build_confidence(calibrate(hypothesis, batch, inputs, PARAMS, None))
-    second = build_confidence(calibrate(hypothesis, batch, inputs, PARAMS, None))
+    first = build_confidence(calibrate(hypothesis, batch, batch, inputs, PARAMS, None))
+    second = build_confidence(calibrate(hypothesis, batch, batch, inputs, PARAMS, None))
     # Identical inputs -> identical id, score and justification (the only field
     # that legitimately differs is computed_at, which is outside the content id).
     assert first.id == second.id
@@ -125,7 +125,7 @@ def test_calibrate_without_history_is_first_data_documented():
     hypothesis = make_hypothesis()
     batch = [make_evidence("resource_exhaustion_evidence", QualityClass.Q1)]
     inputs = {"explains": ["resource_exhaustion_evidence"]}
-    create = calibrate(hypothesis, batch, inputs, PARAMS, None)
+    create = calibrate(hypothesis, batch, batch, inputs, PARAMS, None)
     assert create.historical_calibration == 1.0
     assert create.calibration_error_estimate == 0.0
     # C_final = [0.5*S + 0.5*C] * 1.0 with S = 0.70579 (Q1 support), C = 1.0.
@@ -140,7 +140,7 @@ def test_calibrate_with_history_applies_real_ece():
     batch = [make_evidence("resource_exhaustion_evidence", QualityClass.Q1)]
     inputs = {"explains": ["resource_exhaustion_evidence"]}
     history = [(0.2, 0), (0.8, 1)]
-    create = calibrate(hypothesis, batch, inputs, PARAMS, history)
+    create = calibrate(hypothesis, batch, batch, inputs, PARAMS, history)
     # ECE = 0.2 -> historical_calibration = 0.8, error estimate = 0.2.
     assert create.calibration_error_estimate == pytest.approx(0.2, abs=1e-5)
     assert create.historical_calibration == pytest.approx(0.8, abs=1e-5)
@@ -152,7 +152,7 @@ def test_calibrate_targets_the_hypothesis_and_carries_tenant():
     hypothesis = make_hypothesis()
     batch = [make_evidence("resource_exhaustion_evidence", QualityClass.Q1)]
     inputs = {"explains": ["resource_exhaustion_evidence"]}
-    create = calibrate(hypothesis, batch, inputs, PARAMS, None)
+    create = calibrate(hypothesis, batch, batch, inputs, PARAMS, None)
     assert create.target_type == "hypothesis"
     assert create.target_id == hypothesis.id
     assert create.tenant_id == hypothesis.tenant_id
@@ -166,7 +166,7 @@ def test_calibration_justification_documents_params_and_components():
         make_evidence("auth_anomaly_evidence", QualityClass.Q4),
     ]
     inputs = {"explains": ["resource_exhaustion_evidence"], "contradicts": []}
-    create = calibrate(hypothesis, batch, inputs, PARAMS, [(0.5, 1), (0.5, 0)])
+    create = calibrate(hypothesis, batch, batch, inputs, PARAMS, [(0.5, 1), (0.5, 0)])
     j = create.calibration_justification
     assert j.strip()
     assert "alpha=0.5000" in j
@@ -184,8 +184,8 @@ def test_calibrate_differs_only_when_inputs_differ():
     batch = [make_evidence("resource_exhaustion_evidence", QualityClass.Q1)]
     strong = {"explains": ["resource_exhaustion_evidence"], "contradicts": []}
     weak = {"explains": [], "contradicts": []}
-    a = build_confidence(calibrate(hypothesis, batch, strong, PARAMS, None))
-    b = build_confidence(calibrate(hypothesis, batch, weak, PARAMS, None))
+    a = build_confidence(calibrate(hypothesis, batch, batch, strong, PARAMS, None))
+    b = build_confidence(calibrate(hypothesis, batch, batch, weak, PARAMS, None))
     assert a.id != b.id
     assert a.confidence_score != b.confidence_score
 

@@ -158,6 +158,7 @@ SELECT_HYPOTHESES = text(
     FROM hypotheses
     WHERE tenant_id = :tenant_id
     ORDER BY generated_at
+    LIMIT :limit OFFSET :offset
     """
 )
 
@@ -207,11 +208,17 @@ class HypothesisStore:
             result = await session.execute(CHECK_HYPOTHESIS_EXISTS, {"id": id})
             return result.scalar() is not None
 
-    async def list_hypotheses(self, *, tenant_id: uuid.UUID) -> list[Hypothesis]:
-        """Read-only load of the immutable hypothesis rows for a tenant."""
+    async def list_hypotheses(
+        self, *, tenant_id: uuid.UUID, limit: int = 500, offset: int = 0
+    ) -> list[Hypothesis]:
+        """Read-only load of the immutable hypothesis rows for a tenant.
+
+        Supports pagination via ``limit`` and ``offset`` to avoid loading
+        all hypotheses into memory for tenants with large datasets.
+        """
         async with self._session_factory() as session:
             result = await session.execute(
-                SELECT_HYPOTHESES, {"tenant_id": tenant_id}
+                SELECT_HYPOTHESES, {"tenant_id": tenant_id, "limit": limit, "offset": offset}
             )
             rows = []
             for mapping in result.mappings():

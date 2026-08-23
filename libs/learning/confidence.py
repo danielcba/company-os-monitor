@@ -18,12 +18,13 @@ overwritten. ``get_confidence`` returns the most recent row for a target.
 The row is never deleted; the content trigger blocks any UPDATE/DELETE (see
 sprint8-confidence-content-trigger.sql and the base schema).
 """
+import struct
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -53,6 +54,15 @@ class CalibrationContent:
     alpha: float
 
 
+def _float_to_bytes(val: float) -> bytes:
+    """Deterministic binary representation of a float for hashing.
+
+    Uses IEEE 754 binary64 (big-endian) to avoid decimal formatting
+    non-determinism (e.g. 0.7057850000000001 vs 0.705785).
+    """
+    return struct.pack("!d", val)
+
+
 def confidence_id(
     tenant_id: uuid.UUID,
     target_type: str,
@@ -69,12 +79,16 @@ def confidence_id(
     and the history is kept (append-only, P1). ``computed_at`` is deliberately
     excluded: it would break idempotence between runs.
     """
-    return uuid.uuid5(
-        CONFIDENCE_NAMESPACE,
-        f"{tenant_id}:{target_type}:{target_id}:"
-        f"{content.evidential_support:.6f}:{content.explanatory_coherence:.6f}:"
-        f"{content.historical_calibration:.6f}:{content.alpha:.4f}",
-    )
+    parts = [
+        str(tenant_id).encode(),
+        target_type.encode(),
+        str(target_id).encode(),
+        _float_to_bytes(content.evidential_support),
+        _float_to_bytes(content.explanatory_coherence),
+        _float_to_bytes(content.historical_calibration),
+        _float_to_bytes(content.alpha),
+    ]
+    return uuid.uuid5(CONFIDENCE_NAMESPACE, b":".join(parts))
 
 
 class ConfidenceCreate(BaseModel):
@@ -98,6 +112,13 @@ class ConfidenceCreate(BaseModel):
     calibration_justification: str
     calibration_error_estimate: float = Field(ge=0.0, le=1.0)
     computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @field_validator("target_type")
+    @classmethod
+    def _validate_target_type(cls, v: str) -> str:
+        if v not in TARGET_TYPES:
+            raise ValueError(f"target_type must be one of {sorted(TARGET_TYPES)}, got {v!r}")
+        return v
 
 
 class Confidence(BaseModel):
@@ -123,11 +144,22 @@ class Confidence(BaseModel):
     calibration_error_estimate: float = Field(ge=0.0, le=1.0)
     computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
+    @field_validator("target_type")
+    @classmethod
+    def _validate_target_type(cls, v: str) -> str:
+        if v not in TARGET_TYPES:
+            raise ValueError(f"target_type must be one of {sorted(TARGET_TYPES)}, got {v!r}")
+        return v
+
     model_config = ConfigDict(frozen=True)
 
 
 def build_confidence(create: ConfidenceCreate) -> Confidence:
-    """Materialize a Confidence from a creation request (id assigned at creation)."""
+    """Materialize a Confidence from a creation request (id assigned at creation).
+
+    Note: computed_at is not included here - it will be set by the DB DEFAULT
+    on insert and returned via RETURNING.
+    """
     content = CalibrationContent(
         evidential_support=create.evidential_support,
         explanatory_coherence=create.explanatory_coherence,
@@ -151,7 +183,7 @@ def build_confidence(create: ConfidenceCreate) -> Confidence:
         alpha=create.alpha,
         calibration_justification=create.calibration_justification,
         calibration_error_estimate=create.calibration_error_estimate,
-        computed_at=create.computed_at,
+        computed_at=create.computed_at,  # placeholder; will be overwritten by DB value on insert
     )
 
 
@@ -160,17 +192,17 @@ INSERT_CONFIDENCE = text(
     INSERT INTO confidence_scores (
         id, tenant_id, target_type, target_id, evidential_support,
         explanatory_coherence, historical_calibration, confidence_score,
-        alpha, calibration_justification, calibration_error_estimate, computed_at
+        alpha, calibration_justification, calibration_error_estimate
     )
     VALUES (
         :id, :tenant_id, :target_type, :target_id, :evidential_support,
         :explanatory_coherence, :historical_calibration, :confidence_score,
-        :alpha, :calibration_justification, :calibration_error_estimate, :computed_at
+        :alpha, :calibration_justification, :calibration_error_estimate
     )
     ON CONFLICT (id) DO NOTHING
     RETURNING id, tenant_id, target_type, target_id, evidential_support,
               explanatory_coherence, historical_calibration, confidence_score,
-              alpha, calibration_justification, calibration_error_estimate
+              alpha, calibration_justification, calibration_error_estimate, computed_at
     """
 )
 
@@ -214,8 +246,9 @@ class ConfidenceStore:
     async def save_confidence(self, confidence: Confidence) -> dict[str, Any] | None:
         """Insert one immutable confidence row.
 
-        Returns the persisted row, or None when it was already present
-        (idempotent dedup by the deterministic content-addressed id).
+        Returns the persisted row (with DB-generated computed_at), or None when
+        it was already present (idempotent dedup by the deterministic
+        content-addressed id).
         """
         async with self._session_factory() as session:
             result = await session.execute(
@@ -232,7 +265,6 @@ class ConfidenceStore:
                     "alpha": confidence.alpha,
                     "calibration_justification": confidence.calibration_justification,
                     "calibration_error_estimate": confidence.calibration_error_estimate,
-                    "computed_at": confidence.computed_at,
                 },
             )
             await session.commit()
@@ -245,11 +277,18 @@ class ConfidenceStore:
             result = await session.execute(CHECK_CONFIDENCE_EXISTS, {"id": id})
             return result.scalar() is not None
 
-    async def list_confidence(self, *, tenant_id: uuid.UUID) -> list[Confidence]:
-        """Read-only load of the immutable confidence rows for a tenant."""
+    async def list_confidence(
+        self, *, tenant_id: uuid.UUID, limit: int = 500, offset: int = 0
+    ) -> list[Confidence]:
+        """Read-only load of the immutable confidence rows for a tenant.
+
+        Supports pagination via ``limit`` and ``offset`` to avoid loading
+        all confidence rows into memory for tenants with large datasets.
+        """
+        sql = SELECT_CONFIDENCE + text(" LIMIT :limit OFFSET :offset")
         async with self._session_factory() as session:
             result = await session.execute(
-                SELECT_CONFIDENCE, {"tenant_id": tenant_id}
+                sql, {"tenant_id": tenant_id, "limit": limit, "offset": offset}
             )
             return [Confidence(**dict(row)) for row in result.mappings()]
 

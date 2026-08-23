@@ -32,6 +32,15 @@ def test_quality_class_bands_and_midpoint_weights():
     assert quality_class_to_weight("Q4") == 0.125
 
 
+def test_quality_class_to_weight_raises_on_unknown():
+    with pytest.raises(ValueError, match="Unknown quality class"):
+        quality_class_to_weight("Q5")
+    with pytest.raises(ValueError, match="Unknown quality class"):
+        quality_class_to_weight("invalid")
+    with pytest.raises(ValueError, match="Unknown quality class"):
+        quality_class_to_weight("")
+
+
 def test_evidential_support_log_odds_sigmoid():
     # L = 0 + 0.875 - 0.625 = 0.25 -> S = 1/(1+e^-0.25) = 0.5622 (known value).
     S = evidential_support([0.875, 0.625], [1, -1], 0.0)
@@ -85,42 +94,38 @@ def test_final_confidence_combines_support_coherence_and_ece():
 
 
 def test_explanatory_coherence_high_when_hypothesis_explains_scope():
-    hypothesis = "La hipotesis explica la evidencia."
     evidence = ["resource_exhaustion_evidence", "service_degradation_evidence"]
     constraints = {
         "explains": ["resource_exhaustion_evidence", "service_degradation_evidence"],
         "contradicts": [],
     }
-    C = explanatory_coherence(hypothesis, evidence, constraints)
+    C = explanatory_coherence(evidence, constraints)
     assert C == 1.0
     assert 0.0 <= C <= 1.0
 
 
 def test_explanatory_coherence_low_when_hypothesis_contradicts_scope():
-    hypothesis = "La hipotesis contradice toda la evidencia."
     evidence = ["resource_exhaustion_evidence", "service_degradation_evidence"]
     constraints = {
         "explains": [],
         "contradicts": ["resource_exhaustion_evidence", "service_degradation_evidence"],
     }
-    C = explanatory_coherence(hypothesis, evidence, constraints)
+    C = explanatory_coherence(evidence, constraints)
     assert C == 0.0
 
 
 def test_explanatory_coherence_partial_explanation():
-    hypothesis = "Explica solo la mitad."
     evidence = ["e1", "e2", "e3", "e4"]
     constraints = {"explains": ["e1", "e2"], "contradicts": []}
     # C = 2 explained / (2 + 0 + 2 unexplained) = 0.5.
-    assert explanatory_coherence(hypothesis, evidence, constraints) == 0.5
+    assert explanatory_coherence(evidence, constraints) == 0.5
 
 
 def test_explanatory_coherence_penalizes_contradicted_evidence():
-    hypothesis = "Explica una y contradice otra."
     evidence = ["e1", "e2", "e3"]
     constraints = {"explains": ["e1"], "contradicts": ["e2"]}
-    # C = 1 / (1 + 1 + 2) = 0.25.
-    assert explanatory_coherence(hypothesis, evidence, constraints) == 0.25
+    # C = 1 explained / (1 positive + 1 negative + 1 unexplained) = 1/3.
+    assert explanatory_coherence(evidence, constraints) == pytest.approx(1 / 3)
 
 
 def test_explanatory_coherence_consistency_with_competing_hypotheses():
@@ -139,13 +144,13 @@ def test_explanatory_coherence_consistency_with_competing_hypotheses():
     }
     # Consistency with h2 adds a satisfied positive constraint -> C = 1.0;
     # inconsistency with h3 adds a violated negative -> C = 1/(1+1) = 0.5.
-    assert explanatory_coherence("h1", evidence, consistent) == 1.0
-    assert explanatory_coherence("h1", evidence, inconsistent) == 0.5
+    assert explanatory_coherence(evidence, consistent) == 1.0
+    assert explanatory_coherence(evidence, inconsistent) == 0.5
 
 
 def test_explanatory_coherence_neutral_without_scope():
     # No evidence in scope -> neutral 0.5 (no facts to evaluate, documented).
-    assert explanatory_coherence("h", [], {"explains": ["e1"]}) == 0.5
+    assert explanatory_coherence([], {"explains": ["e1"]}) == 0.5
 
 
 def test_calibration_params_defaults_are_fixed_a_priori():
