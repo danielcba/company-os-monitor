@@ -6,8 +6,14 @@ the confidence requirement (R4) and the authority requirement (R5) for action
 execution. This is the enforcement contract of the Cognitive Boundary (R3) -
 perception and reasoning inform action but never execute it without explicit
 authorization (P6).
+
+Phase 2 (Confidence Provenance Hardening): ``validate_confidence_present``
+now requires ``confidence_id`` and validates it through a store adapter.
+Client-supplied ``confidence_score`` is IGNORED — the store returns the
+authoritative score. This prevents a client from fabricating a high confidence
+score to bypass calibration (R4).
 """
-from typing import Any
+from typing import Any, Protocol
 
 from libs.access.errors import AccessError
 
@@ -57,6 +63,28 @@ class BoundaryViolationError(AccessError):
     """A structural Cognitive Boundary rule was violated (R3)."""
 
 
+class ConfidenceProvenanceError(AccessError):
+    """Confidence could not be verified against the store (R4)."""
+
+
+class ConfidenceStoreAdapter(Protocol):
+    """Protocol for the confidence store used by the boundary gate.
+
+    The gateway injects this adapter so the boundary module stays pure
+    (no direct DB imports — ADR-0002: external capability). The adapter
+    returns the authoritative confidence record or None if not found.
+    """
+
+    async def get_confidence_for_boundary(
+        self,
+        *,
+        tenant_id: str,
+        confidence_id: str,
+        expected_target_type: str,
+        expected_target_id: str | None = None,
+    ) -> dict[str, Any] | None: ...
+
+
 def is_canonical_flow(source: str, target: str) -> bool:
     """Whether a transition between pipeline concepts follows the canonical flow.
 
@@ -67,11 +95,43 @@ def is_canonical_flow(source: str, target: str) -> bool:
 
 
 def validate_confidence_present(payload: dict[str, Any] | None) -> bool:
-    """R4: the payload carries a calibrated Confidence (id or score)."""
+    """R4: the payload carries a confidence_id (required for provenance).
+
+    Client-supplied confidence_score is NOT sufficient — it must be verified
+    against the store. This function only checks structural presence.
+    """
     payload = payload or {}
-    return bool(
-        payload.get("confidence_id") or payload.get("confidence_score") is not None
+    return bool(payload.get("confidence_id"))
+
+
+async def validate_confidence_binding(
+    *,
+    store: ConfidenceStoreAdapter,
+    tenant_id: str,
+    confidence_id: str,
+    expected_target_type: str,
+    expected_target_id: str | None = None,
+) -> dict[str, Any]:
+    """R4: verify confidence exists, belongs to tenant, and matches target.
+
+    Returns the authoritative confidence record from the store.
+    Raises ConfidenceProvenanceError if verification fails.
+
+    The client's confidence_score is IGNORED — the store provides the
+    authoritative score. This prevents score fabrication.
+    """
+    record = await store.get_confidence_for_boundary(
+        tenant_id=tenant_id,
+        confidence_id=confidence_id,
+        expected_target_type=expected_target_type,
+        expected_target_id=expected_target_id,
     )
+    if record is None:
+        raise ConfidenceProvenanceError(
+            f"confidence_id {confidence_id!r} not found or does not match "
+            f"tenant={tenant_id!r} target_type={expected_target_type!r}"
+        )
+    return record
 
 
 def boundary_gate(action: str, payload: dict[str, Any] | None) -> str:
@@ -101,5 +161,5 @@ def check_boundary(action: str, payload: dict[str, Any] | None) -> None:
     if reason == "missing_confidence":
         raise BoundaryViolationError(
             "Recommendation -> Decision requires a calibrated Confidence "
-            "(R4): payload must carry confidence_id or confidence_score"
+            "(R4): payload must carry confidence_id (verified against store)"
         )

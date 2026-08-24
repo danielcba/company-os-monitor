@@ -296,18 +296,21 @@ class DecisionStore:
         self,
         *,
         id: uuid.UUID,
+        tenant_id: uuid.UUID,
         actual_outcomes: list[dict[str, Any]],
         executed_at: datetime | None = None,
         status: str | None = None,
     ) -> dict[str, Any] | None:
         """Update lifecycle fields for a decision (actual outcomes and execution time).
 
+        Phase 12: tenant_id is now required for SQL-level isolation.
+
         Only updates lifecycle fields (actual_outcomes, executed_at, status);
         content columns are immutable (P1, blocked by content trigger).
         Returns the updated decision row, or None if not found.
         """
         set_parts: list[str] = []
-        params: dict[str, Any] = {"id": id}
+        params: dict[str, Any] = {"id": id, "tenant_id": tenant_id}
 
         if actual_outcomes is not None:
             set_parts.append("actual_outcomes = :actual_outcomes")
@@ -329,7 +332,7 @@ class DecisionStore:
             f"""
             UPDATE decisions
             SET {set_clause}
-            WHERE id = :id
+            WHERE id = :id AND tenant_id = :tenant_id
             RETURNING id, tenant_id, recommendation_id, confidence_id, authority_id,
                       commitment, expected_outcomes, risk_tolerance, status, committed_at,
                       executed_at, actual_outcomes

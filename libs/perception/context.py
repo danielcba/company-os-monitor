@@ -112,16 +112,42 @@ def models_for_purpose(purpose: str) -> list[MentalModel]:
     return [m for m in MENTAL_MODEL_CATALOG if purpose in m.purposes]
 
 
-def context_id(
-    tenant_id: uuid.UUID, purpose: str, evidence_ids: list[uuid.UUID]
+def context_id(  # noqa: PLR0913,PLR0917 - content hash parameters
+    tenant_id: uuid.UUID,
+    purpose: str,
+    evidence_ids: list[uuid.UUID],
+    mental_model_id: str = "",
+    coherence_score: float = 0.0,
+    competing_models: list[dict[str, Any]] | None = None,
 ) -> uuid.UUID:
-    """Derive a deterministic id from the context content.
+    """Derive a deterministic id from the FULL context content.
 
-    Re-activating the same context over the same evidence for the same purpose
-    yields the same id, which makes re-runs idempotent (dedup by primary key).
+    Phase 6: The fingerprint now includes all semantically immutable fields:
+    - tenant_id
+    - purpose
+    - evidence_ids (normalized and sorted)
+    - mental_model_id
+    - coherence_score
+    - competing_models (normalized and sorted)
+
+    This prevents collisions where different mental models, scores, or
+    competing alternatives would produce the same ID.
     """
-    ordered = ",".join(str(x) for x in sorted(evidence_ids))
-    return uuid.uuid5(CONTEXT_NAMESPACE, f"{tenant_id}:{purpose}:{ordered}")
+    ordered_evidence = ",".join(str(x) for x in sorted(evidence_ids))
+    # Normalize competing_models: sort by model_id, serialize deterministically.
+    if competing_models:
+        normalized = sorted(
+            competing_models,
+            key=lambda m: m.get("mental_model_id", ""),
+        )
+        competing_str = json.dumps(normalized, sort_keys=True, default=str)
+    else:
+        competing_str = "[]"
+    content = (
+        f"{tenant_id}:{purpose}:{ordered_evidence}:"
+        f"{mental_model_id}:{coherence_score}:{competing_str}"
+    )
+    return uuid.uuid5(CONTEXT_NAMESPACE, content)
 
 
 class ContextCreate(BaseModel):
@@ -159,7 +185,14 @@ class Context(BaseModel):
 def build_context(create: ContextCreate) -> Context:
     """Materialize a Context from a creation request (id assigned at creation)."""
     return Context(
-        id=context_id(create.tenant_id, create.purpose, create.evidence_ids),
+        id=context_id(
+            create.tenant_id,
+            create.purpose,
+            create.evidence_ids,
+            mental_model_id=create.mental_model_id,
+            coherence_score=create.coherence_score,
+            competing_models=create.competing_models,
+        ),
         tenant_id=create.tenant_id,
         evidence_ids=create.evidence_ids,
         mental_model_id=create.mental_model_id,
@@ -196,7 +229,7 @@ DEACTIVATE_CONTEXT = text(
 )
 
 SET_CONTEXT_ACTIVE = text(
-    "UPDATE contexts SET is_active = :is_active WHERE id = :id"
+    "UPDATE contexts SET is_active = :is_active WHERE id = :id AND tenant_id = :tenant_id"
 )
 
 CHECK_CONTEXT_EXISTS = text("SELECT 1 FROM contexts WHERE id = :id")
@@ -237,44 +270,53 @@ class ContextStore:
     async def save_context(self, context: Context) -> dict[str, Any] | None:
         """Insert one immutable context row and supervise the activation cycle.
 
+        Phase 5: The INSERT + DEACTIVATE is now a single transaction. If the
+        INSERT succeeds but DEACTIVATE fails, the entire operation is rolled
+        back, preventing 0-active or 2-active states.
+
         Returns the persisted row, or None when it was already present
         (idempotent dedup). Only a newly inserted activation supersedes the
         previous active context of the same tenant+purpose (is_active lifecycle).
         """
         async with self._session_factory() as session:
-            result = await session.execute(
-                INSERT_CONTEXT,
-                {
-                    "id": context.id,
-                    "tenant_id": context.tenant_id,
-                    "evidence_ids": list(context.evidence_ids),
-                    "mental_model_id": context.mental_model_id,
-                    "purpose": context.purpose,
-                    "coherence_score": context.coherence_score,
-                    "competing_models": json.dumps(context.competing_models, default=str),
-                    "activated_at": context.activated_at,
-                    "is_active": context.is_active,
-                },
-            )
-            await session.commit()
-            row = result.mappings().one_or_none()
-            if row is not None:
-                await session.execute(
-                    DEACTIVATE_CONTEXT,
+            async with session.begin():
+                result = await session.execute(
+                    INSERT_CONTEXT,
                     {
+                        "id": context.id,
                         "tenant_id": context.tenant_id,
+                        "evidence_ids": list(context.evidence_ids),
+                        "mental_model_id": context.mental_model_id,
                         "purpose": context.purpose,
-                        "exclude_id": context.id,
+                        "coherence_score": context.coherence_score,
+                        "competing_models": json.dumps(context.competing_models, default=str),
+                        "activated_at": context.activated_at,
+                        "is_active": context.is_active,
                     },
                 )
-                await session.commit()
+                row = result.mappings().one_or_none()
+                if row is not None:
+                    await session.execute(
+                        DEACTIVATE_CONTEXT,
+                        {
+                            "tenant_id": context.tenant_id,
+                            "purpose": context.purpose,
+                            "exclude_id": context.id,
+                        },
+                    )
             return dict(row) if row is not None else None
 
-    async def set_active(self, *, id: uuid.UUID, is_active: bool) -> None:
-        """Flip the lifecycle flag of one context (content columns untouched)."""
+    async def set_active(
+        self, *, id: uuid.UUID, tenant_id: uuid.UUID, is_active: bool
+    ) -> None:
+        """Flip the lifecycle flag of one context (content columns untouched).
+
+        Phase 12: tenant_id is now required for SQL-level isolation.
+        """
         async with self._session_factory() as session:
             await session.execute(
-                SET_CONTEXT_ACTIVE, {"id": id, "is_active": is_active}
+                SET_CONTEXT_ACTIVE,
+                {"id": id, "tenant_id": tenant_id, "is_active": is_active},
             )
             await session.commit()
 

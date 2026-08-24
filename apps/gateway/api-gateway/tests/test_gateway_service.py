@@ -134,71 +134,71 @@ async def _auth(service, token):
 
 
 # ---------------------------------------------------------------------- auth
-def test_authenticate_missing_token_401(service):
+async def test_authenticate_missing_token_401(service):
     with pytest.raises(InvalidTokenError):
-        service.authenticate("")
+        await service.authenticate("")
 
 
-def test_authenticate_invalid_token_401(service, jwt):
+async def test_authenticate_invalid_token_401(service, jwt):
     with pytest.raises(InvalidTokenError):
-        service.authenticate("Bearer not-a-jwt")
+        await service.authenticate("Bearer not-a-jwt")
 
 
-def test_authenticate_valid_token_returns_payload(service, jwt):
+async def test_authenticate_valid_token_returns_payload(service, jwt):
     token = _token(jwt, role=ROLE_ADMIN)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     assert payload.role == ROLE_ADMIN
     assert payload.tenant_id == TENANT_A
 
 
 # -------------------------------------------------------------- authorize
-def test_authorize_viewer_commit_denied(service, jwt):
+async def test_authorize_viewer_commit_denied(service, jwt):
     token = _token(jwt, role=ROLE_VIEWER, user_id=USER_VIEWER)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     with pytest.raises(AuthorizationError):
         service.require_authorized(token=payload, action="commit", risk=RISK_LOW)
 
 
-def test_authorize_viewer_propose_denied(service, jwt):
+async def test_authorize_viewer_propose_denied(service, jwt):
     token = _token(jwt, role=ROLE_VIEWER, user_id=USER_VIEWER)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     with pytest.raises(AuthorizationError):
         service.require_authorized(token=payload, action="propose")
 
 
-def test_authorize_admin_commit_low_medium_allowed(service, jwt):
+async def test_authorize_admin_commit_low_medium_allowed(service, jwt):
     token = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     service.require_authorized(token=payload, action="commit", risk=RISK_LOW)
     service.require_authorized(token=payload, action="commit", risk=RISK_MEDIUM)
 
 
-def test_authorize_admin_commit_high_denied(service, jwt):
+async def test_authorize_admin_commit_high_denied(service, jwt):
     token = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     with pytest.raises(AuthorizationError):
         service.require_authorized(token=payload, action="commit", risk=RISK_HIGH)
 
 
-def test_authorize_superadmin_commit_high_allowed(service, jwt):
+async def test_authorize_superadmin_commit_high_allowed(service, jwt):
     token = _token(jwt, role=ROLE_SUPERADMIN, user_id=USER_ADMIN)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     service.require_authorized(token=payload, action="commit", risk=RISK_HIGH)
 
 
-def test_authorize_ack_allowed_for_operator_admin(service, jwt):
+async def test_authorize_ack_allowed_for_operator_admin(service, jwt):
     token = _token(jwt, role=ROLE_ADMIN)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     service.require_authorized(token=payload, action="ack")
 
 
-def test_authorize_execute_only_superadmin(service, jwt):
+async def test_authorize_execute_only_superadmin(service, jwt):
     token = _token(jwt, role=ROLE_ADMIN)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     with pytest.raises(AuthorizationError):
         service.require_authorized(token=payload, action="execute")
     super_token = _token(jwt, role=ROLE_SUPERADMIN)
-    super_payload = service.authenticate(f"Bearer {super_token}")
+    super_payload = await service.authenticate(f"Bearer {super_token}")
     service.require_authorized(token=super_payload, action="execute")
 
 
@@ -209,7 +209,7 @@ def test_enforce_boundary_missing_confidence_raises(service, jwt):
 
 
 def test_enforce_boundary_commit_with_confidence_ok(service, jwt):
-    service.enforce_boundary("commit", {"confidence_score": 0.85})
+    service.enforce_boundary("commit", {"confidence_id": "test-uuid"})
 
 
 def test_enforce_boundary_unknown_action_raises(service, jwt):
@@ -220,7 +220,7 @@ def test_enforce_boundary_unknown_action_raises(service, jwt):
 # -------------------------------------------------------------- tenant scope
 async def test_list_decisions_only_own_tenant(service, jwt):
     token = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN, tenant_id=TENANT_A)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     decisions = await service.list_decisions(payload, TENANT_A)
     assert len(decisions) == 1
     assert decisions[0]["tenant_id"] == TENANT_A
@@ -231,14 +231,14 @@ async def test_list_decisions_only_own_tenant(service, jwt):
 
 async def test_list_decisions_cross_tenant_admin_denied(service, jwt):
     token = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN, tenant_id=TENANT_A)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     with pytest.raises(TenantIsolationError):
         await service.list_decisions(payload, TENANT_B)
 
 
 async def test_list_decisions_cross_tenant_superadmin_allowed(service, jwt):
     token = _token(jwt, role=ROLE_SUPERADMIN, user_id=USER_ADMIN, tenant_id=TENANT_A)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     decisions = await service.list_decisions(payload, TENANT_B)
     assert len(decisions) == 1
     assert decisions[0]["tenant_id"] == TENANT_B
@@ -246,7 +246,7 @@ async def test_list_decisions_cross_tenant_superadmin_allowed(service, jwt):
 
 async def test_list_reports_tenant_isolation(service, jwt):
     token = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN, tenant_id=TENANT_A)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     reports = await service.list_reports(payload, TENANT_A)
     assert len(reports) == 1
     assert reports[0]["title"] == "Reporte A"
@@ -254,7 +254,7 @@ async def test_list_reports_tenant_isolation(service, jwt):
 
 async def test_decision_payload_includes_authority_binding(service, jwt):
     token = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN, tenant_id=TENANT_A)
-    payload = service.authenticate(f"Bearer {token}")
+    payload = await service.authenticate(f"Bearer {token}")
     decisions = await service.list_decisions(payload, TENANT_A)
     assert decisions[0]["authority_id"] == USER_ADMIN
     assert decisions[0]["confidence_id"]
@@ -322,3 +322,103 @@ def test_gateway_does_not_import_pipeline_logic():
             assert blocked not in text, (
                 f"{module.__name__} imports {blocked} (ADR-0002 boundary)"
             )
+
+
+# --------------------------------------------------- cross-tenant security (Phase 1)
+USER_SUPERADMIN = "00000000-0000-0000-0000-0000000000cc"
+
+
+async def test_viewer_can_access_own_tenant(service, jwt):
+    """Viewer with READ permission can access their own tenant's data."""
+    token = _token(jwt, role=ROLE_VIEWER, user_id=USER_VIEWER, tenant_id=TENANT_A)
+    payload = await service.authenticate(f"Bearer {token}")
+    decisions = await service.list_decisions(payload, TENANT_A)
+    assert len(decisions) == 1
+    assert decisions[0]["tenant_id"] == TENANT_A
+
+
+async def test_viewer_cannot_access_another_tenant(service, jwt):
+    """Viewer without cross-tenant authority cannot access another tenant."""
+    token = _token(jwt, role=ROLE_VIEWER, user_id=USER_VIEWER, tenant_id=TENANT_A)
+    payload = await service.authenticate(f"Bearer {token}")
+    with pytest.raises(TenantIsolationError):
+        await service.list_decisions(payload, TENANT_B)
+
+
+async def test_admin_cannot_cross_tenant(service, jwt):
+    """Admin (no cross_tenant permission) is blocked from cross-tenant reads."""
+    token = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN, tenant_id=TENANT_A)
+    payload = await service.authenticate(f"Bearer {token}")
+    with pytest.raises(TenantIsolationError):
+        await service.list_reports(payload, TENANT_B)
+
+
+async def test_superadmin_can_cross_tenant(service, jwt):
+    """Superadmin with cross_tenant permission can access other tenants."""
+    token = _token(jwt, role=ROLE_SUPERADMIN, user_id=USER_SUPERADMIN, tenant_id=TENANT_A)
+    payload = await service.authenticate(f"Bearer {token}")
+    reports = await service.list_reports(payload, TENANT_B)
+    assert len(reports) == 1
+    assert reports[0]["title"] == "Reporte B"
+
+
+async def test_report_listing_respects_tenant(service, jwt):
+    """Report listing is scoped to the token's effective tenant."""
+    token_a = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN, tenant_id=TENANT_A)
+    payload_a = await service.authenticate(f"Bearer {token_a}")
+    reports_a = await service.list_reports(payload_a, TENANT_A)
+
+    token_b = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN, tenant_id=TENANT_B)
+    payload_b = await service.authenticate(f"Bearer {token_b}")
+    reports_b = await service.list_reports(payload_b, TENANT_B)
+
+    # Each tenant sees only its own reports.
+    assert reports_a[0]["title"] == "Reporte A"
+    assert reports_b[0]["title"] == "Reporte B"
+    # No cross-contamination.
+    assert all(r["tenant_id"] == TENANT_A for r in reports_a)
+    assert all(r["tenant_id"] == TENANT_B for r in reports_b)
+
+
+async def test_decision_listing_never_leaks_cross_tenant(service, jwt):
+    """Even if somehow a tenant_id were passed, the store filters by tenant."""
+    token = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN, tenant_id=TENANT_A)
+    payload = await service.authenticate(f"Bearer {token}")
+    decisions = await service.list_decisions(payload, TENANT_A)
+    for d in decisions:
+        assert d["tenant_id"] == TENANT_A
+
+
+async def test_operator_cannot_propose(service, jwt):
+    """Operator role cannot propose (only read + ack)."""
+    token = _token(jwt, role="operator", user_id=USER_VIEWER, tenant_id=TENANT_A)
+    payload = await service.authenticate(f"Bearer {token}")
+    with pytest.raises(AuthorizationError):
+        service.require_authorized(token=payload, action="propose")
+
+
+async def test_operator_can_ack(service, jwt):
+    """Operator role can ack decisions."""
+    token = _token(jwt, role="operator", user_id=USER_VIEWER, tenant_id=TENANT_A)
+    payload = await service.authenticate(f"Bearer {token}")
+    service.require_authorized(token=payload, action="ack")
+
+
+async def test_admin_commit_high_risk_denied(service, jwt):
+    """Admin cannot commit high-risk decisions (risk ceiling)."""
+    token = _token(jwt, role=ROLE_ADMIN, user_id=USER_ADMIN, tenant_id=TENANT_A)
+    payload = await service.authenticate(f"Bearer {token}")
+    with pytest.raises(AuthorizationError):
+        service.require_authorized(token=payload, action="commit", risk=RISK_HIGH)
+
+
+async def test_superadmin_execute_allowed(service, jwt):
+    """Only superadmin can execute actions."""
+    token_viewer = _token(jwt, role=ROLE_VIEWER, user_id=USER_VIEWER, tenant_id=TENANT_A)
+    payload_viewer = await service.authenticate(f"Bearer {token_viewer}")
+    with pytest.raises(AuthorizationError):
+        service.require_authorized(token=payload_viewer, action="execute")
+
+    token_super = _token(jwt, role=ROLE_SUPERADMIN, user_id=USER_SUPERADMIN, tenant_id=TENANT_A)
+    payload_super = await service.authenticate(f"Bearer {token_super}")
+    service.require_authorized(token=payload_super, action="execute")

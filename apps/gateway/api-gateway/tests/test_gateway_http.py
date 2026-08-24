@@ -277,7 +277,7 @@ async def test_viewer_commit_403(server, jwt):
         FakeRequest(
             headers={"Authorization": f"Bearer {token}"},
             match_info={"action": "commit"},
-            body={"confidence_score": 0.85, "risk_tolerance": "low"},
+            body={"confidence_id": "test-uuid", "risk_tolerance": "low"},
         )
     )
     assert response.status == 403
@@ -289,7 +289,7 @@ async def test_admin_commit_low_allowed(server, jwt):
         FakeRequest(
             headers={"Authorization": f"Bearer {token}"},
             match_info={"action": "commit"},
-            body={"confidence_score": 0.85, "risk_tolerance": "low"},
+            body={"confidence_id": "test-uuid", "risk_tolerance": "low"},
         )
     )
     assert response.status == 200
@@ -306,7 +306,7 @@ async def test_admin_commit_high_403(server, jwt):
         FakeRequest(
             headers={"Authorization": f"Bearer {token}"},
             match_info={"action": "commit"},
-            body={"confidence_score": 0.95, "risk_tolerance": "high"},
+            body={"confidence_id": "test-uuid", "risk_tolerance": "high"},
         )
     )
     assert response.status == 403
@@ -318,7 +318,7 @@ async def test_superadmin_commit_high_allowed(server, jwt):
         FakeRequest(
             headers={"Authorization": f"Bearer {token}"},
             match_info={"action": "commit"},
-            body={"confidence_score": 0.95, "risk_tolerance": "high"},
+            body={"confidence_id": "test-uuid", "risk_tolerance": "high"},
         )
     )
     assert response.status == 200
@@ -338,7 +338,7 @@ async def test_operator_ack_allowed_but_commit_forbidden(server, jwt):
         FakeRequest(
             headers={"Authorization": f"Bearer {token}"},
             match_info={"action": "commit"},
-            body={"confidence_score": 0.85, "risk_tolerance": "low"},
+            body={"confidence_id": "test-uuid", "risk_tolerance": "low"},
         )
     )
     assert response.status == 403

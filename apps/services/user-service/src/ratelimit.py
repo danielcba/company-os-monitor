@@ -1,7 +1,13 @@
-"""Distributed sliding window rate limiter backed by Redis sorted sets.
+"""Distributed sliding window rate limiter backed by Redis (atomic).
 
-Uses Redis ZRANGEBYSCORE for O(log N) sliding window checks. Falls back to
-in-memory when Redis is unavailable (fail-open for availability).
+Phase 4: Atomic rate limiting using a Lua script that executes the entire
+sliding window check (remove expired + count + compare + insert + expire)
+in a single Redis call. No race conditions between operations.
+
+The API is now async-native (``await limiter.is_allowed(key)``). No more
+sync bridges with ThreadPoolExecutor.
+
+Falls back to in-memory when Redis is unavailable (fail-open for availability).
 
 Redis key pattern: ``ratelimit:{key}``
 Sorted set members: ``{timestamp}:{random}`` (unique per request)
@@ -12,7 +18,7 @@ Usage::
     from src.ratelimit import RateLimiter
 
     limiter = RateLimiter.from_url("redis://localhost:6379/1")
-    if not limiter.is_allowed(f"login:{client_ip}"):
+    if not await limiter.is_allowed(f"login:{client_ip}"):
         return 429
 """
 import os
@@ -21,23 +27,53 @@ import uuid
 from collections import defaultdict
 from typing import Protocol
 
+# Lua script for atomic sliding window rate limit check.
+# KEYS[1] = ratelimit:{key}
+# ARGV[1] = now (timestamp)
+# ARGV[2] = cutoff (now - window_seconds)
+# ARGV[3] = max_requests
+# ARGV[4] = member (unique identifier)
+# ARGV[5] = ttl (window_seconds + buffer)
+# Returns: 1 = allowed, 0 = denied
+_SLIDING_WINDOW_LUA = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local cutoff = tonumber(ARGV[2])
+local max_requests = tonumber(ARGV[3])
+local member = ARGV[4]
+local ttl = tonumber(ARGV[5])
+
+-- Remove expired entries.
+redis.call('ZREMRANGEBYSCORE', key, '-inf', cutoff)
+
+-- Count current window requests.
+local count = redis.call('ZCARD', key)
+
+if count >= max_requests then
+    return 0
+end
+
+-- Add current request.
+redis.call('ZADD', key, now, member)
+redis.call('EXPIRE', key, ttl)
+
+return 1
+"""
+
 
 class RedisClient(Protocol):
     """Minimal async Redis interface for the rate limiter."""
 
-    async def zremrangebyscore(self, key: str, min: float, max: float) -> int: ...
-
-    async def zcard(self, key: str) -> int: ...
-
-    async def zadd(self, key: str, mapping: dict[str, float]) -> int: ...
-
-    async def expire(self, key: str, time: int) -> bool: ...
+    async def eval(
+        self, script: str, num_keys: int, *args: str | int | float
+    ) -> int: ...
 
 
 class RateLimiter:
     """Sliding window rate limiter keyed by IP or identifier.
 
-    Supports both Redis-backed (distributed) and in-memory (standalone) modes.
+    Supports both Redis-backed (distributed, atomic via Lua) and
+    in-memory (standalone) modes.
     """
 
     def __init__(
@@ -64,58 +100,38 @@ class RateLimiter:
         except ImportError:
             return cls()
 
-    def is_allowed(self, key: str) -> bool:
+    async def is_allowed(self, key: str) -> bool:
         """Return True if the request is allowed, False if rate-limited.
 
-        Uses Redis sorted sets when available, falls back to in-memory.
+        Uses Redis Lua script when available (atomic), falls back to in-memory.
         """
         if self._redis is not None:
-            return self._is_allowed_redis(key)
+            return await self._is_allowed_redis(key)
         return self._is_allowed_memory(key)
 
-    def _is_allowed_redis(self, key: str) -> bool:
-        """Redis-backed sliding window check (synchronous wrapper)."""
-        import asyncio
-
+    async def _is_allowed_redis(self, key: str) -> bool:
+        """Redis-backed sliding window check (atomic via Lua script)."""
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import concurrent.futures
+            now = time.time()
+            cutoff = now - self._window
+            member = f"{now}:{uuid.uuid4().hex[:8]}"
+            ttl = int(self._window) + 10
+            redis_key = f"ratelimit:{key}"
 
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    future = pool.submit(
-                        asyncio.run, self._is_allowed_redis_async(key)
-                    )
-                    return future.result(timeout=5)
-            else:
-                return loop.run_until_complete(self._is_allowed_redis_async(key))
+            result = await self._redis.eval(
+                _SLIDING_WINDOW_LUA,
+                1,
+                redis_key,
+                str(now),
+                str(cutoff),
+                str(self._max),
+                member,
+                str(ttl),
+            )
+            return result == 1
         except Exception:
             # Fail-open: if Redis is unavailable, allow the request.
             return self._is_allowed_memory(key)
-
-    async def _is_allowed_redis_async(self, key: str) -> bool:
-        """Async Redis-backed sliding window check."""
-        now = time.time()
-        cutoff = now - self._window
-        redis_key = f"ratelimit:{key}"
-
-        # Remove expired entries.
-        await self._redis.zremrangebyscore(redis_key, "-inf", cutoff)
-
-        # Count current window requests.
-        count = await self._redis.zcard(redis_key)
-
-        if count >= self._max:
-            return False
-
-        # Add current request with unique member (timestamp + UUID).
-        member = f"{now}:{uuid.uuid4().hex[:8]}"
-        await self._redis.zadd(redis_key, {member: now})
-
-        # Set TTL on the key (window + buffer for cleanup).
-        await self._redis.expire(redis_key, int(self._window) + 10)
-
-        return True
 
     def _is_allowed_memory(self, key: str) -> bool:
         """In-memory sliding window check (fallback)."""

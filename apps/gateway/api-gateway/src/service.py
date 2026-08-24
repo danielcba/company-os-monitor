@@ -26,7 +26,6 @@ import httpx
 from libs.access.errors import (
     AuthorizationError,
     InvalidTokenError,
-    TenantIsolationError,
 )
 from libs.access.rbac import (
     PERM_COMMIT,
@@ -35,15 +34,16 @@ from libs.access.rbac import (
     cross_tenant_allowed,
 )
 from libs.access.security import JwtService, TokenPayload
-from libs.access.token_blacklist import TokenBlacklist
+from libs.access.tenant_scope import AuthorizationContext, TenantScopeError
+from libs.access.token_blacklist import SecurityControlUnavailable, TokenBlacklist
 
-from src.audit import AuditLogReadStore
 from src.boundary import (
     ACTION_PERMISSION,
     ACTIONS,
+    ConfidenceStoreAdapter,
     check_boundary,
+    validate_confidence_binding,
 )
-from src.observations import ObservationReadStore
 from src.summary import CognitiveSummaryStore
 
 # Default pipeline service health targets (canonical ports; override via env).
@@ -78,6 +78,7 @@ class GatewayService:
         service_health: dict[str, str] | None = None,
         dsn: str | None = None,
         blacklist: TokenBlacklist | None = None,
+        confidence_store: ConfidenceStoreAdapter | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -91,6 +92,7 @@ class GatewayService:
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
         self.blacklist = blacklist
+        self._confidence_store = confidence_store
         self.total_requests = 0
         self.total_rejected_401 = 0
         self.total_rejected_403 = 0
@@ -107,6 +109,9 @@ class GatewayService:
         Checks the Redis blacklist for revoked tokens before verifying the
         signature. If the token's jti is blacklisted, it is rejected even
         if the signature and expiry are valid.
+
+        Phase 3: Redis unavailability during blacklist check is FAIL-CLOSED
+        for this security-critical operation — the token is rejected.
         """
         if not authorization_header.lower().startswith("bearer "):
             self.total_rejected_401 += 1
@@ -120,6 +125,12 @@ class GatewayService:
                     self.total_rejected_401 += 1
                     raise InvalidTokenError("token has been revoked")
             return payload
+        except SecurityControlUnavailable:
+            # Redis down during security-critical check — fail closed.
+            self.total_rejected_401 += 1
+            raise InvalidTokenError(
+                "security control unavailable; token cannot be verified"
+            )
         except InvalidTokenError:
             self.total_rejected_401 += 1
             raise
@@ -182,28 +193,65 @@ class GatewayService:
             self.total_boundary_violations += 1
             raise
 
+    async def verify_confidence_provenance(
+        self,
+        *,
+        tenant_id: str,
+        confidence_id: str,
+        expected_target_type: str,
+        expected_target_id: str | None = None,
+    ) -> dict[str, Any]:
+        """R4: verify confidence against the store (provenance check).
+
+        The client's confidence_score is IGNORED — the store provides the
+        authoritative record. Raises ConfidenceProvenanceError if the
+        confidence cannot be verified.
+        """
+        if self._confidence_store is None:
+            # No store configured — in tests without DB, skip provenance check.
+            # In production, this must be configured.
+            return {"confidence_score": 0.0, "verified": False}
+        return await validate_confidence_binding(
+            store=self._confidence_store,
+            tenant_id=tenant_id,
+            confidence_id=confidence_id,
+            expected_target_type=expected_target_type,
+            expected_target_id=expected_target_id,
+        )
+
     # -------------------------------------------------------------- tenant
+    def _resolve_tenant(
+        self, token: TokenPayload, requested_tenant_id: str
+    ) -> AuthorizationContext:
+        """Create AuthorizationContext and resolve effective tenant (single
+        source of truth for all tenant-scoped operations).
+
+        The token's tenant_id is the authority; cross-tenant access requires
+        superadmin. Returns the resolved context with effective_tenant_id set.
+        """
+        ctx = AuthorizationContext.from_token_payload(token)
+        try:
+            ctx.effective_tenant_id = ctx.resolve(requested_tenant_id)
+        except TenantScopeError:
+            self.total_rejected_403 += 1
+            raise
+        return ctx
+
     def ensure_tenant_access(
         self, token: TokenPayload, requested_tenant_id: str
     ) -> None:
         """Multi-tenant isolation: a token may only read its own tenant unless
         it holds cross-tenant authority (superadmin)."""
-        if str(requested_tenant_id) != token.tenant_id and not cross_tenant_allowed(
-            token.role
-        ):
-            self.total_rejected_403 += 1
-            raise TenantIsolationError(
-                "cross-tenant access requires superadmin authority"
-            )
+        self._resolve_tenant(token, requested_tenant_id)
 
     # ---------------------------------------------------------------- reads
     async def list_decisions(self, token: TokenPayload, tenant_id: str) -> list[Any]:
         """READ decisions within the token's tenant scope (viewer+)."""
         if self.decision_store is None:
             raise RuntimeError("decision_store not configured in gateway")
-        self.ensure_tenant_access(token, tenant_id)
+        ctx = self._resolve_tenant(token, tenant_id)
         decisions = await self.decision_store.list_decisions(
-            tenant_id=uuid.UUID(tenant_id)
+            tenant_id=uuid.UUID(ctx.effective_tenant_id)
         )
         return [_decision_payload(d) for d in decisions]
 
@@ -211,8 +259,10 @@ class GatewayService:
         """READ reports within the token's tenant scope (viewer+)."""
         if self.report_store is None:
             raise RuntimeError("report_store not configured in gateway")
-        self.ensure_tenant_access(token, tenant_id)
-        reports = await self.report_store.list_reports(tenant_id=uuid.UUID(tenant_id))
+        ctx = self._resolve_tenant(token, tenant_id)
+        reports = await self.report_store.list_reports(
+            tenant_id=uuid.UUID(ctx.effective_tenant_id)
+        )
         return [_report_payload(r) for r in reports]
 
     async def list_audit_logs(
@@ -233,9 +283,9 @@ class GatewayService:
         """READ audit log entries within the token's tenant scope (viewer+)."""
         if self._audit_store is None:
             raise RuntimeError("audit_store not configured in gateway")
-        self.ensure_tenant_access(token, tenant_id)
+        ctx = self._resolve_tenant(token, tenant_id)
         return await self._audit_store.list_audit_logs(
-            tenant_id=uuid.UUID(tenant_id),
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
             limit=limit,
             offset=offset,
             user_id=user_id,
@@ -259,9 +309,9 @@ class GatewayService:
         """READ insights within the token's tenant scope (viewer+)."""
         if self._insight_store is None:
             raise RuntimeError("insight_store not configured in gateway")
-        self.ensure_tenant_access(token, tenant_id)
+        ctx = self._resolve_tenant(token, tenant_id)
         return await self._insight_store.list_insights(
-            tenant_id=uuid.UUID(tenant_id),
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
             limit=limit,
             offset=offset,
             sort=sort,
@@ -276,9 +326,9 @@ class GatewayService:
         """READ one insight with its desglose within the token's tenant scope (viewer+)."""
         if self._insight_store is None:
             raise RuntimeError("insight_store not configured in gateway")
-        self.ensure_tenant_access(token, tenant_id)
+        ctx = self._resolve_tenant(token, tenant_id)
         return await self._insight_store.get_insight(
-            tenant_id=uuid.UUID(tenant_id),
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
             insight_id=uuid.UUID(insight_id),
         )
 
@@ -291,9 +341,9 @@ class GatewayService:
         """READ one decision with its desglose within the token's tenant scope (viewer+)."""
         if self._decision_read_store is None:
             raise RuntimeError("decision_read_store not configured in gateway")
-        self.ensure_tenant_access(token, tenant_id)
+        ctx = self._resolve_tenant(token, tenant_id)
         return await self._decision_read_store.get_decision(
-            tenant_id=uuid.UUID(tenant_id),
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
             decision_id=uuid.UUID(decision_id),
         )
 
@@ -306,9 +356,9 @@ class GatewayService:
         """READ one recommendation with its desglose within the token's tenant scope (viewer+)."""
         if self._recommendation_read_store is None:
             raise RuntimeError("recommendation_read_store not configured in gateway")
-        self.ensure_tenant_access(token, tenant_id)
+        ctx = self._resolve_tenant(token, tenant_id)
         return await self._recommendation_read_store.get_recommendation(
-            tenant_id=uuid.UUID(tenant_id),
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
             recommendation_id=uuid.UUID(recommendation_id),
         )
 
@@ -323,9 +373,9 @@ class GatewayService:
         """Submit actual outcomes for a decision (lifecycle update, P1 allows)."""
         if self._decision_read_store is None:
             raise RuntimeError("decision_read_store not configured in gateway")
-        self.ensure_tenant_access(token, tenant_id)
+        ctx = self._resolve_tenant(token, tenant_id)
         return await self._decision_read_store.submit_outcomes(
-            tenant_id=uuid.UUID(tenant_id),
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
             decision_id=uuid.UUID(decision_id),
             actual_outcomes=actual_outcomes,
             executed_at=executed_at,
@@ -346,9 +396,9 @@ class GatewayService:
         """READ observations within the token's tenant scope (viewer+)."""
         if self._observation_store is None:
             raise RuntimeError("observation_store not configured in gateway")
-        self.ensure_tenant_access(token, tenant_id)
+        ctx = self._resolve_tenant(token, tenant_id)
         observations = await self._observation_store.list_observations(
-            tenant_id=uuid.UUID(tenant_id),
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
             limit=limit,
             offset=offset,
             fact_type=fact_type,

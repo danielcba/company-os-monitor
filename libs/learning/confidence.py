@@ -46,12 +46,18 @@ class CalibrationContent:
     ``historical_calibration`` is 1 - ECE and ``alpha`` is the mixing
     coefficient. Together with the target they fully determine C_final, so they
     are the content that makes the confidence id deterministic and append-only.
+
+    Phase 7: ``evidence_ids`` tracks which evidence was used for calibration.
+    This ensures provenance: the confidence of a hypothesis can be reconstructed
+    exclusively from its scoped evidence. Adding B3 from another hypothesis must
+    NOT alter Confidence(A).
     """
 
     evidential_support: float
     explanatory_coherence: float
     historical_calibration: float
     alpha: float
+    evidence_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 def _float_to_bytes(val: float) -> bytes:
@@ -78,6 +84,9 @@ def confidence_id(
     different history) yields a DIFFERENT id - so the old row is never updated
     and the history is kept (append-only, P1). ``computed_at`` is deliberately
     excluded: it would break idempotence between runs.
+
+    Phase 7: evidence_ids are included in the hash so different evidence scopes
+    produce different confidence ids (provenance tracking).
     """
     parts = [
         str(tenant_id).encode(),
@@ -88,6 +97,9 @@ def confidence_id(
         _float_to_bytes(content.historical_calibration),
         _float_to_bytes(content.alpha),
     ]
+    # Phase 7: evidence_ids in the fingerprint ensure provenance tracking.
+    for eid in sorted(content.evidence_ids):
+        parts.append(str(eid).encode())
     return uuid.uuid5(CONFIDENCE_NAMESPACE, b":".join(parts))
 
 
@@ -99,6 +111,9 @@ class ConfidenceCreate(BaseModel):
     is C(H), ``historical_calibration`` is 1 - ECE, ``confidence_score`` is
     C_final and ``calibration_error_estimate`` is the ECE of the judgment class.
     ``alpha`` is the fixed-a-priori mixing coefficient used in the computation.
+
+    Phase 7: ``evidence_ids`` tracks which evidence was used for calibration,
+    ensuring provenance and scope isolation between hypotheses.
     """
 
     tenant_id: uuid.UUID
@@ -111,6 +126,7 @@ class ConfidenceCreate(BaseModel):
     alpha: float = Field(ge=0.0, le=1.0)
     calibration_justification: str
     calibration_error_estimate: float = Field(ge=0.0, le=1.0)
+    evidence_ids: list[uuid.UUID] = Field(default_factory=list)
     computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @field_validator("target_type")
@@ -129,6 +145,9 @@ class Confidence(BaseModel):
     inputs is a NEW row, never an UPDATE). The row always records the score
     (C_final), the reasons for it (``calibration_justification``) and the
     calibration error estimate (ECE), per the Confidence concept.
+
+    Phase 7: ``evidence_ids`` tracks which evidence was used, ensuring
+    provenance and scope isolation between hypotheses.
     """
 
     id: uuid.UUID
@@ -142,6 +161,7 @@ class Confidence(BaseModel):
     alpha: float = Field(ge=0.0, le=1.0)
     calibration_justification: str
     calibration_error_estimate: float = Field(ge=0.0, le=1.0)
+    evidence_ids: list[uuid.UUID] = Field(default_factory=list)
     computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @field_validator("target_type")
@@ -165,6 +185,7 @@ def build_confidence(create: ConfidenceCreate) -> Confidence:
         explanatory_coherence=create.explanatory_coherence,
         historical_calibration=create.historical_calibration,
         alpha=create.alpha,
+        evidence_ids=create.evidence_ids,
     )
     return Confidence(
         id=confidence_id(
@@ -183,6 +204,7 @@ def build_confidence(create: ConfidenceCreate) -> Confidence:
         alpha=create.alpha,
         calibration_justification=create.calibration_justification,
         calibration_error_estimate=create.calibration_error_estimate,
+        evidence_ids=create.evidence_ids,
         computed_at=create.computed_at,  # placeholder; will be overwritten by DB value on insert
     )
 
@@ -192,17 +214,20 @@ INSERT_CONFIDENCE = text(
     INSERT INTO confidence_scores (
         id, tenant_id, target_type, target_id, evidential_support,
         explanatory_coherence, historical_calibration, confidence_score,
-        alpha, calibration_justification, calibration_error_estimate
+        alpha, calibration_justification, calibration_error_estimate,
+        evidence_ids
     )
     VALUES (
         :id, :tenant_id, :target_type, :target_id, :evidential_support,
         :explanatory_coherence, :historical_calibration, :confidence_score,
-        :alpha, :calibration_justification, :calibration_error_estimate
+        :alpha, :calibration_justification, :calibration_error_estimate,
+        :evidence_ids
     )
     ON CONFLICT (id) DO NOTHING
     RETURNING id, tenant_id, target_type, target_id, evidential_support,
               explanatory_coherence, historical_calibration, confidence_score,
-              alpha, calibration_justification, calibration_error_estimate, computed_at
+              alpha, calibration_justification, calibration_error_estimate,
+              evidence_ids, computed_at
     """
 )
 
@@ -212,7 +237,8 @@ SELECT_CONFIDENCE = text(
     """
     SELECT id, tenant_id, target_type, target_id, evidential_support,
            explanatory_coherence, historical_calibration, confidence_score,
-           alpha, calibration_justification, calibration_error_estimate, computed_at
+           alpha, calibration_justification, calibration_error_estimate,
+           evidence_ids, computed_at
     FROM confidence_scores
     WHERE tenant_id = :tenant_id
     ORDER BY computed_at, id
@@ -223,15 +249,53 @@ SELECT_LATEST_BY_TARGET = text(
     """
     SELECT id, tenant_id, target_type, target_id, evidential_support,
            explanatory_coherence, historical_calibration, confidence_score,
-           alpha, calibration_justification, calibration_error_estimate, computed_at
+           alpha, calibration_justification, calibration_error_estimate,
+           evidence_ids, computed_at
     FROM confidence_scores
     WHERE target_type = :target_type AND target_id = :target_id
+      AND tenant_id = :tenant_id
     ORDER BY computed_at DESC, id DESC
     LIMIT 1
     """
 )
 
 SELECT_TENANT_IDS = text("SELECT DISTINCT tenant_id FROM confidence_scores")
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Evidence Scope Validation
+# ---------------------------------------------------------------------------
+
+class EvidenceScopeError(Exception):
+    """Raised when confidence evidence exceeds its cognitive scope."""
+
+
+def validate_confidence_evidence_scope(
+    *,
+    confidence_evidence_ids: list[uuid.UUID],
+    hypothesis_evidence_ids: list[uuid.UUID],
+) -> None:
+    """Phase 7: Validate that confidence evidence is within hypothesis scope.
+
+    A Hypothesis's Confidence must be calibratable exclusively from evidence
+    within its cognitive scope. Evidence from another hypothesis (B1, B2, B3)
+    must NOT affect Confidence(A).
+
+    This function checks that every evidence_id used for calibration belongs
+    to the hypothesis's evidence scope. It does NOT check the reverse (that
+    all scope evidence was used) — some evidence may be irrelevant to a
+    specific calibration.
+
+    Raises:
+        EvidenceScopeError: If any evidence_id is outside the hypothesis scope.
+    """
+    scope_set = set(hypothesis_evidence_ids)
+    for eid in confidence_evidence_ids:
+        if eid not in scope_set:
+            raise EvidenceScopeError(
+                f"evidence {eid!r} is outside the hypothesis scope; "
+                f"confidence must only use evidence from its cognitive scope"
+            )
 
 
 class ConfidenceStore:
@@ -265,6 +329,7 @@ class ConfidenceStore:
                     "alpha": confidence.alpha,
                     "calibration_justification": confidence.calibration_justification,
                     "calibration_error_estimate": confidence.calibration_error_estimate,
+                    "evidence_ids": list(confidence.evidence_ids),
                 },
             )
             await session.commit()
@@ -293,17 +358,23 @@ class ConfidenceStore:
             return [Confidence(**dict(row)) for row in result.mappings()]
 
     async def get_confidence(
-        self, *, target_type: str, target_id: uuid.UUID
+        self, *, tenant_id: uuid.UUID, target_type: str, target_id: uuid.UUID
     ) -> Confidence | None:
         """The most recent calibration row for one target (append-only history).
 
         A target may have several rows (each a distinct calibration with
         different inputs); this returns the latest by ``computed_at``.
+
+        Phase 12: tenant_id is now required for SQL-level isolation.
         """
         async with self._session_factory() as session:
             result = await session.execute(
                 SELECT_LATEST_BY_TARGET,
-                {"target_type": target_type, "target_id": target_id},
+                {
+                    "tenant_id": tenant_id,
+                    "target_type": target_type,
+                    "target_id": target_id,
+                },
             )
             row = result.mappings().one_or_none()
             return Confidence(**dict(row)) if row is not None else None

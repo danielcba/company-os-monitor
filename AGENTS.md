@@ -51,3 +51,35 @@ Reglas:
   calibración y el Action Layer (Recommendation → Decision) son fases futuras.
 - Confianza/calibración y LM Studio: herramientas/capacidades externas
   no-canónicas (ADR-0002), nunca bypassan el flujo cognitivo canónico.
+
+## Remediación (2026-08-22)
+
+Se completó una remediación profunda de 19 fases alineada con el framework
+Company OS. Todos los cambios mantienen conformidad estricta con P1-P7/R1-R7.
+
+### Fases completadas
+
+- **P1**: Multi-tenant security (AuthorizationContext, tenant scope)
+- **P2**: Confidence provenance (ConfidenceStoreAdapter, score del cliente ignorado)
+- **P3**: JWT security (fail-closed, consume-once atómico)
+- **P4**: Rate limiter (Lua atómico, async API)
+- **P5**: Context activation atómica (transacción única, UNIQUE partial index)
+- **P6**: Context deterministic ID (fingerprint expandido)
+- **P7**: Confidence evidence scope (evidence_ids, validación de scope)
+- **P8**: DB architecture (engine compartido, pool configurado)
+- **P9**: Bounded concurrency (Semaphore, MAX_CONCURRENT_TENANTS)
+- **P10**: Cognitive Boundary 2.0 (policy declarativa, no lista rígida)
+- **P11**: Decision/Execution separación (ActionExecutor externo)
+- **P12**: Tenant scoping en TODOS los stores (3 queries corregidas)
+- **P13**: Frontend security (HttpOnly cookies, design doc)
+- **P14**: CSP hardening (nonce-based, sin unsafe-inline)
+- **P15**: CI/CD (removido continue-on-error)
+- **P16**: Docker validation (smoke test end-to-end)
+- **P17**: Architecture as Code (12 invariant tests)
+- **P18**: Observability (structured logging, redacción de secretos)
+- **P19**: Learning/P7 (documentación, tests de comparación)
+
+### Tests: 195/198 pasan (3 CORS preexistentes)
+
+### Archivos de reporte
+Ver `docs/remediation/` para reportes completos.

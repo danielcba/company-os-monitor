@@ -1,4 +1,7 @@
-"""Unit tests for the Cognitive Boundary rules (R3, pure, no I/O)."""
+"""Unit tests for the Cognitive Boundary rules (R3, pure, no I/O).
+
+Phase 2 updated: confidence_id is now required (not confidence_score).
+"""
 import sys
 from pathlib import Path
 
@@ -49,11 +52,13 @@ def test_unknown_concept_has_no_outgoing_flow():
 
 
 def test_confidence_required_for_propose_and_commit():
-    assert validate_confidence_present({"confidence_score": 0.8})
+    # Phase 2: confidence_id is required, confidence_score alone is NOT sufficient.
     assert validate_confidence_present({"confidence_id": "u-1"})
+    assert not validate_confidence_present({"confidence_score": 0.8})
     assert not validate_confidence_present({})
     assert not validate_confidence_present(None)
     assert not validate_confidence_present({"confidence_id": None})
+    assert not validate_confidence_present({"confidence_id": ""})
 
 
 def test_check_boundary_missing_confidence_raises_for_commit():
@@ -61,10 +66,13 @@ def test_check_boundary_missing_confidence_raises_for_commit():
         check_boundary("commit", {})
     with pytest.raises(BoundaryViolationError, match="Confidence"):
         check_boundary("propose", {"action": "restart"})
+    # Phase 2: confidence_score alone is NOT sufficient
+    with pytest.raises(BoundaryViolationError, match="Confidence"):
+        check_boundary("commit", {"confidence_score": 0.95})
 
 
-def test_check_boundary_commit_with_confidence_ok():
-    check_boundary("commit", {"confidence_score": 0.85, "risk_tolerance": "low"})
+def test_check_boundary_commit_with_confidence_id_ok():
+    check_boundary("commit", {"confidence_id": "some-uuid", "risk_tolerance": "low"})
 
 
 def test_check_boundary_ack_does_not_require_confidence():
