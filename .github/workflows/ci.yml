@@ -15,7 +15,7 @@ jobs:
         node-version: ["20"]
     services:
       postgres:
-        image: timescale/timescaledb:2.15.0-pg16
+        image: postgres:16
         env:
           POSTGRES_USER: cosmonitor
           POSTGRES_PASSWORD: cosmonitor
@@ -67,8 +67,9 @@ jobs:
 
       - name: Install TimescaleDB in PostgreSQL
         run: |
-          # TimescaleDB is pre-installed in timescale/timescaledb image
-          # Just create the extension
+          # Install TimescaleDB extension in the running postgres container
+          docker exec $(docker ps -qf "ancestor=postgres:16") bash -c "apt-get update && apt-get install -y timescaledb-2-postgresql-16 && timescaledb-tune --quiet --yes 2>/dev/null || true"
+          sleep 3
           psql -h localhost -p 5433 -U cosmonitor -d cosmonitor -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
       
       - name: Wait for Redis
