@@ -204,13 +204,14 @@ class GatewayService:
         """R4: verify confidence against the store (provenance check).
 
         The client's confidence_score is IGNORED — the store provides the
-        authoritative record. Raises ConfidenceProvenanceError if the
-        confidence cannot be verified.
+        authoritative record. Raises SecurityControlUnavailable if the
+        confidence store is not configured (fail-closed).
         """
         if self._confidence_store is None:
-            # No store configured — in tests without DB, skip provenance check.
-            # In production, this must be configured.
-            return {"confidence_score": 0.0, "verified": False}
+            raise SecurityControlUnavailable(
+                "confidence store not configured; "
+                "cannot verify confidence provenance (fail-closed)"
+            )
         return await validate_confidence_binding(
             store=self._confidence_store,
             tenant_id=tenant_id,

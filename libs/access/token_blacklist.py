@@ -165,13 +165,24 @@ class TokenBlacklist:
 
 
 class _NoOpRedis:
-    """Fallback when redis package is not installed; all ops are no-ops."""
+    """Fallback when redis package is not installed.
+
+    Security-critical operations (revoke, consume) raise
+    SecurityControlUnavailable to prevent fail-open behavior.
+    Non-critical operations (exists) return safe defaults.
+    """
 
     async def set(self, key: str, value: str, ex: int | None = None) -> bool:
-        return True
+        raise SecurityControlUnavailable(
+            "Redis unavailable (package not installed); "
+            "cannot perform security-critical operation"
+        )
 
     async def setnx(self, key: str, value: str, ex: int | None = None) -> bool:
-        return True
+        raise SecurityControlUnavailable(
+            "Redis unavailable (package not installed); "
+            "cannot perform security-critical operation"
+        )
 
     async def exists(self, key: str) -> bool:
         return False

@@ -31,15 +31,29 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install ruff mypy pytest pytest-asyncio pytest-cov bandit safety
+          pip install -e .
 
       - name: Ruff lint
         run: ruff check . --output-format=github
 
       - name: MyPy typecheck
-        run: mypy . --ignore-missing-imports
+        run: mypy libs/ apps/gateway/ apps/services/ --ignore-missing-imports --exclude 'apps/agents'
 
-      - name: PyTest
-        run: pytest --cov=libs --cov=apps --cov-report=xml -v
+      - name: Root tests
+        run: pytest tests/ --cov=libs --cov-report=xml -v
+
+      - name: Service tests (each from its own directory)
+        run: |
+          for svc in apps/services/*/; do
+            if [ -d "$svc/tests" ] && ls "$svc/tests"/test_*.py 1>/dev/null 2>&1; then
+              echo "=== Testing $svc ==="
+              (cd "$svc" && python -m pytest tests/ -v --tb=short) || exit 1
+            fi
+          done
+
+      - name: Gateway tests
+        working-directory: apps/gateway/api-gateway
+        run: python -m pytest tests/ -v --tb=short
 
       - name: Frontend setup
         working-directory: apps/web

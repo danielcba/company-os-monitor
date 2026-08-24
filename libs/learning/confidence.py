@@ -20,7 +20,7 @@ sprint8-confidence-content-trigger.sql and the base schema).
 """
 import struct
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -57,7 +57,7 @@ class CalibrationContent:
     explanatory_coherence: float
     historical_calibration: float
     alpha: float
-    evidence_ids: list[uuid.UUID] = Field(default_factory=list)
+    evidence_ids: list[uuid.UUID] = field(default_factory=list)
 
 
 def _float_to_bytes(val: float) -> bytes:

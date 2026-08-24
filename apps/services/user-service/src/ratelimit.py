@@ -61,6 +61,14 @@ return 1
 """
 
 
+class RateLimiterUnavailable(Exception):
+    """Raised when the rate limiter backend (Redis) is unavailable.
+
+    For security-critical endpoints (login, refresh), this must result
+    in request rejection (fail-closed), not silent pass-through.
+    """
+
+
 class RedisClient(Protocol):
     """Minimal async Redis interface for the rate limiter."""
 
@@ -103,21 +111,26 @@ class RateLimiter:
     async def is_allowed(self, key: str) -> bool:
         """Return True if the request is allowed, False if rate-limited.
 
-        Uses Redis Lua script when available (atomic), falls back to in-memory.
+        Uses Redis Lua script when available (atomic).
+        Raises RateLimiterUnavailable if Redis is down (fail-closed).
         """
         if self._redis is not None:
             return await self._is_allowed_redis(key)
         return self._is_allowed_memory(key)
 
     async def _is_allowed_redis(self, key: str) -> bool:
-        """Redis-backed sliding window check (atomic via Lua script)."""
-        try:
-            now = time.time()
-            cutoff = now - self._window
-            member = f"{now}:{uuid.uuid4().hex[:8]}"
-            ttl = int(self._window) + 10
-            redis_key = f"ratelimit:{key}"
+        """Redis-backed sliding window check (atomic via Lua script).
 
+        Fail-closed: raises RateLimiterUnavailable when Redis is down
+        for security-critical endpoints (login, refresh).
+        """
+        now = time.time()
+        cutoff = now - self._window
+        member = f"{now}:{uuid.uuid4().hex[:8]}"
+        ttl = int(self._window) + 10
+        redis_key = f"ratelimit:{key}"
+
+        try:
             result = await self._redis.eval(
                 _SLIDING_WINDOW_LUA,
                 1,
@@ -129,9 +142,11 @@ class RateLimiter:
                 str(ttl),
             )
             return result == 1
-        except Exception:
-            # Fail-open: if Redis is unavailable, allow the request.
-            return self._is_allowed_memory(key)
+        except Exception as exc:
+            raise RateLimiterUnavailable(
+                f"Redis unavailable during rate limit check for key={key!r}; "
+                "refusing to fail open"
+            ) from exc
 
     def _is_allowed_memory(self, key: str) -> bool:
         """In-memory sliding window check (fallback)."""

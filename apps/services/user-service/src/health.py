@@ -29,7 +29,7 @@ from libs.access.security import JwtService, TokenPayload
 from libs.access.token_blacklist import TokenBlacklist
 
 from src.service import AuthService
-from src.ratelimit import RateLimiter
+from src.ratelimit import RateLimiter, RateLimiterUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -109,9 +109,15 @@ class UserServer:
 
     async def login_handler(self, request):
         client_ip = request.remote or "unknown"
-        if not self._rate_limiter.is_allowed(f"login:{client_ip}"):
+        try:
+            if not await self._rate_limiter.is_allowed(f"login:{client_ip}"):
+                return web.json_response(
+                    {"error": "Too many requests, try again later"},
+                    status=429,
+                )
+        except RateLimiterUnavailable:
             return web.json_response(
-                {"error": "Too many requests, try again later"},
+                {"error": "Rate limiter unavailable; request rejected (fail-closed)"},
                 status=429,
             )
         try:
@@ -130,9 +136,15 @@ class UserServer:
 
     async def refresh_handler(self, request):
         client_ip = request.remote or "unknown"
-        if not self._rate_limiter.is_allowed(f"refresh:{client_ip}"):
+        try:
+            if not await self._rate_limiter.is_allowed(f"refresh:{client_ip}"):
+                return web.json_response(
+                    {"error": "Too many requests, try again later"},
+                    status=429,
+                )
+        except RateLimiterUnavailable:
             return web.json_response(
-                {"error": "Too many requests, try again later"},
+                {"error": "Rate limiter unavailable; request rejected (fail-closed)"},
                 status=429,
             )
         try:

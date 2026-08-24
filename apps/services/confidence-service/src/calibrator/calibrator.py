@@ -200,7 +200,12 @@ def calibrate(
     The ``historical`` parameter is reserved for future outcome-based calibration
     (Sprint 9+). Currently always None; when available, it should contain
     (reported_confidence, outcome) pairs where outcome in {0, 1}.
+
+    Phase 20: validates that evidence used for calibration is within the
+    hypothesis scope (evidence scope isolation).
     """
+    from libs.learning.confidence import validate_confidence_evidence_scope, EvidenceScopeError
+
     # Input validation
     if hypothesis is None:
         raise ValueError("hypothesis must not be None")
@@ -214,6 +219,14 @@ def calibrate(
         raise ValueError(f"params.alpha must be in [0, 1], got {params.alpha}")
     if params.M <= 0:
         raise ValueError(f"params.M must be positive, got {params.M}")
+
+    # Phase 20: validate that evidence is within hypothesis scope.
+    evidence_ids = [e.id for e in evidence]
+    scope_ids = [e.id for e in scope]
+    validate_confidence_evidence_scope(
+        confidence_evidence_ids=evidence_ids,
+        hypothesis_evidence_ids=scope_ids,
+    )
 
     S = evidential_support_score(evidence, coherence_inputs, params.L0)
     C = coherence_score(hypothesis.description, scope, coherence_inputs)

@@ -112,7 +112,12 @@ def service(store, jwt):
 
 @pytest.fixture
 def server(service, jwt):
-    return UserServer(service, jwt)
+    from src.ratelimit import RateLimiter
+
+    srv = UserServer(service, jwt)
+    # Replace Redis-backed rate limiter with always-allow for unit tests.
+    srv._rate_limiter = RateLimiter(max_requests=999999, window_seconds=1, redis=None)
+    return srv
 
 
 async def _seed(store, *, email, password="cosmonitor", role="viewer", tenant_id=TENANT_A):
@@ -133,6 +138,7 @@ class FakeRequest:
         self._body = body or {}
         self.headers = headers or {}
         self.query = query or {}
+        self.remote = "127.0.0.1"
 
     async def json(self):
         return self._body

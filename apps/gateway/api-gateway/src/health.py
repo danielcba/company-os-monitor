@@ -511,6 +511,10 @@ class GatewayServer:
         Body may carry ``confidence_id``/``confidence_score`` (R4 for
         propose/commit), ``risk_tolerance`` (commit ceiling) and an optional
         ``tenant_id`` (cross-tenant requires superadmin).
+
+        R4 enforcement: for propose/commit actions, the confidence_id is
+        verified against the confidence store (provenance check). The client's
+        confidence_score is IGNORED — the store provides the authoritative score.
         """
         try:
             token = await self._authenticate(request)
@@ -531,6 +535,17 @@ class GatewayServer:
                 risk=risk if action == "commit" else None,
                 requested_tenant_id=requested_tenant_id,
             )
+            # R4: verify confidence provenance for propose/commit actions.
+            confidence_verified = None
+            if action in ("propose", "commit") and payload.get("confidence_id"):
+                tenant_for_confidence = requested_tenant_id or token.tenant_id
+                provenance = await self.service.verify_confidence_provenance(
+                    tenant_id=tenant_for_confidence,
+                    confidence_id=payload["confidence_id"],
+                    expected_target_type=payload.get("target_type", "hypothesis"),
+                    expected_target_id=payload.get("target_id"),
+                )
+                confidence_verified = provenance.get("verified", False)
             return web.json_response(
                 {
                     "authorized": True,
@@ -540,6 +555,7 @@ class GatewayServer:
                         "role": token.role,
                         "tenant_id": token.tenant_id,
                     },
+                    "confidence_verified": confidence_verified,
                     "note": (
                         "validated by the Cognitive Boundary (R3); execution "
                         "happens in the canonical service cycle, not here"

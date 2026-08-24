@@ -92,7 +92,7 @@ async def main():
         report_store,
         output_dir=output_dir,
     )
-    server = ReportServer(service)
+    server = ReportServer(service, jwt=jwt)
 
     # Add JWT auth middleware to protect /api/v1/reports/* endpoints.
     server.app.middlewares.append(jwt_auth_middleware(jwt))

@@ -76,6 +76,13 @@ class _DecisionStore:
         return [d for d in self.rows if d.tenant_id == tenant_id]
 
 
+class _FakeConfidenceStore:
+    """Mock confidence store for tests that don't test provenance."""
+
+    async def get_confidence_for_boundary(self, *, tenant_id, confidence_id, expected_target_type, expected_target_id=None):
+        return {"confidence_score": 0.5, "verified": True}
+
+
 class _ReportStore:
     def __init__(self):
         self.rows = [_Report(tenant_id=uuid.UUID(TENANT_A))]
@@ -166,6 +173,7 @@ def server(jwt):
         decision_store=_DecisionStore(),
         report_store=_ReportStore(),
         observation_store=_ObservationStore(),
+        confidence_store=_FakeConfidenceStore(),
     )
     return GatewayServer(service, jwt)
 

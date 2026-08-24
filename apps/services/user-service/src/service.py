@@ -19,12 +19,16 @@ It NEVER produces cognitive judgments and NEVER runs the pipeline (R1 external
 contract: authenticate/authorize only; R3: it protects the boundary without
 becoming the flow).
 """
+import logging
 import uuid
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 from libs.access.errors import (
+    AccessError,
     AuthenticationError,
     AuthorizationError,
     UserConflictError,
@@ -100,24 +104,29 @@ class AuthService:
         return self._issue_token_pair(user)
 
     async def refresh(self, *, refresh_token: str) -> dict[str, Any]:
-        """Rotate the refresh token: blacklist old + issue new access+refresh pair.
+        """Rotate the refresh token: atomic consume + issue new access+refresh pair.
 
         The refresh token is verified by signature + type + expiry; the
         referenced user must still exist and be active. The old refresh token
-        is blacklisted to prevent reuse (token rotation).
+        is consumed atomically via SET NX EX to prevent replay (consume-once).
+
+        Fail-closed: if Redis is unavailable during consume, the request is
+        rejected (SecurityControlUnavailable).
         """
         payload = self.jwt.verify_refresh_token(refresh_token)
-        if self.blacklist and payload.jti:
-            is_revoked = await self.blacklist.is_revoked(jti=payload.jti)
-            if is_revoked:
-                self.total_errors += 1
-                raise AuthenticationError("refresh token has been revoked")
         user = await self.user_store.get_by_id(id=uuid.UUID(payload.user_id))
         if user is None or not user.is_active:
             self.total_errors += 1
             raise AuthenticationError("refresh token references an unknown user")
         if self.blacklist and payload.jti:
-            await self.blacklist.revoke(jti=payload.jti, expires_at=payload.exp)
+            consumed = await self.blacklist.consume_refresh_token(
+                jti=payload.jti, expires_at=payload.exp
+            )
+            if not consumed:
+                self.total_errors += 1
+                raise AuthenticationError(
+                    "refresh token has already been used (replay detected)"
+                )
         access_token = self._access_token(user)
         new_refresh_token = self.jwt.create_refresh_token(
             user_id=str(user.id),
@@ -138,14 +147,28 @@ class AuthService:
 
         The access token (15 min TTL) will expire naturally; the refresh
         token is blacklisted to prevent further token renewal.
+
+        Idempotent for invalid tokens (already expired/malformed), but
+        propagates infrastructure failures (Redis down) so the caller
+        can distinguish "token was invalid" from "revocation failed".
         """
+        from libs.access.token_blacklist import SecurityControlUnavailable
+
         try:
             payload = self.jwt.verify_refresh_token(refresh_token)
-            if self.blacklist and payload.jti:
+        except Exception:
+            return  # Token already invalid — idempotent, nothing to revoke.
+        if self.blacklist and payload.jti:
+            try:
                 await self.blacklist.revoke(jti=payload.jti, expires_at=payload.exp)
                 self.total_tokens_revoked += 1
-        except Exception:
-            pass  # Best-effort: even if token is invalid, logout succeeds
+            except SecurityControlUnavailable:
+                raise  # Infrastructure failure — must not pretend success.
+            except Exception:
+                logger.exception(
+                    "unexpected failure revoking token jti=%s", payload.jti
+                )
+                self.total_errors += 1
 
     async def create_user(
         self,
