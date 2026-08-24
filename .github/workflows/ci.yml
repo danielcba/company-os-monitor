@@ -75,6 +75,11 @@ jobs:
           echo "Redis not ready after 30s"
           exit 1
 
+      - name: Apply database base schema
+        run: |
+          echo "Applying base schema"
+          psql -h localhost -p 5433 -U cosmonitor -d cosmonitor -f infrastructure/docker/init-sql/01-schema.sql
+      
       - name: Apply database migrations
         run: |
           for f in infrastructure/db-migrations/*.sql; do
