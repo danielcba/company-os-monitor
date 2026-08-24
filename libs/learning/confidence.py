@@ -37,6 +37,13 @@ CONFIDENCE_NAMESPACE = uuid.UUID("00000000-0000-0000-0000-000000000080")
 # calibrated by the Action Layer (Sprints 9/10) through the same API.
 TARGET_TYPES: frozenset[str] = frozenset({"hypothesis", "recommendation", "decision"})
 
+# Sorted tuple for deterministic error messages.
+_TARGET_TYPES_SORTED = tuple(sorted(TARGET_TYPES))
+
+
+def _invalid_target_type_msg(v: str) -> str:
+    return f"target_type must be one of {_TARGET_TYPES_SORTED}, got {v!r}"
+
 
 @dataclass(frozen=True)
 class CalibrationContent:
@@ -133,7 +140,7 @@ class ConfidenceCreate(BaseModel):
     @classmethod
     def _validate_target_type(cls, v: str) -> str:
         if v not in TARGET_TYPES:
-            raise ValueError(f"target_type must be one of {sorted(TARGET_TYPES)}, got {v!r}")
+            raise ValueError(_invalid_target_type_msg(v))
         return v
 
 
@@ -168,7 +175,7 @@ class Confidence(BaseModel):
     @classmethod
     def _validate_target_type(cls, v: str) -> str:
         if v not in TARGET_TYPES:
-            raise ValueError(f"target_type must be one of {sorted(TARGET_TYPES)}, got {v!r}")
+            raise ValueError(_invalid_target_type_msg(v))
         return v
 
     model_config = ConfigDict(frozen=True)
@@ -269,6 +276,13 @@ SELECT_TENANT_IDS = text("SELECT DISTINCT tenant_id FROM confidence_scores")
 class EvidenceScopeError(Exception):
     """Raised when confidence evidence exceeds its cognitive scope."""
 
+    @classmethod
+    def outside_scope(cls, eid: uuid.UUID) -> "EvidenceScopeError":
+        return cls(
+            f"evidence {eid!r} is outside the hypothesis scope; "
+            f"confidence must only use evidence from its cognitive scope"
+        )
+
 
 def validate_confidence_evidence_scope(
     *,
@@ -292,10 +306,7 @@ def validate_confidence_evidence_scope(
     scope_set = set(hypothesis_evidence_ids)
     for eid in confidence_evidence_ids:
         if eid not in scope_set:
-            raise EvidenceScopeError(
-                f"evidence {eid!r} is outside the hypothesis scope; "
-                f"confidence must only use evidence from its cognitive scope"
-            )
+            raise EvidenceScopeError.outside_scope(eid)
 
 
 class ConfidenceStore:

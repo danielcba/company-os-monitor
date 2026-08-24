@@ -17,8 +17,9 @@ Usage::
 """
 import logging
 import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -55,13 +56,15 @@ class CircuitBreaker:
     @property
     def state(self) -> CircuitState:
         """Current circuit state (auto-transitions from OPEN to HALF_OPEN)."""
-        if self._state == CircuitState.OPEN:
-            if time.monotonic() - self._last_failure_time >= self._reset_timeout:
-                self._state = CircuitState.HALF_OPEN
-                self._half_open_attempts = 0
+        if (
+            self._state == CircuitState.OPEN
+            and time.monotonic() - self._last_failure_time >= self._reset_timeout
+        ):
+            self._state = CircuitState.HALF_OPEN
+            self._half_open_attempts = 0
         return self._state
 
-    async def call(self, func: Callable, *args, **kwargs) -> Any:
+    async def call(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Execute a function through the circuit breaker.
 
         Raises CircuitBreakerOpenError if the circuit is open.
@@ -69,26 +72,21 @@ class CircuitBreaker:
         current_state = self.state
 
         if current_state == CircuitState.OPEN:
-            raise CircuitBreakerOpenError(
-                f"Circuit '{self._name}' is open; "
-                f"retry after {self._reset_timeout}s"
-            )
+            raise CircuitBreakerOpenError.open(self._name, self._reset_timeout)
 
         if current_state == CircuitState.HALF_OPEN:
             self._half_open_attempts += 1
             if self._half_open_attempts > 1:
-                raise CircuitBreakerOpenError(
-                    f"Circuit '{self._name}' is half-open; "
-                    f"waiting for test request"
-                )
+                raise CircuitBreakerOpenError.half_open(self._name)
 
         try:
             result = await func(*args, **kwargs)
-            self._on_success()
-            return result
         except Exception:
             self._on_failure()
             raise
+        else:
+            self._on_success()
+            return result
 
     def _on_success(self) -> None:
         """Handle a successful call."""
@@ -123,3 +121,11 @@ class CircuitBreaker:
 
 class CircuitBreakerOpenError(Exception):
     """Raised when a circuit breaker is open and rejecting requests."""
+
+    @classmethod
+    def open(cls, name: str, reset_timeout: float) -> "CircuitBreakerOpenError":
+        return cls(f"Circuit '{name}' is open; retry after {reset_timeout}s")
+
+    @classmethod
+    def half_open(cls, name: str) -> "CircuitBreakerOpenError":
+        return cls(f"Circuit '{name}' is half-open; waiting for test request")

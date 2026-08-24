@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 from unittest.mock import MagicMock
 
 from libs.access.cookie_auth import (
+    RefreshCookieConfig,
     clear_refresh_cookie,
     get_refresh_token_from_cookie,
     set_refresh_cookie,
@@ -58,7 +59,8 @@ EXPECTED_MAX_AGE = 3600
 def test_cookie_has_max_age():
     """Refresh cookie MUST have a max_age."""
     response = MagicMock()
-    set_refresh_cookie(response, "token", max_age=EXPECTED_MAX_AGE)
+    config = RefreshCookieConfig(max_age=EXPECTED_MAX_AGE)
+    set_refresh_cookie(response, "token", config=config)
     _, kwargs = response.set_cookie.call_args
     assert kwargs["max_age"] == EXPECTED_MAX_AGE
 

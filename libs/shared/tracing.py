@@ -34,13 +34,16 @@ def setup_tracing(service_name: str) -> None:
         return
 
     try:
-        from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+        from opentelemetry import trace  # noqa: PLC0415 - optional dependency
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (  # noqa: PLC0415 - optional dependency
             OTLPSpanExporter,
         )
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.sampling import (
+        from opentelemetry.sdk.resources import Resource  # noqa: PLC0415 - optional dependency
+        from opentelemetry.sdk.trace import TracerProvider  # noqa: PLC0415 - optional dependency
+        from opentelemetry.sdk.trace.export import (  # noqa: PLC0415 - optional dependency
+            BatchSpanProcessor,
+        )
+        from opentelemetry.sdk.trace.sampling import (  # noqa: PLC0415 - optional dependency
             ALWAYS_ON,
             TraceIdRatioBased,
         )
@@ -55,10 +58,7 @@ def setup_tracing(service_name: str) -> None:
 
         # Sampler configuration.
         sampler_arg = float(os.getenv("OTEL_TRACES_SAMPLER_ARG", "1.0"))
-        if sampler_arg >= 1.0:
-            sampler = ALWAYS_ON
-        else:
-            sampler = TraceIdRatioBased(sampler_arg)
+        sampler = ALWAYS_ON if sampler_arg >= 1.0 else TraceIdRatioBased(sampler_arg)
 
         # Create provider with OTLP exporter.
         exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
@@ -66,9 +66,7 @@ def setup_tracing(service_name: str) -> None:
             resource=resource,
             sampler=sampler,
         )
-        provider.add_span_processor(
-            _BatchSpanProcessor(exporter)
-        )
+        provider.add_span_processor(BatchSpanProcessor(exporter))
 
         trace.set_tracer_provider(provider)
         logger.info("OpenTelemetry tracing enabled: endpoint=%s service=%s", endpoint, service_name)
@@ -81,9 +79,3 @@ def setup_tracing(service_name: str) -> None:
         )
     except Exception:
         logger.exception("Failed to initialize OpenTelemetry tracing")
-
-
-def _BatchSpanProcessor(exporter):
-    """Lazy import of BatchSpanProcessor."""
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    return BatchSpanProcessor(exporter)

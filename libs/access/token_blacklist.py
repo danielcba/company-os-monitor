@@ -45,6 +45,27 @@ class SecurityControlUnavailable(Exception):
     """Raised when a security control (Redis) is unavailable during a
     security-critical operation. The operation MUST NOT proceed."""
 
+    @classmethod
+    def redis_uninstalled(cls) -> "SecurityControlUnavailable":
+        return cls(
+            "Redis unavailable (package not installed); "
+            "cannot perform security-critical operation"
+        )
+
+    @classmethod
+    def check_failed(cls, jti: str) -> "SecurityControlUnavailable":
+        return cls(
+            f"Redis unavailable during security-critical blacklist check "
+            f"for jti={jti!r}; refusing to fail open"
+        )
+
+    @classmethod
+    def consume_failed(cls, jti: str) -> "SecurityControlUnavailable":
+        return cls(
+            f"Redis unavailable during refresh token consumption "
+            f"for jti={jti!r}; refusing to fail open"
+        )
+
 
 class RedisClient(Protocol):
     """Minimal async Redis interface for the blacklist."""
@@ -116,10 +137,7 @@ class TokenBlacklist:
         try:
             return bool(await self._redis.exists(key))
         except Exception as exc:
-            raise SecurityControlUnavailable(  # noqa: TRY003 - declarative error
-                f"Redis unavailable during security-critical blacklist check "
-                f"for jti={jti!r}; refusing to fail open"
-            ) from exc
+            raise SecurityControlUnavailable.check_failed(jti) from exc
 
     async def is_revoked_non_critical(self, *, jti: str) -> bool:
         """Check blacklist with fail-open behavior (NON-CRITICAL only).
@@ -160,10 +178,7 @@ class TokenBlacklist:
                 logger.warning("refresh token replay detected: jti=%s", jti)
             return bool(consumed)
         except Exception as exc:
-            raise SecurityControlUnavailable(  # noqa: TRY003 - declarative error
-                f"Redis unavailable during refresh token consumption "
-                f"for jti={jti!r}; refusing to fail open"
-            ) from exc
+            raise SecurityControlUnavailable.consume_failed(jti) from exc
 
 
 class _NoOpRedis:
@@ -175,16 +190,10 @@ class _NoOpRedis:
     """
 
     async def set(self, key: str, value: str, ex: int | None = None) -> bool:
-        raise SecurityControlUnavailable(
-            "Redis unavailable (package not installed); "
-            "cannot perform security-critical operation"
-        )
+        raise SecurityControlUnavailable.redis_uninstalled()
 
     async def setnx(self, key: str, value: str, ex: int | None = None) -> bool:
-        raise SecurityControlUnavailable(
-            "Redis unavailable (package not installed); "
-            "cannot perform security-critical operation"
-        )
+        raise SecurityControlUnavailable.redis_uninstalled()
 
     async def exists(self, key: str) -> bool:
         return False

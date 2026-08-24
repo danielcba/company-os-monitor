@@ -15,17 +15,19 @@ Usage:
 """
 import argparse
 import asyncio
+import json
 import os
 import sys
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 
 import asyncpg
 from redis.asyncio import Redis
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from libs.cognitive_core.observation_bus import Observation, ObservationBus  # noqa: E402
+from libs.cognitive_core.observation_bus import Observation, ObservationBus
 
 TENANT_ID = uuid.UUID(
     os.getenv("QA_TENANT_ID", "00000000-0000-0000-0000-000000000001")
@@ -59,6 +61,9 @@ TABLES = (
 )
 
 POLL_SECONDS = 5.0
+CONTEXT_INCREMENT = 3
+PATTERN_TARGET = 3
+ANOMALY_TARGET = 3
 
 
 def _batch(source_id: uuid.UUID, captured_at: datetime) -> list[Observation]:
@@ -136,16 +141,13 @@ async def _wait_for(
         if predicate(counts):
             return counts
         await asyncio.sleep(POLL_SECONDS)
-    raise TimeoutError(
-        f"timed out waiting for: {label} "
-        f"(last counts: {json_dumps(counts)})"
-    )
+    raise TimeoutError.seed_timeout(label, json.dumps(counts))
 
 
-def json_dumps(obj: dict) -> str:
-    import json
-
-    return json.dumps(obj)
+class SeedTimeoutError(TimeoutError):
+    @classmethod
+    def seed_timeout(cls, label: str, counts: str) -> "SeedTimeoutError":
+        return cls(f"timed out waiting for: {label} (last counts: {counts})")
 
 
 async def main() -> int:
@@ -166,9 +168,9 @@ async def main() -> int:
         return max(1.0, budget - (asyncio.get_running_loop().time() - started))
 
     try:
-        print(f"[seed] tenant={TENANT_ID}")
+        print(f"[seed] tenant={TENANT_ID}")  # noqa: T201 - CLI output
         base = await _counts(pool)
-        print(f"[seed] baseline: {json_dumps(base)}")
+        print(f"[seed] baseline: {json.dumps(base)}")  # noqa: T201 - CLI output
 
         # Phase A-C: three batches -> three Evidence rows -> three activations
         # per scope -> a pattern per scope (>=3 occurrences in the window).
@@ -176,10 +178,12 @@ async def main() -> int:
             now = datetime.now(UTC)
             for obs in _batch(source, now):
                 await bus.publish(obs)
-            print(f"[seed] batch {index} published (source {source.hex[-4:]})")
+            print(  # noqa: T201 - CLI output
+                f"[seed] batch {index} published (source {source.hex[-4:]})"
+            )
             await _wait_for(
                 pool,
-                lambda c, target=base["contexts"] + 3 * index: (
+                lambda c, target=base["contexts"] + CONTEXT_INCREMENT * index: (
                     c["contexts"] >= target
                 ),
                 label=f"{index} context activation(s) for the batch",
@@ -188,25 +192,27 @@ async def main() -> int:
 
         counts = await _wait_for(
             pool,
-            lambda c: c["patterns"] >= 3,
+            lambda c: c["patterns"] >= PATTERN_TARGET,
             label="a pattern per scope (capacity_risk x2 + auth_compromise)",
             timeout_seconds=remaining(),
         )
-        print(f"[seed] patterns formed: {json_dumps(counts)}")
+        print(f"[seed] patterns formed: {json.dumps(counts)}")  # noqa: T201 - CLI output
 
         # Phase D: a fourth batch -> superseding activation off the pattern
         # cadence -> anomaly (relative to the expected pattern, never absolute).
         source = BATCH_SOURCES[3]
         for obs in _batch(source, datetime.now(UTC)):
             await bus.publish(obs)
-        print(f"[seed] batch 4 published (source {source.hex[-4:]})")
+        print(  # noqa: T201 - CLI output
+            f"[seed] batch 4 published (source {source.hex[-4:]})"
+        )
         counts = await _wait_for(
             pool,
-            lambda c: c["anomalies"] >= 3,
+            lambda c: c["anomalies"] >= ANOMALY_TARGET,
             label="anomaly per scope (deviation vs expected pattern)",
             timeout_seconds=remaining(),
         )
-        print(f"[seed] anomalies detected: {json_dumps(counts)}")
+        print(f"[seed] anomalies detected: {json.dumps(counts)}")  # noqa: T201 - CLI output
 
         # Phase E: downstream cascade - hypotheses -> confidence ->
         # recommendations -> decisions -> reports (each service cycle).
@@ -217,12 +223,14 @@ async def main() -> int:
             label="decisions committed and a new report rendered",
             timeout_seconds=remaining(),
         )
-        print(f"[seed] cascade complete: {json_dumps(counts)}")
+        print(f"[seed] cascade complete: {json.dumps(counts)}")  # noqa: T201 - CLI output
 
-        print(f"[seed] done in {asyncio.get_running_loop().time() - started:.0f}s")
-        print("[seed] final counts:")
+        print(  # noqa: T201 - CLI output
+            f"[seed] done in {asyncio.get_running_loop().time() - started:.0f}s"
+        )
+        print("[seed] final counts:")  # noqa: T201 - CLI output
         for table in TABLES:
-            print(f"  {table:20s} {counts[table]:>6}")
+            print(f"  {table:20s} {counts[table]:>6}")  # noqa: T201 - CLI output
         return 0
     finally:
         await pool.close()

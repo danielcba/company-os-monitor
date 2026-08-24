@@ -18,37 +18,48 @@ Usage:
     # Frontend reads access token from response body (in-memory only)
     # Frontend does NOT store refresh token in localStorage
 """
+from dataclasses import dataclass
+
 from aiohttp import web
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshCookieConfig:
+    """Configuration for refresh token cookie attributes.
+
+    Immutable to ensure consistent security posture across requests.
+    """
+
+    secure: bool = True
+    samesite: str = "Lax"
+    max_age: int = 604800  # 7 days
+    path: str = "/api/v1/auth/refresh"
+
+
+DEFAULT_REFRESH_COOKIE_CONFIG = RefreshCookieConfig()
 
 
 def set_refresh_cookie(
     response: web.Response,
     refresh_token: str,
     *,
-    secure: bool = True,
-    samesite: str = "Lax",
-    max_age: int = 604800,  # 7 days
-    path: str = "/api/v1/auth/refresh",
+    config: RefreshCookieConfig = DEFAULT_REFRESH_COOKIE_CONFIG,
 ) -> None:
     """Set refresh token as HttpOnly cookie.
 
     Args:
         response: The aiohttp response to set the cookie on.
         refresh_token: The refresh token value.
-        secure: If True, cookie is only sent over HTTPS.
-        samesite: SameSite attribute (Strict/Lax/None). Lax allows same-site
-            refresh requests while blocking cross-site CSRF.
-        max_age: Cookie lifetime in seconds.
-        path: Cookie path scope.
+        config: Cookie configuration (secure, samesite, max_age, path).
     """
     response.set_cookie(
         "refresh_token",
         refresh_token,
-        secure=secure,
+        secure=config.secure,
         httponly=True,
-        samesite=samesite,
-        max_age=max_age,
-        path=path,
+        samesite=config.samesite,
+        max_age=config.max_age,
+        path=config.path,
     )
 
 

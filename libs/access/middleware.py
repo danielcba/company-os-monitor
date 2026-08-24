@@ -25,6 +25,7 @@ from aiohttp import web
 
 from libs.access.errors import InvalidTokenError
 from libs.access.security import JwtService, TokenPayload
+from libs.access.token_blacklist import SecurityControlUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -60,26 +61,19 @@ def jwt_auth_middleware(
         # Extract and verify Bearer token.
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.lower().startswith("bearer "):
-            raise InvalidTokenError("missing bearer token")
+            raise InvalidTokenError.missing_bearer()
 
         token = auth_header.split(" ", 1)[1].strip()
-        try:
-            payload: TokenPayload = jwt.verify_access_token(token)
-        except InvalidTokenError:
-            raise  # Let the handler's error handling deal with it
+        payload: TokenPayload = jwt.verify_access_token(token)
 
         # Phase 20.1: Check revocation if blacklist is available (fail-closed).
         if blacklist and payload.jti:
-            from libs.access.token_blacklist import SecurityControlUnavailable
-
             try:
                 is_revoked = await blacklist.is_revoked(jti=payload.jti)
                 if is_revoked:
-                    raise InvalidTokenError("token has been revoked")
+                    raise InvalidTokenError.revoked()
             except SecurityControlUnavailable:
-                raise InvalidTokenError(
-                    "security control unavailable; token cannot be verified"
-                ) from None
+                raise InvalidTokenError.security_unavailable() from None
 
         # Attach token payload to request for handlers that need it.
         request["token"] = payload

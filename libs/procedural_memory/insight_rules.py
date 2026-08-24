@@ -24,11 +24,11 @@ Placeholders instantiated with measured facts:
 """
 from dataclasses import dataclass
 
-COMPETITIVE_FRAME_MIN_HYPOTHESES: int = 2
-
 from libs.perception.context import Context
 from libs.reasoning.hypothesis import Hypothesis
 from libs.reasoning.insight import InsightCreate
+
+COMPETITIVE_FRAME_MIN_HYPOTHESES: int = 2
 
 # The MVP frame: a single observed deviation of an Active Context that the
 # system explains with multiple competing hypotheses. Restructuring it means

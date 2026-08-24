@@ -16,6 +16,18 @@ class AccessError(Exception):
 class InvalidTokenError(AccessError):
     """Missing, malformed, expired or unverifiable token (-> 401)."""
 
+    @classmethod
+    def missing_bearer(cls) -> "InvalidTokenError":
+        return cls("missing bearer token")
+
+    @classmethod
+    def revoked(cls) -> "InvalidTokenError":
+        return cls("token has been revoked")
+
+    @classmethod
+    def security_unavailable(cls) -> "InvalidTokenError":
+        return cls("security control unavailable; token cannot be verified")
+
 
 class AuthenticationError(AccessError):
     """Credentials do not authenticate a valid identity (-> 401)."""

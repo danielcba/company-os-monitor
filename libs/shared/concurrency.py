@@ -17,7 +17,8 @@ Configuration via environment variables:
 """
 import asyncio
 import os
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 # Default concurrency limits.
 DEFAULT_MAX_CONCURRENT_TENANTS = 10

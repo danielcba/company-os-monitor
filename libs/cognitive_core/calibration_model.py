@@ -24,6 +24,34 @@ from dataclasses import dataclass
 from math import exp
 
 
+class CalibrationError(ValueError):
+    """Base class for calibration model errors."""
+
+
+class InvalidQualityClassError(CalibrationError):
+    """Raised when an unknown quality class is provided."""
+
+    def __init__(self, qc: str) -> None:
+        super().__init__(
+            f"Unknown quality class: {qc!r}. Expected one of {sorted(QUALITY_CLASS_RANGES)}"
+        )
+
+
+class InvalidInputRangeError(CalibrationError):
+    """Raised when a calibration input is outside [0, 1]."""
+
+    def __init__(self, name: str, value: float) -> None:
+        super().__init__(self._message(name, value))
+
+    @staticmethod
+    def _message(name: str, value: float) -> str:
+        return f"{name} must be in [0, 1], got {value}"
+
+    @classmethod
+    def for_input(cls, name: str, value: float) -> "InvalidInputRangeError":
+        return cls(name, value)
+
+
 @dataclass(frozen=True)
 class CalibrationParams:
     alpha: float = 0.5      # mixing coefficient
@@ -41,12 +69,12 @@ def quality_class_to_weight(qc: str) -> float:
     """Convert quality class to mid-point weight for calibration.
 
     Raises:
-        ValueError: If quality class is not one of Q1, Q2, Q3, Q4.
+        InvalidQualityClassError: If quality class is not one of Q1, Q2, Q3, Q4.
     """
     try:
         low, high = QUALITY_CLASS_RANGES[qc]
-    except KeyError:
-        raise ValueError(f"Unknown quality class: {qc!r}. Expected one of {sorted(QUALITY_CLASS_RANGES)}")
+    except KeyError as err:
+        raise InvalidQualityClassError(qc) from err
     return (low + high) / 2
 
 def evidential_support(evidence_weights: list[float], signs: list[int], L0: float = 0.0) -> float:
@@ -150,11 +178,11 @@ def final_confidence(S: float, C: float, ECE: float, alpha: float = 0.5) -> floa
     Validates and clamps inputs to [0, 1] range.
     """
     if not 0.0 <= S <= 1.0:
-        raise ValueError(f"S (evidential_support) must be in [0, 1], got {S}")
+        raise InvalidInputRangeError.for_input("S", S)
     if not 0.0 <= C <= 1.0:
-        raise ValueError(f"C (explanatory_coherence) must be in [0, 1], got {C}")
+        raise InvalidInputRangeError.for_input("C", C)
     if not 0.0 <= ECE <= 1.0:
-        raise ValueError(f"ECE must be in [0, 1], got {ECE}")
+        raise InvalidInputRangeError.for_input("ECE", ECE)
     if not 0.0 <= alpha <= 1.0:
-        raise ValueError(f"alpha must be in [0, 1], got {alpha}")
+        raise InvalidInputRangeError.for_input("alpha", alpha)
     return max(0.0, min(1.0, (alpha * S + (1 - alpha) * C) * (1 - ECE)))

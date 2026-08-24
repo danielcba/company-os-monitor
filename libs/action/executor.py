@@ -15,6 +15,8 @@ Phase 11: Formaliza que:
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from libs.access.rbac import can, commit_risk_allowed
+
 
 class ActionExecutor(Protocol):
     """Protocol for external action execution.
@@ -59,17 +61,12 @@ def validate_execution_authorization(
     Phase 11: Execution authorization is a separate step from decision commit.
     Only superadmin can execute; admin can commit but not execute.
     """
-    from libs.access.rbac import can, commit_risk_allowed
-
     # Executor must have execute permission.
     if not can(executor_role, "execute"):
         return False
 
     # Executor must have commit permission for this risk level.
-    if not commit_risk_allowed(executor_role, risk_tolerance):
-        return False
-
-    return True
+    return commit_risk_allowed(executor_role, risk_tolerance)
 
 
 # Capabilities that must NEVER execute actions directly.
@@ -86,14 +83,21 @@ NON_EXECUTING_CAPABILITIES: frozenset[str] = frozenset({
 })
 
 
+class NonExecutingCapabilityError(ValueError):
+    """Raised when a non-executing capability attempts to execute actions."""
+
+    def __init__(self, capability: str) -> None:
+        super().__init__(
+            f"capability {capability!r} must not execute actions directly; "
+            f"only Decision → Action Executor may execute"
+        )
+
+
 def validate_no_direct_execution(capability: str) -> None:
     """Phase 11: Observation/Reasoning capabilities must never execute actions.
 
     Raises:
-        ValueError: If the capability is in the non-executing set.
+        NonExecutingCapabilityError: If the capability is in the non-executing set.
     """
     if capability in NON_EXECUTING_CAPABILITIES:
-        raise ValueError(
-            f"capability {capability!r} must not execute actions directly; "
-            f"only Decision → Action Executor may execute"
-        )
+        raise NonExecutingCapabilityError(capability)

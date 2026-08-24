@@ -14,6 +14,7 @@ Usage::
         request_timeout_middleware(timeout_seconds=30),
     ])
 """
+import asyncio
 import logging
 import time
 import uuid
@@ -38,6 +39,17 @@ def correlation_middleware() -> web.middleware:
         start = time.monotonic()
         try:
             response = await handler(request)
+        except Exception:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            logger.exception(
+                "%s %s -> ERROR (%.1fms) [%s]",
+                request.method,
+                request.path,
+                elapsed_ms,
+                request_id,
+            )
+            raise
+        else:
             elapsed_ms = (time.monotonic() - start) * 1000
             response.headers["X-Request-ID"] = request_id
             response.headers["X-Response-Time"] = f"{elapsed_ms:.1f}ms"
@@ -51,16 +63,6 @@ def correlation_middleware() -> web.middleware:
                 request_id,
             )
             return response
-        except Exception:
-            elapsed_ms = (time.monotonic() - start) * 1000
-            logger.exception(
-                "%s %s -> ERROR (%.1fms) [%s]",
-                request.method,
-                request.path,
-                elapsed_ms,
-                request_id,
-            )
-            raise
 
     return middleware
 
@@ -75,7 +77,7 @@ def request_timeout_middleware(timeout_seconds: float = 30.0) -> web.middleware:
     async def middleware(request: web.Request, handler) -> web.Response:
         try:
             return await asyncio.wait_for(handler(request), timeout=timeout_seconds)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 "Request timeout: %s %s after %.1fs",
                 request.method,
@@ -88,7 +90,3 @@ def request_timeout_middleware(timeout_seconds: float = 30.0) -> web.middleware:
             )
 
     return middleware
-
-
-# Lazy import to avoid circular imports at module level.
-import asyncio  # noqa: E402

@@ -26,7 +26,23 @@ Usage::
 """
 import logging
 import re
+from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass(frozen=True, slots=True)
+class LogContext:
+    """Context fields for structured logging.
+
+    Immutable context that ensures consistent cognitive pipeline fields
+    across all log entries.
+    """
+
+    tenant_id: str | None = None
+    cognitive_capability: str | None = None
+    trace_id: str | None = None
+    request_id: str | None = None
+
 
 # Patterns for sensitive data that must NEVER be logged.
 SENSITIVE_PATTERNS: list[re.Pattern] = [
@@ -83,41 +99,30 @@ class StructuredLogger:
         self._logger = logging.getLogger(name)
         self._service = service
 
-    def _extra_fields(
-        self,
-        tenant_id: str | None = None,
-        cognitive_capability: str | None = None,
-        trace_id: str | None = None,
-        request_id: str | None = None,
-    ) -> dict[str, Any]:
+    def _extra_fields(self, context: LogContext) -> dict[str, Any]:
         """Build the standard extra fields for structured logging."""
         extra: dict[str, Any] = {}
         if self._service:
             extra["service"] = self._service
-        if tenant_id:
-            extra["tenant_id"] = tenant_id
-        if cognitive_capability:
-            extra["cognitive_capability"] = cognitive_capability
-        if trace_id:
-            extra["trace_id"] = trace_id
-        if request_id:
-            extra["request_id"] = request_id
+        if context.tenant_id:
+            extra["tenant_id"] = context.tenant_id
+        if context.cognitive_capability:
+            extra["cognitive_capability"] = context.cognitive_capability
+        if context.trace_id:
+            extra["trace_id"] = context.trace_id
+        if context.request_id:
+            extra["request_id"] = context.request_id
         return extra
 
     def info(
         self,
         msg: str,
         *,
-        tenant_id: str | None = None,
-        cognitive_capability: str | None = None,
-        trace_id: str | None = None,
-        request_id: str | None = None,
+        context: LogContext | None = None,
         extra: dict[str, Any] | None = None,
     ) -> None:
         """Log at INFO level with structured fields."""
-        all_extra = self._extra_fields(
-            tenant_id, cognitive_capability, trace_id, request_id
-        )
+        all_extra = self._extra_fields(context or LogContext())
         if extra:
             all_extra.update(sanitize_log_data(extra))
         self._logger.info(msg, extra=all_extra)
@@ -126,16 +131,11 @@ class StructuredLogger:
         self,
         msg: str,
         *,
-        tenant_id: str | None = None,
-        cognitive_capability: str | None = None,
-        trace_id: str | None = None,
-        request_id: str | None = None,
+        context: LogContext | None = None,
         extra: dict[str, Any] | None = None,
     ) -> None:
         """Log at WARNING level with structured fields."""
-        all_extra = self._extra_fields(
-            tenant_id, cognitive_capability, trace_id, request_id
-        )
+        all_extra = self._extra_fields(context or LogContext())
         if extra:
             all_extra.update(sanitize_log_data(extra))
         self._logger.warning(msg, extra=all_extra)
@@ -144,16 +144,11 @@ class StructuredLogger:
         self,
         msg: str,
         *,
-        tenant_id: str | None = None,
-        cognitive_capability: str | None = None,
-        trace_id: str | None = None,
-        request_id: str | None = None,
+        context: LogContext | None = None,
         extra: dict[str, Any] | None = None,
     ) -> None:
         """Log at ERROR level with structured fields."""
-        all_extra = self._extra_fields(
-            tenant_id, cognitive_capability, trace_id, request_id
-        )
+        all_extra = self._extra_fields(context or LogContext())
         if extra:
             all_extra.update(sanitize_log_data(extra))
         self._logger.error(msg, extra=all_extra)
@@ -162,16 +157,11 @@ class StructuredLogger:
         self,
         msg: str,
         *,
-        tenant_id: str | None = None,
-        cognitive_capability: str | None = None,
-        trace_id: str | None = None,
-        request_id: str | None = None,
+        context: LogContext | None = None,
         extra: dict[str, Any] | None = None,
     ) -> None:
         """Log at DEBUG level with structured fields."""
-        all_extra = self._extra_fields(
-            tenant_id, cognitive_capability, trace_id, request_id
-        )
+        all_extra = self._extra_fields(context or LogContext())
         if extra:
             all_extra.update(sanitize_log_data(extra))
         self._logger.debug(msg, extra=all_extra)

@@ -69,6 +69,10 @@ EXPECTED_OUTCOME_KEYS: frozenset[str] = frozenset(
     {OUTCOME_PREDICTION, OUTCOME_VERIFIABLE_BY, OUTCOME_DEADLINE}
 )
 
+# Binary classification threshold for predicted probability -> outcome match.
+# A prediction >= this threshold is treated as "positive" (success expected).
+PREDICTION_THRESHOLD = 0.5
+
 
 def decision_id(
     tenant_id: uuid.UUID,
@@ -438,9 +442,7 @@ def compare_expected_actual_outcomes(
         if actual is not None:
             # Convert actual outcome to binary (1 = success, 0 = failure)
             actual_value = actual.get("value")
-            if isinstance(actual_value, bool):
-                outcome_int = 1 if actual_value else 0
-            elif isinstance(actual_value, (int, float)):
+            if isinstance(actual_value, (bool, int, float)):
                 outcome_int = 1 if actual_value else 0
             else:
                 outcome_int = 0
@@ -451,7 +453,7 @@ def compare_expected_actual_outcomes(
                     "metric": metric,
                     "prediction": prediction,
                     "actual": outcome_int,
-                    "matches": prediction >= 0.5 and outcome_int == 1,
+                    "matches": prediction >= PREDICTION_THRESHOLD and outcome_int == 1,
                 }
             )
         else:

@@ -1,12 +1,12 @@
 """Perception Layer - Observation & Evidence Pydantic Models."""
 import uuid
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class QualityClass(str, Enum):
+class QualityClass(StrEnum):
     Q1 = "Q1"  # Direct Measurement
     Q2 = "Q2"  # Corroborated Inference
     Q3 = "Q3"  # Statistical Regularity

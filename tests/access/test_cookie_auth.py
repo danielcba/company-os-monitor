@@ -6,10 +6,14 @@ from unittest.mock import MagicMock
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from libs.access.cookie_auth import (
+    RefreshCookieConfig,
     clear_refresh_cookie,
     get_refresh_token_from_cookie,
     set_refresh_cookie,
 )
+
+# Test constant for max_age (1 hour in seconds).
+TEST_MAX_AGE = 3600
 
 
 def test_set_refresh_cookie_has_httponly():
@@ -52,9 +56,10 @@ def test_set_refresh_cookie_has_correct_path():
 def test_set_refresh_cookie_has_max_age():
     """Phase 13: refresh token cookie must have max_age."""
     response = MagicMock()
-    set_refresh_cookie(response, "test_token", max_age=3600)
+    config = RefreshCookieConfig(max_age=TEST_MAX_AGE)
+    set_refresh_cookie(response, "test_token", config=config)
     _, kwargs = response.set_cookie.call_args
-    assert kwargs["max_age"] == 3600
+    assert kwargs["max_age"] == TEST_MAX_AGE
 
 
 def test_clear_refresh_cookie():

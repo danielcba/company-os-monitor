@@ -27,6 +27,11 @@ TENANT_A = "00000000-0000-0000-0000-00000000000a"
 TENANT_B = "00000000-0000-0000-0000-00000000000b"
 _root = Path(__file__).resolve().parents[3]  # company-os-monitor root
 
+# Test constants for assertions.
+EXPECTED_CONFIDENCE_SCORE = 0.85
+HTTP_OK = 200
+HTTP_FORBIDDEN = 403
+
 
 @pytest.fixture
 def jwt():
@@ -99,7 +104,7 @@ async def test_valid_confidence_provenance():
                 "tenant_id": TENANT_A,
                 "target_type": "hypothesis",
                 "target_id": str(uuid.uuid4()),
-                "confidence_score": 0.85,
+                "confidence_score": EXPECTED_CONFIDENCE_SCORE,
             }
         }
     )
@@ -111,7 +116,7 @@ async def test_valid_confidence_provenance():
         expected_target_type="hypothesis",
     )
     assert result is not None
-    assert result["confidence_score"] == 0.85
+    assert result["confidence_score"] == EXPECTED_CONFIDENCE_SCORE
     assert fake_store.get_called
 
 
@@ -161,7 +166,7 @@ async def test_cross_tenant_confidence_rejected():
                 "tenant_id": TENANT_A,
                 "target_type": "hypothesis",
                 "target_id": str(uuid.uuid4()),
-                "confidence_score": 0.85,
+                "confidence_score": EXPECTED_CONFIDENCE_SCORE,
             }
         }
     )
@@ -189,7 +194,7 @@ async def test_wrong_target_confidence_rejected():
                 "tenant_id": TENANT_A,
                 "target_type": "hypothesis",
                 "target_id": str(uuid.uuid4()),
-                "confidence_score": 0.85,
+                "confidence_score": EXPECTED_CONFIDENCE_SCORE,
             }
         }
     )
@@ -216,7 +221,7 @@ async def test_client_score_ignored():
                 "tenant_id": TENANT_A,
                 "target_type": "hypothesis",
                 "target_id": str(uuid.uuid4()),
-                "confidence_score": 0.85,
+                "confidence_score": EXPECTED_CONFIDENCE_SCORE,
             }
         }
     )
@@ -227,7 +232,7 @@ async def test_client_score_ignored():
         confidence_id=confidence_id,
         expected_target_type="hypothesis",
     )
-    assert result["confidence_score"] == 0.85
+    assert result["confidence_score"] == EXPECTED_CONFIDENCE_SCORE
 
 
 async def test_confidence_store_unavailable_fails_closed():
@@ -321,7 +326,7 @@ async def test_middleware_no_blacklist_skips_revocation():
     mock_handler = AsyncMock(return_value=MagicMock(status=200))
 
     result = await middleware_fn(mock_request, mock_handler)
-    assert result.status == 200
+    assert result.status == HTTP_OK
     assert mock_request["token"] is not None
 
 
@@ -507,7 +512,7 @@ def test_csrf_allows_same_origin():
 
     import asyncio
     result = asyncio.run(middleware_fn(mock_request, mock_handler))
-    assert result.status == 200
+    assert result.status == HTTP_OK
 
 
 def test_csrf_allows_no_origin_header():
@@ -524,7 +529,7 @@ def test_csrf_allows_no_origin_header():
 
     import asyncio
     result = asyncio.run(middleware_fn(mock_request, mock_handler))
-    assert result.status == 200
+    assert result.status == HTTP_OK
 
 
 def test_csrf_skips_non_protected_paths():
@@ -541,7 +546,7 @@ def test_csrf_skips_non_protected_paths():
 
     import asyncio
     result = asyncio.run(middleware_fn(mock_request, mock_handler))
-    assert result.status == 200
+    assert result.status == HTTP_OK
 
 
 def test_csrf_allows_extra_origins():
@@ -563,7 +568,7 @@ def test_csrf_allows_extra_origins():
 
     import asyncio
     result = asyncio.run(middleware_fn(mock_request, mock_handler))
-    assert result.status == 200
+    assert result.status == HTTP_OK
 
 
 def test_csrf_uses_referer_fallback():

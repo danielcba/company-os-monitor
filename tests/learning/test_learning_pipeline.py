@@ -6,6 +6,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from libs.action.decision import compare_expected_actual_outcomes
 
+# Test constants for assertions.
+BRIER_TOLERANCE = 0.01
+EXPECTED_OUTCOME_COUNT = 2
+
 
 def test_compare_empty_outcomes():
     """Phase 19: empty expected outcomes returns zero scores."""
@@ -51,7 +55,7 @@ def test_compare_partial_prediction():
         {"verifiable_by": "cpu_usage", "value": True}
     ]
     result = compare_expected_actual_outcomes(expected, actual)
-    assert abs(result["brier_score"] - 0.09) < 0.01
+    assert abs(result["brier_score"] - 0.09) < BRIER_TOLERANCE
     assert result["details"][0]["matches"] is True
 
 
@@ -77,4 +81,4 @@ def test_compare_multiple_outcomes():
     ]
     result = compare_expected_actual_outcomes(expected, actual)
     assert result["brier_score"] == 0.0
-    assert result["outcome_count"] == 2
+    assert result["outcome_count"] == EXPECTED_OUTCOME_COUNT
