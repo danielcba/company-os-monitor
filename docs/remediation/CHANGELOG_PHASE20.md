@@ -120,6 +120,52 @@ Runtime integration verification, adversarial testing, and final hardening.
 
 ---
 
+## Phase 20.3 — MyPy CI Module Discovery Fix
+
+**Date:** 2026-08-24
+**Commit:** `68600e6` — `phase 20.3: fix mypy ci module discovery`
+**Tests:** Ruff PASS, MyPy PASS (no duplicate module), 166 root + 123 gateway + 39 service (unit) tests
+
+### Problem
+MyPy CI command `mypy libs/ apps/gateway/ apps/services/ --ignore-missing-imports --exclude 'apps/agents'` failed with:
+```
+apps/services/anomaly-service/src/__init__.py: error: Duplicate module named "src"
+(also at "apps/gateway/api-gateway/src/__init__.py")
+```
+
+11 services + gateway all use `src/` layout with `__init__.py` → MyPy discovers each as top-level `"src"` module.
+
+### Solution
+Split MyPy into per-package invocations from each package base:
+
+| Step | Working Dir | Command |
+|------|-------------|---------|
+| libs | repo root | `mypy libs/ --ignore-missing-imports --explicit-package-bases` |
+| gateway | `apps/gateway/api-gateway/` | `mypy src/ --ignore-missing-imports` |
+| services (×11) | each `apps/services/*/` | `mypy src/ --ignore-missing-imports` |
+
+### Files Changed
+- `.github/workflows/ci.yml` — replaced single MyPy step with 3 per-package steps
+- `docs/remediation/phase-20.3-mypy-ci-fix.md` — full documentation
+
+### Validation
+- Ruff = PASS
+- MyPy (libs) = PASS (no duplicate module)
+- MyPy (gateway) = PASS (no duplicate module)
+- MyPy (11 services) = PASS (no duplicate module)
+- Root tests = 166 passed
+- Gateway tests = 123 passed (3 CORS pre-existing failures)
+- Service unit tests = passing (integration tests need Docker)
+
+### Compliance
+- No cognitive code changes (Observation, Evidence, Context, Pattern, Anomaly, Hypothesis, Insight, Confidence, Recommendation, Decision intact)
+- No security changes (JWT, rate limit, tenant isolation, CSP intact)
+- No architecture changes (Cognitive Boundary, Decision/Execution separation intact)
+- No services excluded to hide errors
+- No new `# type: ignore` comments
+
+---
+
 ## Phase 20.1 — Runtime Wiring & Production Hardening
 
 **Date:** 2026-08-24
