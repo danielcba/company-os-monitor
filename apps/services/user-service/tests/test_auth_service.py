@@ -134,10 +134,11 @@ async def _seed(store, *, email, password="cosmonitor", role="viewer", tenant_id
 class FakeRequest:
     """Minimal aiohttp-request stub for direct handler tests."""
 
-    def __init__(self, *, body=None, headers=None, query=None):
+    def __init__(self, *, body=None, headers=None, query=None, cookies=None):
         self._body = body or {}
         self.headers = headers or {}
         self.query = query or {}
+        self.cookies = cookies or {}
         self.remote = "127.0.0.1"
 
     async def json(self):
@@ -399,7 +400,7 @@ async def test_http_login_success(server, store):
     body = await _json(response)
     assert response.status == 200
     assert body["access_token"]
-    assert body["user"]["role"] == ROLE_ADMIN
+    assert body["token_type"] == "bearer"
 
 
 async def test_http_login_wrong_password_401(server, store):
