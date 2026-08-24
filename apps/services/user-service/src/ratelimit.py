@@ -73,7 +73,7 @@ class RedisClient(Protocol):
     """Minimal async Redis interface for the rate limiter."""
 
     async def eval(
-        self, script: str, num_keys: int, *args: str | int | float
+        self, script: str, num_keys: int, *args: str | float
     ) -> int: ...
 
 

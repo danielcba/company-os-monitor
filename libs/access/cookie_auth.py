@@ -4,6 +4,13 @@ Provides cookie-based token storage as an alternative to localStorage.
 The access token stays in memory (needed for Authorization header), but the
 refresh token is moved to an HttpOnly cookie.
 
+Phase 20.1: Cookie attributes hardened:
+- HttpOnly: true (JS-inaccessible)
+- Secure: true (HTTPS-only in production)
+- SameSite: Lax (allows same-site refresh requests)
+- Path: /api/v1/auth/refresh (scoped to refresh endpoint)
+- Max-Age: 604800 (7 days)
+
 Usage:
     # Backend sets the cookie on login/refresh
     set_refresh_cookie(response, refresh_token)
@@ -19,7 +26,7 @@ def set_refresh_cookie(
     refresh_token: str,
     *,
     secure: bool = True,
-    samesite: str = "Strict",
+    samesite: str = "Lax",
     max_age: int = 604800,  # 7 days
     path: str = "/api/v1/auth/refresh",
 ) -> None:
@@ -29,7 +36,8 @@ def set_refresh_cookie(
         response: The aiohttp response to set the cookie on.
         refresh_token: The refresh token value.
         secure: If True, cookie is only sent over HTTPS.
-        samesite: SameSite attribute (Strict/Lax/None).
+        samesite: SameSite attribute (Strict/Lax/None). Lax allows same-site
+            refresh requests while blocking cross-site CSRF.
         max_age: Cookie lifetime in seconds.
         path: Cookie path scope.
     """

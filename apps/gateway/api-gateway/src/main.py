@@ -42,6 +42,7 @@ async def main():
     from libs.action.report import ReportStore
     from libs.cognitive_core.summary import CognitiveSummaryStore
     from libs.shared.db import create_shared_engine
+
     from src.audit import AuditLogReadStore
     from src.confidence import ConfidenceReadStore
     from src.decisions import DecisionReadStore
@@ -107,6 +108,7 @@ async def main():
         service_health=_build_service_health(),
         dsn=dsn,
         blacklist=blacklist,
+        confidence_store=confidence_store,
     )
     server = GatewayServer(service, jwt)
 

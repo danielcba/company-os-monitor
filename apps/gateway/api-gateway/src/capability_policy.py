@@ -21,8 +21,8 @@ Phase 10: The Boundary is no longer a rigid state machine. Reasoning can:
 The boundary protects capabilities and prevents illegitimate bypasses,
 but does NOT impede legitimate internal Reasoning cycles.
 """
-from dataclasses import dataclass, field
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Protocol
 
 
 @dataclass(frozen=True)

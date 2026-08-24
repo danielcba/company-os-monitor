@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 import { queryClient } from '@/lib/query-client'
+import { setTokens, clearTokens, getAccessToken } from '@/api/client'
 
 const meResponse = {
   id: 'u1',
@@ -39,13 +40,13 @@ function ViewerContent() {
 
 describe('RBAC UI guards', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
 
   it('viewer role is reflected in the auth context', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'token-viewer')
+    setTokens({ access_token: 'token-viewer', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => meResponse }),
@@ -63,7 +64,7 @@ describe('RBAC UI guards', () => {
   })
 
   it('admin role is reflected in the auth context', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'token-admin')
+    setTokens({ access_token: 'token-admin', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => adminMeResponse }),
@@ -94,7 +95,7 @@ describe('RBAC UI guards', () => {
   })
 
   it('authenticated viewer can access protected content', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'token-viewer')
+    setTokens({ access_token: 'token-viewer', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => meResponse }),
@@ -112,7 +113,7 @@ describe('RBAC UI guards', () => {
   })
 
   it('authenticated admin can access protected content', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'token-admin')
+    setTokens({ access_token: 'token-admin', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => adminMeResponse }),
@@ -130,7 +131,7 @@ describe('RBAC UI guards', () => {
   })
 
   it('invalid token clears session and shows unauthenticated', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'expired-token')
+    setTokens({ access_token: 'expired-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'invalid' }) }),
@@ -145,11 +146,11 @@ describe('RBAC UI guards', () => {
       </QueryClientProvider>,
     )
     expect(await screen.findByTestId('role')).toHaveTextContent('none')
-    expect(localStorage.getItem('cosmonitor.access_token')).toBeNull()
+    expect(getAccessToken()).toBeNull()
   })
 
   it('expired token during profile fetch clears session', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'expired-token')
+    setTokens({ access_token: 'expired-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'token expired' }) }),
@@ -164,6 +165,6 @@ describe('RBAC UI guards', () => {
       </QueryClientProvider>,
     )
     expect(await screen.findByTestId('role')).toHaveTextContent('none')
-    expect(localStorage.getItem('cosmonitor.access_token')).toBeNull()
+    expect(getAccessToken()).toBeNull()
   })
 })

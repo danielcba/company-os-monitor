@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 import { queryClient } from '@/lib/query-client'
+import { getAccessToken, clearTokens } from '@/api/client'
 
 function Probe() {
   const { isAuthenticated, user, signIn, signOut } = useAuth()
@@ -22,7 +23,6 @@ function Probe() {
 
 const loginResponse = {
   access_token: 'access-1',
-  refresh_token: 'refresh-1',
   token_type: 'bearer',
   expires_in: 3600,
 }
@@ -54,7 +54,7 @@ function renderWithProviders() {
 
 describe('auth provider', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
@@ -89,6 +89,6 @@ describe('auth provider', () => {
     await waitFor(() => expect(screen.getByTestId('auth').textContent).toBe('true'))
     await user.click(screen.getByText('signout'))
     await waitFor(() => expect(screen.getByTestId('auth').textContent).toBe('false'))
-    expect(localStorage.getItem('cosmonitor.access_token')).toBeNull()
+    expect(getAccessToken()).toBeNull()
   })
 })

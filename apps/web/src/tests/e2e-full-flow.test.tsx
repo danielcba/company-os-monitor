@@ -5,7 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { queryClient } from '@/lib/query-client'
-import { apiFetch, setTokens, clearTokens } from '@/api/client'
+import { apiFetch, setTokens, clearTokens, getAccessToken } from '@/api/client'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -38,7 +38,6 @@ const superadminProfile = {
 
 const loginResponse = {
   access_token: 'access-1',
-  refresh_token: 'refresh-1',
   token_type: 'bearer',
   expires_in: 3600,
 }
@@ -79,17 +78,15 @@ function renderAuth(path: string) {
 
 describe('E2E: Login → Dashboard → Cognitive Trace', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
 
   it('login → store tokens → load profile → render dashboard', async () => {
-    // Step 1: Login stores tokens
     setTokens(loginResponse)
-    expect(localStorage.getItem('cosmonitor.access_token')).toBe('access-1')
+    expect(getAccessToken()).toBe('access-1')
 
-    // Step 2: Auth loads profile on mount
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => adminProfile }),
@@ -136,7 +133,7 @@ describe('E2E: Login → Dashboard → Cognitive Trace', () => {
 
 describe('E2E: Viewer Cannot Commit', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
@@ -149,7 +146,7 @@ describe('E2E: Viewer Cannot Commit', () => {
   })
 
   it('viewer is correctly identified in auth context', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'viewer-token')
+    setTokens({ access_token: 'viewer-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => viewerProfile }),
@@ -159,7 +156,7 @@ describe('E2E: Viewer Cannot Commit', () => {
   })
 
   it('viewer sees users admin page content (UI does not block, backend enforces RBAC)', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'viewer-token')
+    setTokens({ access_token: 'viewer-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => viewerProfile }),
@@ -191,7 +188,7 @@ describe('E2E: Admin Risk Restrictions', () => {
   })
 
   it('admin cannot access cross-tenant endpoints', async () => {
-    setTokens({ access_token: 'admin-token', refresh_token: 'refresh-1', token_type: 'bearer', expires_in: 3600 })
+    setTokens({ access_token: 'admin-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -210,7 +207,7 @@ describe('E2E: Admin Risk Restrictions', () => {
 
 describe('E2E: Superadmin Cross-Tenant', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
@@ -221,7 +218,7 @@ describe('E2E: Superadmin Cross-Tenant', () => {
   })
 
   it('superadmin can query other tenants', async () => {
-    setTokens({ access_token: 'superadmin-token', refresh_token: 'refresh-1', token_type: 'bearer', expires_in: 3600 })
+    setTokens({ access_token: 'superadmin-token', token_type: 'bearer', expires_in: 3600 })
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -236,7 +233,7 @@ describe('E2E: Superadmin Cross-Tenant', () => {
   })
 
   it('superadmin profile is loaded correctly', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'superadmin-token')
+    setTokens({ access_token: 'superadmin-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => superadminProfile }),
@@ -255,17 +252,15 @@ describe('E2E: Superadmin Cross-Tenant', () => {
 
 describe('E2E: Session Lifecycle', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
 
   it('complete session lifecycle: login → operate → logout', async () => {
-    // Login: store tokens
     setTokens(loginResponse)
-    expect(localStorage.getItem('cosmonitor.access_token')).toBe('access-1')
+    expect(getAccessToken()).toBe('access-1')
 
-    // Verify profile loaded
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => adminProfile }),
@@ -273,26 +268,24 @@ describe('E2E: Session Lifecycle', () => {
     renderAuth('/dashboard')
     await waitFor(() => expect(screen.getByTestId('role').textContent).toBe('admin'))
 
-    // Logout
     clearTokens()
-    expect(localStorage.getItem('cosmonitor.access_token')).toBeNull()
-    expect(localStorage.getItem('cosmonitor.refresh_token')).toBeNull()
+    expect(getAccessToken()).toBeNull()
   })
 
   it('token refresh extends the session', async () => {
-    setTokens({ access_token: 'old', refresh_token: 'refresh-old', token_type: 'bearer', expires_in: 3600 })
+    setTokens({ access_token: 'old', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
-        json: async () => ({ access_token: 'refreshed', refresh_token: 'refresh-new', token_type: 'bearer', expires_in: 3600 }),
+        json: async () => ({ access_token: 'refreshed', token_type: 'bearer', expires_in: 3600 }),
       }),
     )
 
     const { tryRefresh } = await import('@/api/client')
     const refreshed = await tryRefresh()
     expect(refreshed).toBe(true)
-    expect(localStorage.getItem('cosmonitor.access_token')).toBe('refreshed')
+    expect(getAccessToken()).toBe('refreshed')
   })
 })

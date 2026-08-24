@@ -12,8 +12,8 @@ Usage:
 import argparse
 import json
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 
 
 def log_ok(msg: str) -> None:

@@ -117,3 +117,55 @@ Runtime integration verification, adversarial testing, and final hardening.
 | R6 (Tenant Isolation) | FIX 7 — report service tenant scoping |
 | P5 (Calibrated Confidence) | FIX 10 — evidence scope validation |
 | P7 (Learning) | FIX 12 — calibration model data structure |
+
+---
+
+## Phase 20.1 — Runtime Wiring & Production Hardening
+
+**Date:** 2026-08-24
+**Tests:** 291 Python tests passing (166 tests/ + 125 apps/gateway/)
+
+### P0 — ConfidenceStore Injection
+- `apps/gateway/api-gateway/src/main.py` — GatewayService receives `confidence_store`
+- `apps/gateway/api-gateway/src/service.py` — `verify_confidence_provenance()` validates all records
+- `apps/gateway/api-gateway/src/boundary.py` — `validate_confidence_binding()` blocks cross-binding
+- `apps/gateway/api-gateway/src/confidence.py` — `ConfidenceReadStore` scoped queries
+- `apps/gateway/api-gateway/src/summary.py` — Fixed indentation bug, corrected `OperationalError` reference
+
+### P1 — HttpOnly Refresh Cookie
+- `libs/access/cookie_auth.py` — SameSite=Lax, HttpOnly, Secure, path-scoped
+- `apps/web/src/api/client.ts` — In-memory `accessToken`, no localStorage for tokens
+- `apps/web/src/api/auth.ts` — Login sends `credentials: 'include'`
+- `apps/web/src/types/auth.ts` — `AuthSession` no longer exposes `refresh_token`
+- `apps/services/user-service/src/health.py` — Login/refresh/logout use cookie functions
+
+### P1 — JWT Revocation
+- `libs/access/middleware.py` — `jwt_auth_middleware()` accepts optional `blacklist`, FAIL-CLOSED
+- `libs/access/token_blacklist.py` — `TokenBlacklist` with `is_revoked()`, `consume_refresh_token()`
+- `apps/services/report-service/src/main.py` — `TokenBlacklist` created and passed
+
+### CSRF Protection
+- `libs/access/csrf.py` — New middleware: Origin/Referer validation
+- `apps/services/user-service/src/health.py` — CSRF middleware wired
+
+### Frontend Token Security
+- `apps/web/src/api/client.ts` — `setTokens()`, `clearTokens()`, `getAccessToken()` API
+- 9 frontend test files updated (removed localStorage/refresh_token references)
+
+### New Tests (29)
+- `tests/security/adversarial/test_15_phase20_1_wiring.py` — ConfidenceStore, HttpOnly cookies, JWT revocation, CSRF, rate limiter, context activation, evidence scope
+
+### Lint Fixes
+- `summary.py` — `sqlalchemy.exc.OperationalError` → `OperationalError` (undefined name bug)
+- `health.py` — Removed unused `# noqa: BLE001` directives
+- `middleware.py` — `raise ... from None` for proper exception chaining
+- `middleware.py` — `from collections.abc import Callable` (UP035)
+
+### CI Fixes (GitHub Actions)
+- **PYI041**: `apps/services/user-service/src/ratelimit.py` — `int | float` → `float`
+- **F821**: `apps/services/insight-service/tests/test_insight_store.py` — Rewrote broken fixtures (`autouse()` call → `autouse=True`, `db_connection` scope)
+- **F541**: `apps/gateway/api-gateway/src/health.py` — Removed unnecessary `f` prefix from f-string
+- **C401**: `apps/gateway/api-gateway/tests/test_gateway_http.py` — Rewrote generator expressions as set comprehensions
+- **BLE001**: Added `per-file-ignores` to sub-project `pyproject.toml` files (user-service, confidence-service, 3 agents)
+- **E501**: Added `per-file-ignores` for `generate_compliance_matrix.py`, `smoke_test.py`, `calibration_model.py`
+- **RUF100**: Removed conflicting `# noqa: BLE001` comments; unified config via `pyproject.toml`

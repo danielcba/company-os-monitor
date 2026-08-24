@@ -204,7 +204,7 @@ def calibrate(
     Phase 20: validates that evidence used for calibration is within the
     hypothesis scope (evidence scope isolation).
     """
-    from libs.learning.confidence import validate_confidence_evidence_scope, EvidenceScopeError
+    from libs.learning.confidence import validate_confidence_evidence_scope
 
     # Input validation
     if hypothesis is None:

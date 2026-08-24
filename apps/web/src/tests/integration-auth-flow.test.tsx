@@ -6,7 +6,7 @@ import { AuthProvider, useAuth } from '@/hooks/use-auth'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { queryClient } from '@/lib/query-client'
 import { UnauthorizedState, ForbiddenState } from '@/components/ui/state'
-import { apiFetch, setTokens } from '@/api/client'
+import { apiFetch, setTokens, clearTokens, getAccessToken } from '@/api/client'
 
 function Probe() {
   const { isAuthenticated, isLoading } = useAuth()
@@ -17,7 +17,7 @@ function Probe() {
 
 describe('Unauthorized state — integration', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
@@ -29,7 +29,7 @@ describe('Unauthorized state — integration', () => {
   })
 
   it('401 from API causes redirect to login', async () => {
-    setTokens({ access_token: 'expired', refresh_token: 'refresh-1', token_type: 'bearer', expires_in: 3600 })
+    setTokens({ access_token: 'expired', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'invalid token' }) }),
@@ -49,11 +49,11 @@ describe('Unauthorized state — integration', () => {
       </QueryClientProvider>,
     )
     await waitFor(() => expect(screen.getByText('login page')).toBeInTheDocument())
-    expect(localStorage.getItem('cosmonitor.access_token')).toBeNull()
+    expect(getAccessToken()).toBeNull()
   })
 
-  it('clears both access and refresh tokens on 401', async () => {
-    setTokens({ access_token: 'expired', refresh_token: 'refresh-1', token_type: 'bearer', expires_in: 3600 })
+  it('clears access token on 401', async () => {
+    setTokens({ access_token: 'expired', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) }),
@@ -73,8 +73,7 @@ describe('Unauthorized state — integration', () => {
       </QueryClientProvider>,
     )
     await waitFor(() => {
-      expect(localStorage.getItem('cosmonitor.access_token')).toBeNull()
-      expect(localStorage.getItem('cosmonitor.refresh_token')).toBeNull()
+      expect(getAccessToken()).toBeNull()
     })
   })
 })
@@ -92,7 +91,7 @@ describe('Forbidden state — integration', () => {
   })
 
   it('403 from API throws ApiError with status 403', async () => {
-    setTokens({ access_token: 'token', refresh_token: 'refresh-1', token_type: 'bearer', expires_in: 3600 })
+    setTokens({ access_token: 'token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: false, status: 403, json: async () => ({ error: 'forbidden' }) }),
@@ -106,13 +105,13 @@ describe('Forbidden state — integration', () => {
 
 describe('Tenant isolation — integration', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
 
   it('cross-tenant query by non-superadmin returns 403', async () => {
-    setTokens({ access_token: 'admin-token', refresh_token: 'refresh-1', token_type: 'bearer', expires_in: 3600 })
+    setTokens({ access_token: 'admin-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -128,7 +127,7 @@ describe('Tenant isolation — integration', () => {
   })
 
   it('tenant-scoped query uses the correct tenant_id in the URL', async () => {
-    setTokens({ access_token: 'token', refresh_token: 'refresh-1', token_type: 'bearer', expires_in: 3600 })
+    setTokens({ access_token: 'token', token_type: 'bearer', expires_in: 3600 })
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -142,7 +141,7 @@ describe('Tenant isolation — integration', () => {
   })
 
   it('superadmin cross-tenant query succeeds', async () => {
-    setTokens({ access_token: 'superadmin-token', refresh_token: 'refresh-1', token_type: 'bearer', expires_in: 3600 })
+    setTokens({ access_token: 'superadmin-token', token_type: 'bearer', expires_in: 3600 })
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,

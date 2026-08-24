@@ -3,16 +3,23 @@
 Provides a reusable aiohttp middleware that validates Bearer tokens on
 protected routes. Health and metrics endpoints are exempt from auth.
 
+Phase 20.1: When a TokenBlacklist is provided, the middleware also checks
+whether the token has been revoked before accepting it. If Redis is
+unavailable during the revocation check, the middleware FAIL-CLOSED:
+the request is rejected.
+
 Usage::
 
     from libs.access.middleware import jwt_auth_middleware
     from libs.access.security import JwtService
+    from libs.access.token_blacklist import TokenBlacklist
 
     jwt = JwtService(algorithm="HS256", secret_key="...")
-    app = web.Application(middlewares=[jwt_auth_middleware(jwt)])
+    blacklist = TokenBlacklist.from_url("redis://localhost:6379/1")
+    app = web.Application(middlewares=[jwt_auth_middleware(jwt, blacklist=blacklist)])
 """
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from aiohttp import web
 
@@ -29,12 +36,15 @@ def jwt_auth_middleware(
     jwt: JwtService,
     *,
     public_paths: frozenset[str] | None = None,
+    blacklist=None,
 ) -> Callable:
     """Create an aiohttp middleware that validates Bearer JWT tokens.
 
     Args:
         jwt: The JwtService instance for token verification.
         public_paths: Additional paths to exempt from auth (besides /health, /metrics).
+        blacklist: Optional TokenBlacklist for revocation checks. When provided
+            and Redis is unavailable, the request is FAIL-CLOSED (rejected).
 
     Returns:
         An aiohttp middleware function.
@@ -57,6 +67,19 @@ def jwt_auth_middleware(
             payload: TokenPayload = jwt.verify_access_token(token)
         except InvalidTokenError:
             raise  # Let the handler's error handling deal with it
+
+        # Phase 20.1: Check revocation if blacklist is available (fail-closed).
+        if blacklist and payload.jti:
+            from libs.access.token_blacklist import SecurityControlUnavailable
+
+            try:
+                is_revoked = await blacklist.is_revoked(jti=payload.jti)
+                if is_revoked:
+                    raise InvalidTokenError("token has been revoked")
+            except SecurityControlUnavailable:
+                raise InvalidTokenError(
+                    "security control unavailable; token cannot be verified"
+                ) from None
 
         # Attach token payload to request for handlers that need it.
         request["token"] = payload

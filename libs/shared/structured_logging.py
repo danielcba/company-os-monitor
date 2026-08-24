@@ -28,7 +28,6 @@ import logging
 import re
 from typing import Any
 
-
 # Patterns for sensitive data that must NEVER be logged.
 SENSITIVE_PATTERNS: list[re.Pattern] = [
     re.compile(r"password[\"':\s]*[\"'][^\"']+[\"']", re.IGNORECASE),

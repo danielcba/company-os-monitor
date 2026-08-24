@@ -20,10 +20,12 @@ execution. 401 = no/invalid token, 403 = authenticated but no authority,
 """
 
 import os
+import uuid
+from typing import Any
 
 from aiohttp import web
-from aiohttp_cors import ResourceOptions, setup as cors_setup
-
+from aiohttp_cors import ResourceOptions
+from aiohttp_cors import setup as cors_setup
 from libs.access.errors import (
     AccessError,
     InvalidTokenError,
@@ -147,7 +149,7 @@ class GatewayServer:
             return web.json_response({"services": results})
         except InvalidTokenError as exc:
             return web.json_response({"error": str(exc)}, status=401)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -157,7 +159,7 @@ class GatewayServer:
             import uuid
             uuid.UUID(tenant_id)
         except ValueError:
-            raise AccessError(f"Invalid tenant_id format")
+            raise AccessError("Invalid tenant_id format")
         return tenant_id
 
     async def _validate_uuid(self, value: str, field_name: str) -> str:
@@ -171,7 +173,6 @@ class GatewayServer:
 
     async def _parse_observations_query(self, query) -> dict[str, Any]:
         """Parse and validate observations query parameters."""
-        from typing import Any
         try:
             limit = int(query.get("limit", "50"))
         except ValueError:
@@ -219,7 +220,7 @@ class GatewayServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -237,7 +238,7 @@ class GatewayServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -257,7 +258,7 @@ class GatewayServer:
         except AccessError as exc:
             status = 400 if _is_validation_error(str(exc)) else 403
             return web.json_response({"error": str(exc)}, status=status)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -275,7 +276,7 @@ class GatewayServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -357,7 +358,7 @@ class GatewayServer:
         except AccessError as exc:
             status = 400 if _is_validation_error(str(exc)) else 403
             return web.json_response({"error": str(exc)}, status=status)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -400,7 +401,7 @@ class GatewayServer:
         except AccessError as exc:
             status = 400 if _is_validation_error(str(exc)) else 403
             return web.json_response({"error": str(exc)}, status=status)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -421,7 +422,7 @@ class GatewayServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -442,7 +443,7 @@ class GatewayServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -463,7 +464,7 @@ class GatewayServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -501,7 +502,7 @@ class GatewayServer:
             return web.json_response({"error": str(exc)}, status=400)
         except DecisionNotFoundError as exc:
             return web.json_response({"error": str(exc)}, status=404)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -568,7 +569,7 @@ class GatewayServer:
             return web.json_response({"error": str(exc)}, status=400)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=400)
 

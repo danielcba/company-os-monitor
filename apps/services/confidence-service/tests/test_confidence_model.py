@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 
 import pytest
 from libs.learning.confidence import (
-    CONFIDENCE_NAMESPACE,
     TARGET_TYPES,
     CalibrationContent,
     ConfidenceCreate,

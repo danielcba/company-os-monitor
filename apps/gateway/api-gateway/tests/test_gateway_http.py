@@ -117,8 +117,8 @@ class _ObservationStore:
 
         # Build facets
         all_tenant = [o for o in self.rows if o.tenant_id == tenant_id]
-        fact_types = sorted(set(o.fact_type for o in all_tenant))
-        source_types = sorted(set(o.source_type for o in all_tenant))
+        fact_types = sorted({o.fact_type for o in all_tenant})
+        source_types = sorted({o.source_type for o in all_tenant})
         quality_classes = ["Q1", "Q2", "Q3", "Q4"]
 
         # Convert to dict format

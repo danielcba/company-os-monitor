@@ -33,7 +33,6 @@ from libs.reasoning.hypothesis import HypothesisStore
 
 from src.calibrator import calibrate, resolve_scope_evidence
 
-
 log = logging.getLogger(__name__)
 
 

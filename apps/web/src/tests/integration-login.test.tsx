@@ -5,10 +5,10 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 import { queryClient } from '@/lib/query-client'
 import userEvent from '@testing-library/user-event'
+import { getAccessToken, clearTokens } from '@/api/client'
 
 const loginResponse = {
   access_token: 'access-1',
-  refresh_token: 'refresh-1',
   token_type: 'bearer',
   expires_in: 3600,
 }
@@ -40,12 +40,12 @@ function LoginForm() {
 
 describe('Login flow — integration', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
 
-  it('successful login stores tokens and loads profile', async () => {
+  it('successful login stores access token in memory and loads profile', async () => {
     const mockFetch = vi
       .fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => loginResponse })
@@ -63,8 +63,7 @@ describe('Login flow — integration', () => {
     )
     await user.click(screen.getByText('sign in'))
     await waitFor(() => expect(screen.getByText('logged in as admin@sandbox.local')).toBeInTheDocument())
-    expect(localStorage.getItem('cosmonitor.access_token')).toBe('access-1')
-    expect(localStorage.getItem('cosmonitor.refresh_token')).toBe('refresh-1')
+    expect(getAccessToken()).toBe('access-1')
   })
 
   it('failed login does not store tokens', async () => {
@@ -86,7 +85,7 @@ describe('Login flow — integration', () => {
     )
     await user.click(screen.getByText('sign in'))
     await waitFor(() => expect(mockFetch).toHaveBeenCalled())
-    expect(localStorage.getItem('cosmonitor.access_token')).toBeNull()
+    expect(getAccessToken()).toBeNull()
     expect(screen.queryByText(/logged in/)).not.toBeInTheDocument()
   })
 
@@ -106,6 +105,6 @@ describe('Login flow — integration', () => {
       </QueryClientProvider>,
     )
     await user.click(screen.getByText('sign in'))
-    await waitFor(() => expect(localStorage.getItem('cosmonitor.access_token')).toBeNull())
+    await waitFor(() => expect(getAccessToken()).toBeNull())
   })
 })

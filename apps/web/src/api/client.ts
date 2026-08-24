@@ -5,39 +5,42 @@ const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://
 const USER_SERVICE_URL =
   (import.meta.env.VITE_USER_SERVICE_URL as string | undefined) ?? 'http://localhost:8099/api/v1'
 
-const TOKEN_KEY = 'cosmonitor.access_token'
-const REFRESH_KEY = 'cosmonitor.refresh_token'
+// Phase 20.1: Access token in memory only (never in localStorage).
+// Refresh token is in HttpOnly cookie (server-managed, JS-inaccessible).
+let accessToken: string | null = null
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  return accessToken
 }
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY)
+export function setAccessToken(token: string | null): void {
+  accessToken = token
 }
 
+// Phase 20.1: setTokens now only stores access token in memory.
+// The refresh token is set as HttpOnly cookie by the backend.
 export function setTokens(session: AuthSession): void {
-  localStorage.setItem(TOKEN_KEY, session.access_token)
-  localStorage.setItem(REFRESH_KEY, session.refresh_token)
+  accessToken = session.access_token
+  // refresh_token is NOT stored in JS — it's in HttpOnly cookie set by backend.
 }
 
 export function clearTokens(): void {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(REFRESH_KEY)
+  accessToken = null
 }
 
 let refreshInFlight: Promise<boolean> | null = null
 
 export async function tryRefresh(): Promise<boolean> {
-  const refreshToken = getRefreshToken()
-  if (!refreshToken) return false
   if (refreshInFlight) return refreshInFlight
   refreshInFlight = (async () => {
     try {
+      // Phase 20.1: Refresh uses HttpOnly cookie (credentials: "include").
+      // The browser sends the refresh_token cookie automatically.
+      // No body.refresh_token — the cookie is the source of truth.
       const res = await fetch(`${USER_SERVICE_URL}/auth/refresh`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refreshToken }),
       })
       if (!res.ok) {
         clearTokens()
@@ -76,7 +79,8 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     if (token) finalHeaders.Authorization = `Bearer ${token}`
   }
 
-  const res = await fetch(url, { ...rest, headers: finalHeaders })
+  // Phase 20.1: Always include credentials so HttpOnly cookies are sent.
+  const res = await fetch(url, { ...rest, headers: finalHeaders, credentials: 'include' })
 
   if (res.status === 401 && retryOn401 && !skipAuth) {
     const refreshed = await tryRefresh()

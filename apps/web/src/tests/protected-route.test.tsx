@@ -6,6 +6,7 @@ import { AuthProvider } from '@/hooks/use-auth'
 import { ThemeProvider } from '@/hooks/use-theme'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { queryClient } from '@/lib/query-client'
+import { setTokens, clearTokens, getAccessToken } from '@/api/client'
 
 const meResponse = {
   id: 'u1',
@@ -43,7 +44,7 @@ function renderProtected(path = '/dashboard') {
 
 describe('ProtectedRoute', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
@@ -55,7 +56,7 @@ describe('ProtectedRoute', () => {
   })
 
   it('renders protected content when a valid session exists', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'access-1')
+    setTokens({ access_token: 'access-1', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => meResponse }),
@@ -65,13 +66,13 @@ describe('ProtectedRoute', () => {
   })
 
   it('redirects to /login when the token is invalid', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'expired')
+    setTokens({ access_token: 'expired', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'invalid' }) }),
     )
     renderProtected()
     expect(await screen.findByText('login page')).toBeInTheDocument()
-    expect(localStorage.getItem('cosmonitor.access_token')).toBeNull()
+    expect(getAccessToken()).toBeNull()
   })
 })

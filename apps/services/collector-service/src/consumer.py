@@ -96,7 +96,7 @@ class ObservationConsumer:
                 processed += 1
                 self.last_processed_at = datetime.now(UTC)
                 self._pending.append(observation)
-            except Exception:
+            except Exception:  # noqa: BLE001 - consumer loop: count errors and continue processing
                 self.errors += 1
         await self._organize()
         return processed

@@ -47,7 +47,7 @@ from libs.access.security import (
     verify_password,
 )
 from libs.access.token_blacklist import TokenBlacklist
-from libs.access.users import User, UserStore, Tenant
+from libs.access.users import Tenant, User, UserStore
 
 from src.auth.rbac import validate_role
 
@@ -155,8 +155,9 @@ class AuthService:
         from libs.access.token_blacklist import SecurityControlUnavailable
 
         try:
+            from libs.access.errors import InvalidTokenError
             payload = self.jwt.verify_refresh_token(refresh_token)
-        except Exception:
+        except InvalidTokenError:
             return  # Token already invalid — idempotent, nothing to revoke.
         if self.blacklist and payload.jti:
             try:

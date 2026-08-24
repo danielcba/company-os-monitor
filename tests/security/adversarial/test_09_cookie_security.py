@@ -33,11 +33,15 @@ def test_cookie_secure():
 
 
 def test_cookie_samesite_strict():
-    """Refresh cookie MUST have SameSite=Strict."""
+    """Phase 20.1: Refresh cookie MUST have SameSite=Lax.
+
+    Lax allows same-site refresh requests while blocking cross-site CSRF.
+    Strict would block same-site navigations which breaks refresh flow.
+    """
     response = MagicMock()
     set_refresh_cookie(response, "token")
     _, kwargs = response.set_cookie.call_args
-    assert kwargs["samesite"] == "Strict"
+    assert kwargs["samesite"] == "Lax"
 
 
 def test_cookie_scoped_to_refresh_path():

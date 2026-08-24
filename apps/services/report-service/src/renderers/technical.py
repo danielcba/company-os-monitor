@@ -13,9 +13,10 @@ invents (ADR-0002).
 """
 from datetime import UTC, datetime
 
-from src.renderers.common import ReportSource, build_decision_traces, decision_view, confidence_view, latest_confidence_for
 from libs.action.decision import compare_expected_actual_outcomes
 from libs.cognitive_core.calibration_model import CalibrationParams
+
+from src.renderers.common import ReportSource, build_decision_traces
 
 
 def render_technical(source: ReportSource) -> dict:

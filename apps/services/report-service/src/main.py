@@ -17,6 +17,7 @@ import os
 
 from libs.access.middleware import jwt_auth_middleware
 from libs.access.security import JwtService
+from libs.access.token_blacklist import TokenBlacklist
 from libs.action.decision import DecisionStore
 from libs.action.recommendation import RecommendationStore
 from libs.action.report import ReportStore
@@ -54,6 +55,10 @@ async def main():
         access_expire_minutes=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "15")),
         refresh_expire_days=int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7")),
     )
+
+    # Phase 20.1: Redis-backed JWT blacklist for token revocation
+    redis_url = os.getenv("JWT_REDIS_URL", "redis://localhost:6379/1")
+    blacklist = TokenBlacklist.from_url(redis_url)
 
     decision_store = DecisionStore(dsn)
     recommendation_store = RecommendationStore(dsn)
@@ -95,7 +100,8 @@ async def main():
     server = ReportServer(service, jwt=jwt)
 
     # Add JWT auth middleware to protect /api/v1/reports/* endpoints.
-    server.app.middlewares.append(jwt_auth_middleware(jwt))
+    # Phase 20.1: Include blacklist for revocation checks (fail-closed).
+    server.app.middlewares.append(jwt_auth_middleware(jwt, blacklist=blacklist))
 
     await server.start(port)
 

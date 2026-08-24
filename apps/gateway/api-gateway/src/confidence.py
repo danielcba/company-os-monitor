@@ -21,11 +21,10 @@ an UPDATE; there is no lifecycle flag.
 import uuid
 from typing import Any
 
+from libs.shared.facets_cache import FacetsCache
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-
-from libs.shared.facets_cache import FacetsCache
 
 TARGET_TYPES = ("hypothesis", "recommendation", "decision")
 

@@ -10,6 +10,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -97,8 +98,8 @@ and changes slowly. The CognitiveSummaryStore is engineered for reuse.
         try:
             async with self._engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
-        except Exception:
-            # Log and continue - may be expected in test environments
+        except OperationalError:
+            # Database not reachable - health check will report degraded
             pass
 
     async def close(self) -> None:

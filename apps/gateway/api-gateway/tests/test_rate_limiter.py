@@ -1,9 +1,7 @@
 """Unit tests for the atomic sliding window rate limiter (Phase 4)."""
+import asyncio
 import sys
-import time
 from pathlib import Path
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "apps" / "services" / "user-service" / "src"))
 
@@ -34,7 +32,7 @@ async def test_resets_after_window_expires():
     await limiter.is_allowed("client-1")
     await limiter.is_allowed("client-1")
     assert await limiter.is_allowed("client-1") is False
-    time.sleep(0.02)
+    await asyncio.sleep(0.02)
     assert await limiter.is_allowed("client-1") is True
 
 
@@ -49,6 +47,6 @@ async def test_different_keys_are_independent():
 async def test_expired_hits_are_purged():
     limiter = RateLimiter(max_requests=2, window_seconds=0.01)
     await limiter.is_allowed("client-1")
-    time.sleep(0.02)
+    await asyncio.sleep(0.02)
     await limiter.is_allowed("client-1")
     assert len(limiter._hits["client-1"]) == 1

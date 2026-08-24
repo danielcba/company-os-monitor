@@ -11,9 +11,10 @@ export interface UserProfile {
   updated_at: string
 }
 
+// Phase 20.1: AuthSession no longer contains refresh_token.
+// The refresh token is in HttpOnly cookie (JS-inaccessible).
 export interface AuthSession {
   access_token: string
-  refresh_token: string
   token_type: string
   expires_in: number
 }
@@ -34,6 +35,8 @@ export interface LoginRequest {
   tenant_id?: string
 }
 
+// Phase 20.1: RefreshRequest no longer needed (cookie-based).
+// Kept for backward compatibility in deprecated body path.
 export interface RefreshRequest {
   refresh_token: string
 }

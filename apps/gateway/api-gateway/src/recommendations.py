@@ -19,11 +19,10 @@ import json
 import uuid
 from typing import Any
 
+from libs.shared.facets_cache import FacetsCache
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-
-from libs.shared.facets_cache import FacetsCache
 
 RECOMMENDATION_STATUSES = ("proposed", "accepted", "rejected", "superseded")
 

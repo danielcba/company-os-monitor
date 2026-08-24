@@ -5,7 +5,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from libs.shared.structured_logging import (
-    SENSITIVE_FIELDS,
     StructuredLogger,
     sanitize_log_data,
 )

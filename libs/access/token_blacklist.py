@@ -29,6 +29,8 @@ import logging
 import time
 from typing import Protocol
 
+from redis.exceptions import RedisError
+
 logger = logging.getLogger(__name__)
 
 # Redis key prefix for blacklisted tokens.
@@ -130,7 +132,7 @@ class TokenBlacklist:
         key = f"{_KEY_PREFIX}{jti}"
         try:
             return bool(await self._redis.exists(key))
-        except Exception:
+        except RedisError:
             logger.warning("blacklist check failed for jti=%s; failing open (non-critical)", jti)
             return False
 

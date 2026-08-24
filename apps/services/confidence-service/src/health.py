@@ -1,7 +1,7 @@
 """Health endpoint for metacognitive monitoring of the Confidence Calibrator."""
 from aiohttp import web
-
 from libs.learning.confidence import ConfidenceStore
+
 from src.service import ConfidenceService
 
 
@@ -26,6 +26,7 @@ class HealthServer:
         try:
             await self.confidence_store.verify_connection()
         except Exception:
+            # Health check: any connectivity failure makes the service degraded
             db_healthy = False
 
         return web.json_response({

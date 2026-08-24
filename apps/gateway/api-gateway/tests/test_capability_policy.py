@@ -6,7 +6,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.capability_policy import (
     CAPABILITY_POLICIES,
-    CapabilityPolicy,
     DefaultPolicyStore,
     validate_authority,
     validate_capability_transition,

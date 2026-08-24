@@ -6,6 +6,7 @@ export async function login(credentials: LoginRequest): Promise<AuthSession> {
     method: 'POST',
     body: JSON.stringify(credentials),
     skipAuth: true,
+    credentials: 'include',
   })
 }
 

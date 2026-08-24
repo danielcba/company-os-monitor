@@ -4,18 +4,17 @@ import type { AuthSession } from '@/types/auth'
 
 const session: AuthSession = {
   access_token: 'access-1',
-  refresh_token: 'refresh-1',
   token_type: 'bearer',
   expires_in: 3600,
 }
 
 describe('api client', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
   })
 
-  it('sets and clears tokens from storage', () => {
+  it('sets and clears tokens in memory', () => {
     expect(getAccessToken()).toBeNull()
     setTokens(session)
     expect(getAccessToken()).toBe('access-1')
@@ -56,7 +55,7 @@ describe('api client', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ access_token: 'access-2', refresh_token: 'refresh-2' }),
+        json: async () => ({ access_token: 'access-2', token_type: 'bearer', expires_in: 3600 }),
       })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ refreshed: true }) })
     vi.stubGlobal('fetch', mockFetch)
@@ -79,9 +78,28 @@ describe('api client', () => {
     await expect(apiFetch('/services/health')).rejects.toMatchObject({ status: 403 })
   })
 
-  it('tryRefresh returns false when no refresh token exists', async () => {
+  it('tryRefresh uses credentials include for cookie-based refresh', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    })
+    vi.stubGlobal('fetch', mockFetch)
     clearTokens()
     const ok = await tryRefresh()
     expect(ok).toBe(false)
+  })
+
+  it('apiFetch includes credentials include', async () => {
+    setTokens(session)
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+    await apiFetch('/services/health')
+    const [, init] = mockFetch.mock.calls[0]
+    expect(init.credentials).toBe('include')
   })
 })

@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Architecture Compliance Matrix — Company OS Monitor.
 
 Maps each cognitive design rule to its implementation in the product.
@@ -202,7 +203,7 @@ def generate_matrix_markdown() -> str:
         "Maps each cognitive design rule to its implementation in the product.",
         "Every row documents WHERE and HOW the rule is enforced.",
         "",
-        f"Generated: 2026-08-22",
+        "Generated: 2026-08-22",
         "Last updated: Phase 4-17 remediation",
         "",
         "---",
@@ -229,7 +230,7 @@ def write_matrix() -> None:
     """Write the compliance matrix to docs."""
     MATRIX_PATH.parent.mkdir(parents=True, exist_ok=True)
     MATRIX_PATH.write_text(generate_matrix_markdown(), encoding="utf-8")
-    print(f"Compliance matrix written to {MATRIX_PATH}")
+    print(f"Compliance matrix written to {MATRIX_PATH}")  # noqa: T201
 
 
 if __name__ == "__main__":

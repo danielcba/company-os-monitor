@@ -48,10 +48,14 @@ include = ["cognitive_core*", "perception*", "reasoning*", "learning*", "action*
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-select = ["E", "F", "I", "UP", "B", "C4", "SIM", "T20", "PTH", "ERA", "PL", "TRY"]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "T20", "PTH", "ERA", "PL", "TRY"]
+
+[tool.ruff.lint.per-file-ignores]
 "tests/security/adversarial/*" = ["PLC0415"]
+"tests/smoke/*" = ["BLE001"]
+"libs/cognitive_core/calibration_model.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"

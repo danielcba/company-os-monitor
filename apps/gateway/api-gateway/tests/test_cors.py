@@ -3,8 +3,8 @@
 Validates CORS functionality via aiohttp-cors setup.
 Note: Some tests may require aiohttp version compatibility adjustments.
 """
-from aiohttp.test_utils import TestClient, TestServer
 from aiohttp import web
+from aiohttp.test_utils import TestClient, TestServer
 
 
 async def _handler(_request):
@@ -14,7 +14,8 @@ async def _handler(_request):
 
 def _make_app():
     app = web.Application()
-    from aiohttp_cors import ResourceOptions, setup as cors_setup
+    from aiohttp_cors import ResourceOptions
+    from aiohttp_cors import setup as cors_setup
     cors = cors_setup(
         app,
         defaults={

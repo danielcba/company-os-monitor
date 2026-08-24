@@ -18,11 +18,10 @@ produces the same id (idempotent dedup by primary key).
 import uuid
 from typing import Any
 
+from libs.shared.facets_cache import FacetsCache
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-
-from libs.shared.facets_cache import FacetsCache
 
 from src.contexts import ContextReadStore
 

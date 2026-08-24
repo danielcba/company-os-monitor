@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '@/hooks/use-auth'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { queryClient } from '@/lib/query-client'
+import { setTokens, clearTokens, getAccessToken } from '@/api/client'
 
 const meResponse = {
   id: 'u1',
@@ -43,7 +44,7 @@ function renderProtected(path = '/dashboard') {
 
 describe('Route guards — comprehensive', () => {
   beforeEach(() => {
-    localStorage.clear()
+    clearTokens()
     vi.restoreAllMocks()
     queryClient.clear()
   })
@@ -60,7 +61,7 @@ describe('Route guards — comprehensive', () => {
   })
 
   it('allows access to all protected routes when authenticated', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'valid-token')
+    setTokens({ access_token: 'valid-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => meResponse }),
@@ -70,25 +71,25 @@ describe('Route guards — comprehensive', () => {
   })
 
   it('shows loading state while verifying session', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'valid-token')
+    setTokens({ access_token: 'valid-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => {})))
     renderProtected()
     expect(screen.getByText('Verifying session…')).toBeInTheDocument()
   })
 
   it('clears tokens on 401 during profile fetch', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'expired-token')
+    setTokens({ access_token: 'expired-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: 'expired' }) }),
     )
     renderProtected()
     expect(await screen.findByText('login page')).toBeInTheDocument()
-    expect(localStorage.getItem('cosmonitor.access_token')).toBeNull()
+    expect(getAccessToken()).toBeNull()
   })
 
   it('catch-all route redirects to dashboard via Navigate', async () => {
-    localStorage.setItem('cosmonitor.access_token', 'valid-token')
+    setTokens({ access_token: 'valid-token', token_type: 'bearer', expires_in: 3600 })
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => meResponse }),
@@ -108,9 +109,7 @@ describe('Route guards — comprehensive', () => {
         </AuthProvider>
       </QueryClientProvider>,
     )
-    // The catch-all * renders its own content (React Router behavior)
     expect(await screen.findByText('catch-all redirect')).toBeInTheDocument()
-    // Verify it does NOT render protected content (no auth match for /nonexistent)
     expect(screen.queryByText('dashboard')).not.toBeInTheDocument()
   })
 })

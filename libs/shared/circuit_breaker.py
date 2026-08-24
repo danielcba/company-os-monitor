@@ -15,7 +15,6 @@ Usage::
     breaker = CircuitBreaker(failure_threshold=5, reset_timeout=30)
     result = await breaker.call(db_query, arg1, arg2)
 """
-import asyncio
 import logging
 import time
 from enum import Enum
@@ -87,7 +86,7 @@ class CircuitBreaker:
             result = await func(*args, **kwargs)
             self._on_success()
             return result
-        except Exception as exc:
+        except Exception:
             self._on_failure()
             raise
 

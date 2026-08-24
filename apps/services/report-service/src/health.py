@@ -16,11 +16,9 @@ import uuid
 from typing import Any
 
 from aiohttp import web
-
 from libs.access.errors import AccessError, InvalidTokenError
 from libs.access.rbac import cross_tenant_allowed
 from libs.access.security import JwtService, TokenPayload
-from libs.access.tenant_scope import AuthorizationContext, TenantScopeError
 
 from src.service import RENDERABLE_TYPES, ReportService
 
@@ -109,7 +107,7 @@ class ReportServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             return web.json_response({"error": "Internal server error"}, status=500)
 
     async def list_handler(self, request):
@@ -128,7 +126,7 @@ class ReportServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:  # noqa: BLE001 - surface as API error
             return web.json_response({"error": "Internal server error"}, status=500)
 
 

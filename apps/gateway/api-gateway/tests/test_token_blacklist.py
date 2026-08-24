@@ -10,7 +10,6 @@ Covers:
 """
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -51,16 +50,20 @@ class FailingRedis:
     """Redis that always raises (simulates Redis down)."""
 
     async def set(self, key: str, value: str, ex: int | None = None) -> bool:
-        raise ConnectionError("Redis unavailable")
+        from redis.exceptions import ConnectionError as RedisConnectionError
+        raise RedisConnectionError("Redis unavailable")
 
     async def setnx(self, key: str, value: str, ex: int | None = None) -> bool:
-        raise ConnectionError("Redis unavailable")
+        from redis.exceptions import ConnectionError as RedisConnectionError
+        raise RedisConnectionError("Redis unavailable")
 
     async def exists(self, key: str) -> bool:
-        raise ConnectionError("Redis unavailable")
+        from redis.exceptions import ConnectionError as RedisConnectionError
+        raise RedisConnectionError("Redis unavailable")
 
     async def expire(self, key: str, time: int) -> bool:
-        raise ConnectionError("Redis unavailable")
+        from redis.exceptions import ConnectionError as RedisConnectionError
+        raise RedisConnectionError("Redis unavailable")
 
 
 # --- is_revoked: fail-closed on Redis failure ---

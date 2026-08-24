@@ -3,8 +3,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from libs.access.cookie_auth import (
@@ -32,11 +30,15 @@ def test_set_refresh_cookie_has_secure():
 
 
 def test_set_refresh_cookie_has_samesite_strict():
-    """Phase 13: refresh token cookie must have SameSite=Strict."""
+    """Phase 20.1: refresh token cookie must have SameSite=Lax.
+
+    Lax allows same-site refresh requests while blocking cross-site CSRF.
+    Strict would block same-site navigations which breaks refresh flow.
+    """
     response = MagicMock()
     set_refresh_cookie(response, "test_token")
     _, kwargs = response.set_cookie.call_args
-    assert kwargs["samesite"] == "Strict"
+    assert kwargs["samesite"] == "Lax"
 
 
 def test_set_refresh_cookie_has_correct_path():

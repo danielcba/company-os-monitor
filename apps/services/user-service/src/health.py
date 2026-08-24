@@ -16,20 +16,20 @@ All user endpoints are tenant-isolated: a user only sees its own tenant
 import logging
 import os
 import uuid
+from typing import Any
 
 from aiohttp import web
-from aiohttp_cors import ResourceOptions, setup as cors_setup
-
+from aiohttp_cors import ResourceOptions
+from aiohttp_cors import setup as cors_setup
 from libs.access.errors import (
     AccessError,
     InvalidTokenError,
     UserConflictError,
 )
 from libs.access.security import JwtService, TokenPayload
-from libs.access.token_blacklist import TokenBlacklist
 
-from src.service import AuthService
 from src.ratelimit import RateLimiter, RateLimiterUnavailable
+from src.service import AuthService
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,9 @@ class UserServer:
         # Add security headers middleware.
         from libs.shared.security_headers import security_headers_middleware
         self.app.middlewares.append(security_headers_middleware())
+        # Phase 20.1: CSRF protection on state-changing cookie endpoints.
+        from libs.access.csrf import csrf_protection_middleware
+        self.app.middlewares.append(csrf_protection_middleware())
         self.app.router.add_get("/health", self.health_handler)
         self.app.router.add_get("/metrics", self.metrics_handler)
         self.app.router.add_post("/api/v1/auth/login", self.login_handler)
@@ -127,10 +130,21 @@ class UserServer:
                 password=str(body.get("password", "")),
                 tenant_id=body.get("tenant_id"),
             )
-            return web.json_response(result, status=200)
+            # Phase 20.1: Set refresh token as HttpOnly cookie.
+            from libs.access.cookie_auth import set_refresh_cookie
+            response = web.json_response(
+                {
+                    "access_token": result["access_token"],
+                    "token_type": result["token_type"],
+                    "expires_in": result["expires_in"],
+                },
+                status=200,
+            )
+            set_refresh_cookie(response, result["refresh_token"])
+            return response
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=401)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -148,26 +162,56 @@ class UserServer:
                 status=429,
             )
         try:
-            body = await request.json()
-            result = await self.service.refresh(
-                refresh_token=str(body.get("refresh_token", ""))
+            # Phase 20.1: Primary path is HttpOnly cookie.
+            # Backward-compatible: fall back to body.refresh_token (deprecated).
+            from libs.access.cookie_auth import get_refresh_token_from_cookie, set_refresh_cookie
+            refresh_token = get_refresh_token_from_cookie(request)
+            if not refresh_token:
+                body = await request.json()
+                refresh_token = str(body.get("refresh_token", ""))
+            if not refresh_token:
+                return web.json_response(
+                    {"error": "refresh token required (cookie or body)"},
+                    status=400,
+                )
+            result = await self.service.refresh(refresh_token=refresh_token)
+            # Phase 20.1: Set new refresh token as HttpOnly cookie.
+            response = web.json_response(
+                {
+                    "access_token": result["access_token"],
+                    "token_type": result["token_type"],
+                    "expires_in": result["expires_in"],
+                },
+                status=200,
             )
-            return web.json_response(result, status=200)
+            set_refresh_cookie(response, result["refresh_token"])
+            return response
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=401)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
     async def logout_handler(self, request):
         """Blacklist the refresh token to revoke access immediately."""
         try:
-            body = await request.json()
-            await self.service.logout(
-                refresh_token=str(body.get("refresh_token", ""))
+            # Phase 20.1: Primary path is HttpOnly cookie.
+            # Backward-compatible: fall back to body.refresh_token (deprecated).
+            from libs.access.cookie_auth import (
+                clear_refresh_cookie,
+                get_refresh_token_from_cookie,
             )
-            return web.json_response({"status": "logged out"}, status=200)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+            refresh_token = get_refresh_token_from_cookie(request)
+            if not refresh_token:
+                body = await request.json()
+                refresh_token = str(body.get("refresh_token", ""))
+            if refresh_token:
+                await self.service.logout(refresh_token=refresh_token)
+            # Always clear the cookie and return success.
+            response = web.json_response({"status": "logged out"}, status=200)
+            clear_refresh_cookie(response)
+            return response
+        except Exception:
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
 
@@ -190,7 +234,7 @@ class UserServer:
             return web.json_response({"error": str(exc)}, status=409)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:
             logger.exception("Error in create_user_handler")
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
@@ -206,7 +250,7 @@ class UserServer:
             return web.json_response(_user_payload(user))
         except InvalidTokenError as exc:
             return web.json_response({"error": str(exc)}, status=401)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:
             logger.exception("Error in me_handler")
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
@@ -222,7 +266,7 @@ class UserServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:
             logger.exception("Error in list_users_handler")
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
@@ -236,7 +280,7 @@ class UserServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:
             logger.exception("Error in list_tenants_handler")
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
@@ -253,7 +297,7 @@ class UserServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:
             logger.exception("Error in get_tenant_handler")
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
@@ -274,7 +318,7 @@ class UserServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:
             logger.exception("Error in update_user_handler")
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
@@ -289,7 +333,7 @@ class UserServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=403)
-        except Exception as exc:  # noqa: BLE001 - surface as API error
+        except Exception:
             logger.exception("Error in deactivate_user_handler")
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)

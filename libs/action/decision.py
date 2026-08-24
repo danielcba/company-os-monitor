@@ -37,6 +37,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from libs.cognitive_core.calibration_model import CalibrationParams, brier_score, ece_score
+
 # Fixed namespace for deterministic decision ids (content-addressed, idempotent).
 DECISION_NAMESPACE = uuid.UUID("00000000-0000-0000-0000-000000000082")
 
@@ -399,14 +401,9 @@ def compare_expected_actual_outcomes(
     - ``outcome_count``: Number of expected outcomes processed.
     - ``details``: Per-outcome breakdown with metric, prediction, actual, and match status.
     """
-    from libs.cognitive_core.calibration_model import (
-        CalibrationParams as _CalibrationParams,
-        brier_score as _brier,
-        ece_score as _ece,
-    )
 
     if params is None:
-        params = _CalibrationParams()
+        params = CalibrationParams()
 
     if not expected_outcomes:
         return {
@@ -470,8 +467,8 @@ def compare_expected_actual_outcomes(
                 }
             )
 
-    brier = _brier(predictions, outcomes) if predictions else 0.0
-    ece = _ece(predictions, outcomes, params.M) if predictions else 0.0
+    brier = brier_score(predictions, outcomes) if predictions else 0.0
+    ece = ece_score(predictions, outcomes, params.M) if predictions else 0.0
     hist = max(0.0, min(1.0, 1.0 - ece))
 
     # Compute confidence adjustment: the C_final factor changes from (1-0) to (1-ECE)

@@ -12,7 +12,6 @@ import asyncio
 import logging
 import os
 import signal
-import sys
 from typing import Any
 
 from libs.cognitive_core.calibration_model import CalibrationParams
@@ -24,7 +23,6 @@ from libs.reasoning.hypothesis import HypothesisStore
 
 from src.health import HealthServer
 from src.service import ConfidenceService
-
 
 log = logging.getLogger(__name__)
 

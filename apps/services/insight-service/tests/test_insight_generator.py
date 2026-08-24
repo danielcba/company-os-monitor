@@ -1,10 +1,11 @@
 """Insight Generator tests - pure functions (no DB required)."""
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from libs.procedural_memory.insight_rules import INSIGHT_RULE_LIBRARY, build_insight
 from libs.reasoning.hypothesis import STATUS_CANDIDATE, Hypothesis
-from libs.reasoning.insight import insight_id
+from libs.reasoning.insight import InsightCreate, insight_id
 
 
 @pytest.fixture

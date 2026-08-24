@@ -1,5 +1,4 @@
 """Unit tests for the graceful shutdown handler."""
-import asyncio
 import signal
 import sys
 from pathlib import Path

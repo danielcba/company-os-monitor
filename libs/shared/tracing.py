@@ -10,8 +10,8 @@ Usage::
 
     setup_tracing("context-service")  # Call once at service startup
 """
-import os
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 

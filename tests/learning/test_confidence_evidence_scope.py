@@ -6,22 +6,21 @@ affect Confidence(A).
 
 These tests are OBLIGATORY per §11 of the remediation prompt.
 """
+import sys
 import uuid
+from pathlib import Path
 
 import pytest
-
-import sys
-from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from libs.learning.confidence import (
     CalibrationContent,
     ConfidenceCreate,
+    EvidenceScopeError,
     build_confidence,
     confidence_id,
     validate_confidence_evidence_scope,
-    EvidenceScopeError,
 )
 
 

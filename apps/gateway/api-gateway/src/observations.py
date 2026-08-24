@@ -11,11 +11,10 @@ import json
 import uuid
 from typing import Any
 
+from libs.shared.facets_cache import FacetsCache
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-
-from libs.shared.facets_cache import FacetsCache
 
 SELECT_BASE = """
     SELECT id, tenant_id, source_id, source_type, fact_type, fact_value,
