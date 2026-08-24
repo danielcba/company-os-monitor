@@ -51,7 +51,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install ruff mypy pytest pytest-asyncio pytest-cov bandit safety psycopg2-binary redis
           pip install -e .
-      
+
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
@@ -65,13 +65,6 @@ jobs:
           echo "PostgreSQL not ready after 30s"
           exit 1
 
-      - name: Install TimescaleDB in PostgreSQL
-        run: |
-          # Install TimescaleDB extension in the running postgres container
-          docker exec $(docker ps -qf "ancestor=postgres:16") bash -c "apt-get update && apt-get install -y timescaledb-2-postgresql-16 && timescaledb-tune --quiet --yes 2>/dev/null || true"
-          sleep 3
-          psql -h localhost -p 5433 -U cosmonitor -d cosmonitor -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
-      
       - name: Wait for Redis
         run: |
           for i in {1..30}; do
@@ -86,7 +79,7 @@ jobs:
         run: |
           echo "Applying base schema"
           psql -h localhost -p 5433 -U cosmonitor -d cosmonitor -f infrastructure/docker/init-sql/01-schema.sql
-      
+
       - name: Apply database migrations
         run: |
           for f in infrastructure/db-migrations/*.sql; do

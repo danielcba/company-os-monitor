@@ -2,7 +2,6 @@
 -- Run on PostgreSQL + TimescaleDB
 
 -- Enable extensions
-CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================
@@ -56,9 +55,6 @@ CREATE TABLE observations (
     
     PRIMARY KEY (id, captured_at)
 );
-
--- TimescaleDB hypertable for observations
-SELECT create_hypertable('observations', 'captured_at', chunk_time_interval => INTERVAL '1 day', if_not_exists => TRUE);
 
 CREATE INDEX idx_observations_tenant_source ON observations(tenant_id, source_id, captured_at DESC);
 CREATE INDEX idx_observations_tenant_fact ON observations(tenant_id, fact_type, captured_at DESC);
@@ -446,9 +442,6 @@ CREATE TABLE audit_log (
     
     PRIMARY KEY (id, timestamp)
 );
-
--- TimescaleDB hypertable for audit_log
-SELECT create_hypertable('audit_log', 'timestamp', chunk_time_interval => INTERVAL '1 month', if_not_exists => TRUE);
 
 CREATE INDEX idx_audit_tenant_time ON audit_log(tenant_id, timestamp DESC);
 CREATE INDEX idx_audit_cognitive_trace ON audit_log(cognitive_layer, cognitive_concept, resource_id);
