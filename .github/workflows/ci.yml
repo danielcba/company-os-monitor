@@ -51,6 +51,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install ruff mypy pytest pytest-asyncio pytest-cov bandit safety psycopg2-binary redis
           pip install -e .
+      
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Wait for PostgreSQL
         run: |
@@ -71,6 +74,13 @@ jobs:
           done
           echo "Redis not ready after 30s"
           exit 1
+
+      - name: Apply database migrations
+        run: |
+          for f in infrastructure/db-migrations/*.sql; do
+            echo "Applying $f"
+            psql -h localhost -p 5433 -U cosmonitor -d cosmonitor -f "$f"
+          done
 
       - name: Ruff lint
         run: ruff check . --output-format=github
