@@ -37,11 +37,11 @@ jobs:
         run: ruff check . --output-format=github
 
       - name: MyPy typecheck (libs)
-        run: mypy libs/ --ignore-missing-imports --explicit-package-bases
+        run: mypy --config-file mypy.ini libs/
       
       - name: MyPy typecheck (gateway)
         working-directory: apps/gateway/api-gateway
-        run: mypy src/ --ignore-missing-imports
+        run: mypy --config-file ../../../mypy.ini src/
       
       - name: MyPy typecheck (services)
         run: |
@@ -49,7 +49,7 @@ jobs:
           for svc in apps/services/*/; do
             if [ -d "$svc/src" ]; then
               echo "=== Typechecking $svc ==="
-              (cd "$svc" && mypy src/ --ignore-missing-imports) || failed=1
+              (cd "$svc" && mypy --config-file ../../../mypy.ini src/) || failed=1
             fi
           done
           exit $failed
