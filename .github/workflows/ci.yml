@@ -13,6 +13,25 @@ jobs:
       matrix:
         python-version: ["3.12"]
         node-version: ["20"]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cos_monitor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=5
 
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +51,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install ruff mypy pytest pytest-asyncio pytest-cov bandit safety
           pip install -e .
-
+      
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 1
+          done
+      
+      - name: Wait for Redis
+        run: |
+          for i in {1..30}; do
+            redis-cli -h localhost -p 6379 ping && break
+            sleep 1
+          done
+      
       - name: Ruff lint
         run: ruff check . --output-format=github
 
@@ -58,17 +91,23 @@ jobs:
         run: pytest tests/ --cov=libs --cov-report=xml -v
 
       - name: Service tests (each from its own directory)
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/cos_monitor
+          REDIS_URL: redis://localhost:6379/0
         run: |
           for svc in apps/services/*/; do
             if [ -d "$svc/tests" ] && ls "$svc/tests"/test_*.py 1>/dev/null 2>&1; then
               echo "=== Testing $svc ==="
-              (cd "$svc" && python -m pytest tests/ -v --tb=short) || exit 1
+              (cd "$svc" && PYTHONPATH="${{ github.workspace }}" python -m pytest tests/ -v --tb=short) || exit 1
             fi
           done
 
       - name: Gateway tests
         working-directory: apps/gateway/api-gateway
-        run: python -m pytest tests/ -v --tb=short
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/cos_monitor
+          REDIS_URL: redis://localhost:6379/0
+        run: PYTHONPATH="${{ github.workspace }}" python -m pytest tests/ -v --tb=short
 
       - name: Frontend setup
         working-directory: apps/web
