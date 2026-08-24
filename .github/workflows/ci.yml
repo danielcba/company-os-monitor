@@ -88,7 +88,7 @@ jobs:
         run: |
           for f in infrastructure/db-migrations/*.sql; do
             echo "Applying $f"
-            psql -h localhost -p 5433 -U cosmonitor -d cosmonitor -f "$f"
+            psql -h localhost -p 5433 -U cosmonitor -d cosmonitor -f "$f" || exit 1
           done
 
       - name: Ruff lint

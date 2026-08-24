@@ -37,6 +37,18 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_tenant_email ON users(tenant_id, email);
 CREATE INDEX IF NOT EXISTS idx_users_tenant_role ON users(tenant_id, role);
 
+-- Ensure the tenant referenced by the sandbox admin seed exists. The seed user
+-- below has tenant_id = 00000000-0000-0000-0000-000000000001; without this row
+-- the FK (users_tenant_id_fkey) rejects the insert. Idempotent for re-runs.
+INSERT INTO tenants (id, name, slug, plan)
+VALUES (
+    '00000000-0000-0000-0000-000000000001',
+    'Sandbox Tenant',
+    'sandbox',
+    'basic'
+)
+ON CONFLICT (id) DO NOTHING;
+
 -- Sandbox admin (DEVELOPMENT ONLY, documented dev password "cosmonitor",
 -- bcrypt rounds=12). Seed exists so dev agents can log into the sandbox; in
 -- production users are created via onboarding, never by agents.
