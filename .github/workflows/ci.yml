@@ -36,8 +36,23 @@ jobs:
       - name: Ruff lint
         run: ruff check . --output-format=github
 
-      - name: MyPy typecheck
-        run: mypy libs/ apps/gateway/ apps/services/ --ignore-missing-imports --exclude 'apps/agents'
+      - name: MyPy typecheck (libs)
+        run: mypy libs/ --ignore-missing-imports --explicit-package-bases
+      
+      - name: MyPy typecheck (gateway)
+        working-directory: apps/gateway/api-gateway
+        run: mypy src/ --ignore-missing-imports
+      
+      - name: MyPy typecheck (services)
+        run: |
+          failed=0
+          for svc in apps/services/*/; do
+            if [ -d "$svc/src" ]; then
+              echo "=== Typechecking $svc ==="
+              (cd "$svc" && mypy src/ --ignore-missing-imports) || failed=1
+            fi
+          done
+          exit $failed
 
       - name: Root tests
         run: pytest tests/ --cov=libs --cov-report=xml -v
