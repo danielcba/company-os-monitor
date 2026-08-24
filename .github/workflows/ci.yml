@@ -51,51 +51,37 @@ jobs:
           python -m pip install --upgrade pip
           pip install ruff mypy pytest pytest-asyncio pytest-cov bandit safety psycopg2-binary redis
           pip install -e .
-      
+
       - name: Wait for PostgreSQL
         run: |
-          python -c "
-import time, psycopg2
-for i in range(30):
-    try:
-        conn = psycopg2.connect(host='localhost', port=5432, user='postgres', password='postgres', database='cos_monitor')
-        conn.close()
-        print('PostgreSQL ready')
-        break
-    except Exception as e:
-        print(f'Waiting for PostgreSQL... ({i+1}/30)')
-        time.sleep(1)
-else:
-    raise Exception('PostgreSQL not ready after 30s')
-"
-      
+          for i in {1..30}; do
+            python -c "import psycopg2; psycopg2.connect(host='localhost', port=5432, user='postgres', password='postgres', database='cos_monitor').close()" && echo "PostgreSQL ready" && exit 0
+            echo "Waiting for PostgreSQL... ($i/30)"
+            sleep 1
+          done
+          echo "PostgreSQL not ready after 30s"
+          exit 1
+
       - name: Wait for Redis
         run: |
-          python -c "
-import time, redis
-for i in range(30):
-    try:
-        r = redis.Redis(host='localhost', port=6379, socket_connect_timeout=2)
-        r.ping()
-        print('Redis ready')
-        break
-    except Exception as e:
-        print(f'Waiting for Redis... ({i+1}/30)')
-        time.sleep(1)
-else:
-    raise Exception('Redis not ready after 30s')
-"
-      
+          for i in {1..30}; do
+            python -c "import redis; redis.Redis(host='localhost', port=6379, socket_connect_timeout=2).ping()" && echo "Redis ready" && exit 0
+            echo "Waiting for Redis... ($i/30)"
+            sleep 1
+          done
+          echo "Redis not ready after 30s"
+          exit 1
+
       - name: Ruff lint
         run: ruff check . --output-format=github
 
       - name: MyPy typecheck (libs)
         run: mypy --config-file mypy.ini libs/
-      
+
       - name: MyPy typecheck (gateway)
         working-directory: apps/gateway/api-gateway
         run: mypy --config-file ../../../mypy.ini src/
-      
+
       - name: MyPy typecheck (services)
         run: |
           failed=0
