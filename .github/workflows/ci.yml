@@ -49,22 +49,42 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff mypy pytest pytest-asyncio pytest-cov bandit safety
+          pip install ruff mypy pytest pytest-asyncio pytest-cov bandit safety psycopg2-binary redis
           pip install -e .
       
       - name: Wait for PostgreSQL
         run: |
-          for i in {1..30}; do
-            pg_isready -h localhost -p 5432 -U postgres && break
-            sleep 1
-          done
+          python -c "
+import time, psycopg2
+for i in range(30):
+    try:
+        conn = psycopg2.connect(host='localhost', port=5432, user='postgres', password='postgres', database='cos_monitor')
+        conn.close()
+        print('PostgreSQL ready')
+        break
+    except Exception as e:
+        print(f'Waiting for PostgreSQL... ({i+1}/30)')
+        time.sleep(1)
+else:
+    raise Exception('PostgreSQL not ready after 30s')
+"
       
       - name: Wait for Redis
         run: |
-          for i in {1..30}; do
-            redis-cli -h localhost -p 6379 ping && break
-            sleep 1
-          done
+          python -c "
+import time, redis
+for i in range(30):
+    try:
+        r = redis.Redis(host='localhost', port=6379, socket_connect_timeout=2)
+        r.ping()
+        print('Redis ready')
+        break
+    except Exception as e:
+        print(f'Waiting for Redis... ({i+1}/30)')
+        time.sleep(1)
+else:
+    raise Exception('Redis not ready after 30s')
+"
       
       - name: Ruff lint
         run: ruff check . --output-format=github
