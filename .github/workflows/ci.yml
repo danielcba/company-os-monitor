@@ -15,7 +15,7 @@ jobs:
         node-version: ["20"]
     services:
       postgres:
-        image: postgres:16
+        image: timescale/timescaledb:2.15.0-pg16
         env:
           POSTGRES_USER: cosmonitor
           POSTGRES_PASSWORD: cosmonitor
@@ -67,6 +67,8 @@ jobs:
 
       - name: Install TimescaleDB in PostgreSQL
         run: |
+          # TimescaleDB is pre-installed in timescale/timescaledb image
+          # Just create the extension
           psql -h localhost -p 5433 -U cosmonitor -d cosmonitor -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
       
       - name: Wait for Redis
