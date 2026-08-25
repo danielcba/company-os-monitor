@@ -432,7 +432,16 @@ async def test_end_to_end_cognitive_chain(stores):
     assert status in ("created", "duplicate")
     assert report.content["decision_count"] >= 1
 
-    # Report -> Decision traceability, following the REAL stored data (no mocks).
+    # A3 (faithful equivalent of `report.decision_id == decision.id`): the
+    # committed Decision must be resolvable from the Report. NOTE: the Report
+    # model intentionally has NO singular `decision_id` column -- a periodic
+    # Report aggregates N decisions (1:N, see libs/action/report.py / ADR-0002),
+    # so traceability lives in `content["decision_traces"]` (one entry per
+    # decision). A singular FK would be architecturally wrong, so we assert the
+    # decision is present and traceable through the canonical mechanism instead.
+    assert any(
+        t["decision"]["id"] == str(d.id) for t in report.content["decision_traces"]
+    )
     trace = next(
         t for t in report.content["decision_traces"] if t["decision"]["id"] == str(d.id)
     )
