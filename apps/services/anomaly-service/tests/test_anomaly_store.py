@@ -574,3 +574,227 @@ def test_anomaly_service_metrics_are_exposed():
         assert body["anomalies_by_mental_model"]["capacity_risk"] == 2
 
     asyncio.run(get_metrics())
+
+
+# ===========================================================================
+# Regression tests for Context Activation atomicity (idx_contexts_unique_active)
+# ===========================================================================
+
+
+async def test_case_a_save_active_without_prior_active(context_store):
+    """Caso A: saving an active context when none exists becomes the active one."""
+    tenant_id = uuid.uuid4()
+    await _create_tenant(tenant_id)
+    try:
+        ctx = make_context(
+            tenant_id, "capacity_risk", "infrastructure_health", NOW, [uuid.uuid4()]
+        )
+        await context_store.save_context(ctx)
+        actives = await context_store.list_active_contexts(tenant_id=tenant_id)
+        assert [c.id for c in actives] == [ctx.id]
+        assert all(c.is_active for c in actives)
+        stream = await context_store.list_contexts(tenant_id=tenant_id)
+        assert len(stream) == 1
+    finally:
+        await _cleanup_tenant(tenant_id)
+
+
+async def test_case_b_save_active_replaces_previous_active(context_store):
+    """Caso B: a new active context supersedes the previous active one."""
+    tenant_id = uuid.uuid4()
+    await _create_tenant(tenant_id)
+    try:
+        evidence_ids = [uuid.uuid4()]
+        anchor = make_context(
+            tenant_id, "capacity_risk", "infrastructure_health",
+            NOW - timedelta(days=7), evidence_ids,
+        )
+        active = make_context(
+            tenant_id, "capacity_risk", "infrastructure_health", NOW, evidence_ids
+        )
+        await context_store.save_context(anchor)
+        await context_store.save_context(active)
+
+        stream = await context_store.list_contexts(tenant_id=tenant_id)
+        assert len(stream) == 2
+        actives = await context_store.list_active_contexts(tenant_id=tenant_id)
+        assert [c.id for c in actives] == [active.id]
+        assert all(c.is_active for c in actives)
+    finally:
+        await _cleanup_tenant(tenant_id)
+
+
+async def test_case_c_save_inactive_does_not_deactivate_active(context_store):
+    """Caso C: saving an INACTIVE (historical) context must NOT tear down the
+    currently active context of the same tenant+purpose."""
+    tenant_id = uuid.uuid4()
+    await _create_tenant(tenant_id)
+    try:
+        evidence_ids = [uuid.uuid4()]
+        anchor = make_context(
+            tenant_id, "capacity_risk", "infrastructure_health", NOW, evidence_ids
+        )
+        historical = make_context(
+            tenant_id, "capacity_risk", "infrastructure_health",
+            NOW - timedelta(days=30), evidence_ids, is_active=False,
+        )
+        await context_store.save_context(anchor)
+        await context_store.save_context(historical)
+
+        stream = await context_store.list_contexts(tenant_id=tenant_id)
+        assert len(stream) == 2
+        actives = await context_store.list_active_contexts(tenant_id=tenant_id)
+        assert [c.id for c in actives] == [anchor.id]
+    finally:
+        await _cleanup_tenant(tenant_id)
+
+
+async def test_case_d_save_same_context_twice_is_idempotent(context_store):
+    """Caso D: saving the same context twice does not duplicate or flip state."""
+    tenant_id = uuid.uuid4()
+    await _create_tenant(tenant_id)
+    try:
+        ctx = make_context(
+            tenant_id, "capacity_risk", "infrastructure_health", NOW, [uuid.uuid4()]
+        )
+        assert await context_store.save_context(ctx) is not None
+        assert await context_store.save_context(ctx) is None
+        stream = await context_store.list_contexts(tenant_id=tenant_id)
+        assert len(stream) == 1
+        actives = await context_store.list_active_contexts(tenant_id=tenant_id)
+        assert [c.id for c in actives] == [ctx.id]
+    finally:
+        await _cleanup_tenant(tenant_id)
+
+
+async def test_case_e_two_active_same_tenant_purpose_leaves_one(context_store):
+    """Caso E: activating two different contexts for the same tenant+purpose
+    must never leave two active rows (partial UNIQUE index respected)."""
+    tenant_id = uuid.uuid4()
+    await _create_tenant(tenant_id)
+    try:
+        a = make_context(
+            tenant_id, "capacity_risk", "infrastructure_health",
+            NOW - timedelta(days=1), [uuid.uuid4()],
+        )
+        b = make_context(
+            tenant_id, "capacity_risk", "infrastructure_health", NOW, [uuid.uuid4()]
+        )
+        await context_store.save_context(a)
+        await context_store.save_context(b)
+        actives = await context_store.list_active_contexts(tenant_id=tenant_id)
+        assert len(actives) == 1
+        assert actives[0].id == b.id
+    finally:
+        await _cleanup_tenant(tenant_id)
+
+
+async def test_case_f_two_tenants_same_purpose_are_independent(context_store):
+    """Caso F: tenant A + purpose X is fully independent of tenant B + purpose X."""
+    tenant_a = uuid.uuid4()
+    tenant_b = uuid.uuid4()
+    await _create_tenant(tenant_a)
+    await _create_tenant(tenant_b)
+    try:
+        ctx_a = make_context(
+            tenant_a, "capacity_risk", "infrastructure_health", NOW, [uuid.uuid4()]
+        )
+        ctx_b = make_context(
+            tenant_b, "capacity_risk", "infrastructure_health", NOW, [uuid.uuid4()]
+        )
+        await context_store.save_context(ctx_a)
+        await context_store.save_context(ctx_b)
+        actives_a = await context_store.list_active_contexts(tenant_id=tenant_a)
+        actives_b = await context_store.list_active_contexts(tenant_id=tenant_b)
+        assert [c.id for c in actives_a] == [ctx_a.id]
+        assert [c.id for c in actives_b] == [ctx_b.id]
+    finally:
+        await _cleanup_tenant(tenant_a)
+        await _cleanup_tenant(tenant_b)
+
+
+async def test_case_g_concurrent_activations_leave_one_active(context_store):
+    """Caso G: concurrent activations for the same tenant+purpose must never
+    produce two active rows (advisory lock serializes the transition)."""
+    tenant_id = uuid.uuid4()
+    await _create_tenant(tenant_id)
+    try:
+        contexts = [
+            make_context(
+                tenant_id, "capacity_risk", "infrastructure_health",
+                NOW + timedelta(minutes=i), [uuid.uuid4()],
+            )
+            for i in range(5)
+        ]
+
+        async def _save(c):
+            return await context_store.save_context(c)
+
+        results = await asyncio.gather(*[_save(c) for c in contexts])
+        # At least one activation succeeded; the partial UNIQUE index +
+        # advisory lock guarantee at most one active context.
+        assert any(r is not None for r in results)
+        actives = await context_store.list_active_contexts(tenant_id=tenant_id)
+        assert len(actives) == 1
+    finally:
+        await _cleanup_tenant(tenant_id)
+
+
+async def test_case_h_rollback_keeps_prior_active_on_failure(context_store):
+    """Caso H: if the activation transition fails mid-way (after the prior
+    active context was deactivated), the transaction rolls back and the prior
+    active context remains the sole active one (no 0-active state)."""
+    tenant_id = uuid.uuid4()
+    await _create_tenant(tenant_id)
+    try:
+        anchor = make_context(
+            tenant_id, "capacity_risk", "infrastructure_health", NOW, [uuid.uuid4()]
+        )
+        await context_store.save_context(anchor)
+
+        # Wrap the session factory so the INSERT step raises, forcing a rollback
+        # of the deactivation that preceded it.
+        real_factory = context_store._session_factory
+
+        class _FailingSession:
+            def __init__(self, real):
+                self._real = real
+
+            async def __aenter__(self):
+                self._sess = await self._real().__aenter__()
+                self._orig = self._sess.execute
+
+                async def failing(stmt, params=None, **kw):
+                    if "INSERT INTO contexts" in str(stmt):
+                        raise RuntimeError("injected insert failure")
+                    return await self._orig(stmt, params, **kw)
+
+                self._sess.execute = failing
+                return self._sess
+
+            async def __aexit__(self, *exc):
+                return await self._real().__aexit__(*exc)
+
+        class _FailingFactory:
+            def __init__(self, real):
+                self._real = real
+
+            def __call__(self):
+                return _FailingSession(self._real)
+
+        context_store._session_factory = _FailingFactory(real_factory)
+
+        broken = make_context(
+            tenant_id, "capacity_risk", "infrastructure_health",
+            NOW + timedelta(days=1), [uuid.uuid4()],
+        )
+        with pytest.raises(RuntimeError):
+            await context_store.save_context(broken)
+
+        # Restore the real factory before asserting DB state.
+        context_store._session_factory = real_factory
+        actives = await context_store.list_active_contexts(tenant_id=tenant_id)
+        assert [c.id for c in actives] == [anchor.id]
+    finally:
+        context_store._session_factory = context_store._session_factory
+        await _cleanup_tenant(tenant_id)

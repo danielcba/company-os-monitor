@@ -280,21 +280,35 @@ class ContextStore:
         """
         async with self._session_factory() as session:
             async with session.begin():
-                # Deactivate any currently-active context of the same
-                # (tenant_id, purpose) BEFORE inserting the new one, so the
-                # UNIQUE (tenant_id, purpose) WHERE is_active partial index is
-                # never momentarily violated. The new activation then becomes
-                # the sole active context. Runs inside the same transaction:
-                # if the insert fails, the deactivation rolls back too (Phase 5
-                # atomic activation - no 0-active / 2-active states).
+                # Serialize concurrent activations for the same (tenant_id,
+                # purpose) so two racing requests can never both INSERT an
+                # active context and trip idx_contexts_unique_active. The lock
+                # is transaction-scoped and released on commit/rollback, keeping
+                # the transition deterministic with a single winner (no 2-active
+                # state even under concurrency).
                 await session.execute(
-                    DEACTIVATE_CONTEXT,
-                    {
-                        "tenant_id": context.tenant_id,
-                        "purpose": context.purpose,
-                        "exclude_id": context.id,
-                    },
+                    text(
+                        "SELECT pg_advisory_xact_lock("
+                        "hashtext(:lock_key))"
+                    ),
+                    {"lock_key": f"{context.tenant_id}:{context.purpose}"},
                 )
+                # Only an incoming ACTIVE context supersedes the previous
+                # active activation of the same (tenant_id, purpose). Saving an
+                # INACTIVE (historical/archived) context must NOT tear down the
+                # currently active one - the lifecycle flag is immutable content
+                # of the activation decision (P1/P5: is_active is the only
+                # mutable lifecycle field, and deactivation is exclusive to a
+                # newer activation).
+                if context.is_active:
+                    await session.execute(
+                        DEACTIVATE_CONTEXT,
+                        {
+                            "tenant_id": context.tenant_id,
+                            "purpose": context.purpose,
+                            "exclude_id": context.id,
+                        },
+                    )
                 result = await session.execute(
                     INSERT_CONTEXT,
                     {

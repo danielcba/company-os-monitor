@@ -42,7 +42,7 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 
 ### Almacenamiento y Trazabilidad
 
-- **Base de datos PostgreSQL + TimescaleDB**: Almacena todos los artefactos cognitivos (observations, evidence, contexts, patterns, anomalies, hypotheses, insights, confidence_scores, recommendations, decisions, reports)
+- **Base de datos PostgreSQL**: Almacena todos los artefactos cognitivos (observations, evidence, contexts, patterns, anomalies, hypotheses, insights, confidence_scores, recommendations, decisions, reports)
 - **Append-only inmutability**: Cada tabla tiene triggers que bloquean UPDATE/DELETE en columnas de contenido. Solo campos de ciclo de vida pueden flipparse (is_active, status).
 - **UUID determinísticos**: IDs generados con uuid5 usando namespaces propios, garantizando idempotencia.
 - **Cadenas de trazabilidad**: Cada artefacto referencia sus inputs (ej: decision → recommendation → confidence → hypothesis → anomaly → pattern → context → evidence → observations).
@@ -99,7 +99,7 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 ### Requisitos Técnicos:
 
 - **Backend**: Python 3.11+ con FastAPI
-- **Base de datos**: PostgreSQL 13+ con TimescaleDB para observations time-series
+- **Base de datos**: PostgreSQL 16 (sin dependencia de TimescaleDB; las observaciones usan columnas TIMESTAMPTZ nativas)
 - **Cache**: Redis para Working Memory (contexto activo, últimas 5 minutos)
 - **Contenedorización**: Docker + Docker Compose
 - **Agentes**: Python SSH para Linux, WinRM para Windows, pyVmomi para VMware

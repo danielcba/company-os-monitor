@@ -1,5 +1,5 @@
 -- COS-Monitor Database Schema - Cognitive-First
--- Run on PostgreSQL + TimescaleDB
+-- Run on PostgreSQL 16
 
 -- Enable extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

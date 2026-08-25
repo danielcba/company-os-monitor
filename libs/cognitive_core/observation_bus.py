@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 import redis
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from redis.asyncio import Redis
 
 
@@ -22,8 +22,7 @@ class Observation(BaseModel):
     quality_class: Literal["Q1", "Q2", "Q3", "Q4"]
     raw_payload: dict[str, Any]
 
-    class Config:
-        frozen = True  # immutability
+    model_config = ConfigDict(frozen=True)  # immutability
 
 class ObservationBus:
     STREAM_KEY = "observations"
