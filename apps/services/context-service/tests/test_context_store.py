@@ -245,7 +245,9 @@ async def test_context_content_trigger_blocks_content_update_and_delete(context_
             await conn.close()
 
         # Lifecycle flip is allowed (is_active is not content).
-        await context_store.set_active(id=context.id, is_active=False)
+        await context_store.set_active(
+            id=context.id, tenant_id=tenant_id, is_active=False
+        )
         conn = await asyncpg.connect(DSN_RAW)
         try:
             active = await conn.fetchval(

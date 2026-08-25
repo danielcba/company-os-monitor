@@ -275,7 +275,13 @@ def test_technical_renders_all_sections_with_exact_data():
     assert len(doc["section_4_confidence_calibration"]) == 1
     assert len(doc["section_5_recommendation_and_alternatives"]) == 1
     assert len(doc["section_6_decision_and_expected_outcomes"]) == 1
-    assert doc["section_7_learning_loop"] == []
+    # SECTION 7 (Learning Loop) is populated per decision that declares expected
+    # outcomes: it is the expected-vs-actual comparison (Brier/ECE update).
+    assert len(doc["section_7_learning_loop"]) == doc["decision_count"]
+    learning = doc["section_7_learning_loop"][0]
+    assert learning["outcome_count"] == len(chain["decision"].expected_outcomes)
+    assert "brier_score" in learning
+    assert "historical_calibration" in learning
 
     s1 = doc["section_1_cognitive_trace"][0]
     assert s1["decision_id"] == str(chain["decision"].id)

@@ -282,7 +282,9 @@ async def test_context_store_reads_full_stream(context_store):
         assert all(c.competing_models for c in loaded)
 
         # The stream keeps all activations even after a lifecycle flip.
-        await context_store.set_active(id=first.id, is_active=False)
+        await context_store.set_active(
+            id=first.id, tenant_id=tenant_id, is_active=False
+        )
         loaded = await context_store.list_contexts(tenant_id=tenant_id)
         assert len(loaded) == 3
         assert tenant_id in (await context_store.list_tenant_ids())

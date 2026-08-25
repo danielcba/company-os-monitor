@@ -19,7 +19,7 @@ def _make_app():
     cors = cors_setup(
         app,
         defaults={
-            "*": ResourceOptions(
+            "http://localhost:5173": ResourceOptions(
                 allow_credentials=True,
                 allow_methods=["GET", "POST", "OPTIONS"],
                 allow_headers=["Authorization", "Content-Type"],
@@ -27,9 +27,10 @@ def _make_app():
             )
         },
     )
+    # Routes must be registered BEFORE they are added to the CORS handler.
+    app.router.add_get("/api/v1/x", _handler)
     for route in app.router.routes():
         cors.add(route)
-    app.router.add_get("/api/v1/x", _handler)
     return app
 
 
@@ -46,16 +47,24 @@ async def _close(client: TestClient):
 async def test_allowed_origin_preflight():
     """Test preflight CORS with allowed origin.
 
-    Note: aiohttp 3.14 middleware format may require updates.
+    aiohttp_cors 0.8.1 answers a well-formed preflight (with
+    Access-Control-Request-Method) for an allowed origin with 200 and the
+    appropriate CORS headers.
     """
     client = await _client()
     try:
         resp = await client.request(
-            "OPTIONS", "/api/v1/x", headers={"Origin": "http://localhost:5173"}
+            "OPTIONS",
+            "/api/v1/x",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Authorization",
+            },
         )
-        assert resp.status == 204
+        assert resp.status == 200
         assert resp.headers["Access-Control-Allow-Origin"] == "http://localhost:5173"
-        assert "Authorization" in resp.headers["Access-Control-Allow-Headers"]
+        assert "authorization" in resp.headers["Access-Control-Allow-Headers"].lower()
         assert "GET" in resp.headers["Access-Control-Allow-Methods"]
     finally:
         await _close(client)
@@ -106,13 +115,19 @@ async def test_no_origin_no_cors():
 async def test_preflight_disallowed_no_cors():
     """Test preflight with disallowed origin.
 
-    Note: aiohttp 3.14 may require version-specific handling.
+    aiohttp_cors rejects a preflight whose Origin is not in the allowed set
+    (403, no CORS headers) - the cross-origin request is denied.
     """
     client = await _client()
     try:
         resp = await client.request(
-            "OPTIONS", "/api/v1/x", headers={"Origin": "https://evil.example"}
+            "OPTIONS",
+            "/api/v1/x",
+            headers={
+                "Origin": "https://evil.example",
+                "Access-Control-Request-Method": "GET",
+            },
         )
-        assert resp.status == 204
+        assert resp.status == 403
     finally:
         await _close(client)

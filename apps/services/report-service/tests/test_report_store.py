@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import asyncpg
 import pytest
+from libs.access.security import JwtService
 from libs.action.decision import STATUS_COMMITTED, Decision, DecisionStore
 from libs.action.recommendation import STATUS_PROPOSED, Recommendation, RecommendationStore
 from libs.action.report import (
@@ -45,6 +46,25 @@ DSN_RAW = "postgresql://cosmonitor:cosmonitor@127.0.0.1:5433/cosmonitor"
 NOW = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
 
 TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+# Phase 20.1: report endpoints are protected by a Bearer JWT; tenant scope is
+# derived from the verified token. These tests mint a token signed with a fixed
+# dev secret (mirrors the gateway/user-service test pattern).
+JWT_SECRET = "test-secret-key-for-report-handler-tests"
+
+
+def _make_jwt() -> JwtService:
+    return JwtService(algorithm="HS256", secret_key=JWT_SECRET)
+
+
+def _auth_header(jwt: JwtService, tenant_id: str | uuid.UUID) -> dict[str, str]:
+    token = jwt.create_access_token(
+        user_id="user-test",
+        tenant_id=str(tenant_id),
+        email="test@x.test",
+        role="admin",
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 async def _create_tenant(tenant_id: uuid.UUID) -> None:
@@ -666,6 +686,7 @@ async def test_generate_handler_rejects_unsupported_type():
 
 async def test_generate_handler_returns_report_payload():
     tenant_id = TENANT
+    jwt = _make_jwt()
     service = ReportService.__new__(ReportService)
     service.decision_store = SimpleNamespace(
         list_tenant_ids=async_wrap([tenant_id])
@@ -689,9 +710,12 @@ async def test_generate_handler_returns_report_payload():
         return report, "created"
 
     service.generate = fake_generate  # type: ignore[method-assign]
-    health = ReportServer(service)
+    health = ReportServer(service, jwt=jwt)
+    # Phase 20.1: tenant scope is taken from the verified token when no
+    # tenant_id is requested.
     request = SimpleNamespace(
-        query={"type": REPORT_TYPE_EXECUTIVE, "tenant_id": str(tenant_id)}
+        query={"type": REPORT_TYPE_EXECUTIVE},
+        headers=_auth_header(jwt, tenant_id),
     )
     response = await health.generate_handler(request)
     assert response.status == 200
@@ -702,13 +726,42 @@ async def test_generate_handler_returns_report_payload():
     assert body["generated"][0]["content"]["decision_count"] == 1
 
 
-async def test_list_handler_requires_tenant_id():
+async def test_generate_handler_without_token_is_401():
     service = ReportService.__new__(ReportService)
-    health = ReportServer(service)
-    response = await health.list_handler(SimpleNamespace(query={}))
-    assert response.status == 400
+    health = ReportServer(service, jwt=_make_jwt())
+    request = SimpleNamespace(
+        query={"type": REPORT_TYPE_EXECUTIVE, "tenant_id": str(TENANT)},
+        headers={},
+    )
+    response = await health.generate_handler(request)
+    assert response.status == 401
+
+
+async def test_list_handler_requires_authentication_and_uses_token_tenant():
+    tenant_id = TENANT
+    jwt = _make_jwt()
+    service = ReportService.__new__(ReportService)
+
+    async def fake_list_reports(tid, report_type=None):
+        return []
+
+    service.list_reports = fake_list_reports  # type: ignore[method-assign]
+    health = ReportServer(service, jwt=jwt)
+
+    # Without a token -> 401 (auth enforced before any tenant scoping).
+    response = await health.list_handler(
+        SimpleNamespace(query={}, headers={})
+    )
+    assert response.status == 401
+
+    # With a valid token and no requested tenant_id -> 200, scoped to the
+    # token's tenant (tenant isolation, Phase 20).
+    response = await health.list_handler(
+        SimpleNamespace(query={}, headers=_auth_header(jwt, tenant_id))
+    )
+    assert response.status == 200
     body = json.loads(response.body)
-    assert "tenant_id" in body["error"]
+    assert body["reports"] == []
 
 
 def async_wrap(values):

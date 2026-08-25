@@ -3,9 +3,9 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from libs.procedural_memory.insight_rules import INSIGHT_RULE_LIBRARY, build_insight
+from libs.procedural_memory.insight_rules import INSIGHT_RULE_LIBRARY
 from libs.reasoning.hypothesis import STATUS_CANDIDATE, Hypothesis
-from libs.reasoning.insight import InsightCreate, insight_id
+from libs.reasoning.insight import InsightCreate, build_insight, insight_id
 
 
 @pytest.fixture

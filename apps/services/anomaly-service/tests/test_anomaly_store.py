@@ -359,6 +359,25 @@ async def test_service_detects_persists_and_traces(
         await context_store.save_context(anchor)
         await context_store.save_context(active)
 
+        # Self-contained isolation: the detection cycle scans ALL tenants (it is
+        # not scoped to one), so total_contexts_without_pattern also reflects the
+        # shared sandbox tenant. Seed active contexts with NO matching pattern for
+        # THIS tenant so the metric is deterministic and does not depend on the
+        # sandbox tenant's accumulated state (test isolation, Phase B). These
+        # contexts increment contexts_without_pattern but never become anomalies
+        # (a context lacking a pattern is counted, not emitted).
+        for i, purpose in enumerate(
+            ("security_posture", "backup_health", "network_health")
+        ):
+            orphan = make_context(
+                tenant_id,
+                "capacity_risk",
+                purpose,
+                NOW + timedelta(days=14 + i),
+                [evidence.id],
+            )
+            await context_store.save_context(orphan)
+
         pattern = build_pattern(
             PatternCreate(
                 tenant_id=tenant_id,
@@ -449,7 +468,9 @@ async def test_service_detects_persists_and_traces(
             await conn.close()
         assert unchanged["obs"] == 2
         assert unchanged["ev"] == 1
-        assert unchanged["ctx"] == 2
+        # 2 seeded contexts (anchor + active) + 3 orphan contexts without a
+        # matching pattern; the anomaly cycle must not add or remove any context.
+        assert unchanged["ctx"] == 5
         assert unchanged["pat"] == 1
     finally:
         await _cleanup_tenant(tenant_id)

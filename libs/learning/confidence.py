@@ -268,6 +268,19 @@ SELECT_LATEST_BY_TARGET = text(
 
 SELECT_TENANT_IDS = text("SELECT DISTINCT tenant_id FROM confidence_scores")
 
+SELECT_CONFIDENCE_PAGED = text(
+    """
+    SELECT id, tenant_id, target_type, target_id, evidential_support,
+           explanatory_coherence, historical_calibration, confidence_score,
+           alpha, calibration_justification, calibration_error_estimate,
+           evidence_ids, computed_at
+    FROM confidence_scores
+    WHERE tenant_id = :tenant_id
+    ORDER BY computed_at, id
+    LIMIT :limit OFFSET :offset
+    """
+)
+
 
 # ---------------------------------------------------------------------------
 # Phase 7: Evidence Scope Validation
@@ -361,7 +374,7 @@ class ConfidenceStore:
         Supports pagination via ``limit`` and ``offset`` to avoid loading
         all confidence rows into memory for tenants with large datasets.
         """
-        sql = SELECT_CONFIDENCE + text(" LIMIT :limit OFFSET :offset")
+        sql = SELECT_CONFIDENCE_PAGED
         async with self._session_factory() as session:
             result = await session.execute(
                 sql, {"tenant_id": tenant_id, "limit": limit, "offset": offset}

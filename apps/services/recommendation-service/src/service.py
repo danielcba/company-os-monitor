@@ -93,7 +93,9 @@ class RecommendationService:
         for hypothesis in hypotheses:
             # R4 gate: only hypotheses with a calibrated Confidence qualify.
             confidence = await self.confidence_store.get_confidence(
-                target_type=TARGET_TYPE_HYPOTHESIS, target_id=hypothesis.id
+                tenant_id=tenant_id,
+                target_type=TARGET_TYPE_HYPOTHESIS,
+                target_id=hypothesis.id,
             )
             if confidence is None:
                 self.total_hypotheses_without_confidence += 1

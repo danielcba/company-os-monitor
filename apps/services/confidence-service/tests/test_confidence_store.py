@@ -280,10 +280,49 @@ async def test_confidence_save_is_idempotent_and_recalibration_appends(confidenc
         rows = await confidence_store.list_confidence(tenant_id=tenant_id)
         assert len(rows) == 2
         latest = await confidence_store.get_confidence(
-            target_type="hypothesis", target_id=target_id
+            tenant_id=tenant_id, target_type="hypothesis", target_id=target_id
         )
         assert latest is not None
         assert latest.id == second.id
+    finally:
+        await _cleanup_tenant(tenant_id)
+
+
+async def test_list_confidence_pagination_slices_rows(confidence_store):
+    """Regression: list_confidence must accept LIMIT/OFFSET (TextClause bug)."""
+    tenant_id = uuid.uuid4()
+    await _create_tenant(tenant_id)
+    try:
+        target_ids = [uuid.uuid4() for _ in range(3)]
+        for i, target_id in enumerate(target_ids):
+            create = build_confidence(
+                make_confidence_create(
+                    tenant_id,
+                    target_id,
+                    evidential_support=0.7,
+                    computed_at=NOW + timedelta(minutes=i),
+                )
+            )
+            assert (await confidence_store.save_confidence(create)) is not None
+
+        # First page: 2 of 3, ordered by computed_at then id.
+        page0 = await confidence_store.list_confidence(
+            tenant_id=tenant_id, limit=2, offset=0
+        )
+        assert len(page0) == 2
+
+        # Second page: remaining 1.
+        page1 = await confidence_store.list_confidence(
+            tenant_id=tenant_id, limit=2, offset=2
+        )
+        assert len(page1) == 1
+
+        # Pages must be disjoint and together cover all three targets.
+        assert {c.target_id for c in page0}.isdisjoint({c.target_id for c in page1})
+        assert (
+            {c.target_id for c in page0} | {c.target_id for c in page1}
+            == set(target_ids)
+        )
     finally:
         await _cleanup_tenant(tenant_id)
 
