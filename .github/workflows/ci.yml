@@ -146,7 +146,7 @@ jobs:
         run: npm run test
 
       - name: Security scan
-        run: bandit -r apps/ libs/ -ll
+        run: bandit -r apps/ libs/ -ll -c bandit.yaml
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3

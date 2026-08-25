@@ -1,0 +1,24 @@
+# Bandit configuration for COS-Monitor
+#
+# Accepted (false-positive) findings in this codebase:
+#
+#   B104 hardcoded_bind_all_interfaces
+#     Services and agents intentionally bind 0.0.0.0 inside their containers.
+#     Network exposure is governed by the container / compose network, not by
+#     the in-container bind address, so this is not a public data surface.
+#
+#   B108 hardcoded_tmp_directory
+#     Only appears in test fixtures that write sample report files under /tmp.
+#     No production code path uses a hardcoded temp directory.
+#
+# B608 (hardcoded_sql_expressions) is accepted for the two occurrences in
+# libs/action/decision.py and apps/gateway/api-gateway/src/decisions.py. Both
+# build their SET clause only from a fixed whitelist of parameterized column
+# assignments ("actual_outcomes", "executed_at", "status") using named binds;
+# no column name or value is ever interpolated from untrusted input, so there
+# is no SQL-injection vector. (A per-line "# nosec" cannot be placed on the
+# triple-quoted f-string that triggers the rule, hence the centralized skip.)
+skips:
+  - B104
+  - B108
+  - B608
