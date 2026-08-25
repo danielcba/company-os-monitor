@@ -23,6 +23,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+import tempfile
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,6 +41,9 @@ DSN = os.getenv(
 # (ActivatorEngine uses absolute `from src.activator...` imports).
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "apps/services/context-service"))
+# report-service `src` (ReportService) is appended (not prepended) so it does
+# not change the `src.service` precedence that gateway's tests rely on.
+sys.path.append(str(ROOT / "apps/services/report-service"))
 
 
 def _load(name: str, path: Path):
@@ -71,6 +75,10 @@ comm = _load(
 rules = _load(
     "cosint_rules", ROOT / "apps/services/collector-service/src/organizer/rules.py"
 )
+report_svc = _load(
+    "cosint_report_service",
+    ROOT / "apps/services/report-service/src/service.py",
+)
 
 from src.activator.engine import ActivatorEngine  # noqa: E402
 
@@ -83,6 +91,7 @@ from libs.action.recommendation import (  # noqa: E402
     RecommendationStore,  # noqa: E402
     build_recommendation,
 )
+from libs.action.report import REPORT_TYPE_JSON, ReportStore  # noqa: E402
 from libs.cognitive_core.calibration_model import (  # noqa: E402
     CalibrationParams,
     quality_class_to_weight,
@@ -342,13 +351,16 @@ async def stores():
         "conf": ConfidenceStore(DSN),
         "rec": RecommendationStore(DSN),
         "dec": DecisionStore(DSN),
+        "rep": ReportStore(DSN),
     }
     try:
         for s in built.values():
             await s.verify_connection()
-    except Exception as exc:  # noqa: BLE001 - skip, do not fail, without infra
+    except Exception as exc:  # noqa: BLE001 - in CI fail (no silent skip), locally skip
         for s in built.values():
             await s.close()
+        if os.getenv("CI"):
+            pytest.fail(f"PostgreSQL not available at {DSN}: {exc}")
         pytest.skip(f"PostgreSQL not available at {DSN}: {exc}")
     yield built
     for s in built.values():
@@ -400,11 +412,51 @@ async def test_end_to_end_cognitive_chain(stores):
     for key in ("evidences", "contexts", "patterns", "anomalies", "hypotheses"):
         assert all(a.tenant_id == tenant for a in art[key])
 
+    # 10) REPORT - non-canonical output document that formats the committed
+    # flow (reads the real cognitive tables, writes only the `reports` table).
+    report_service = report_svc.ReportService(
+        stores["dec"],
+        stores["rec"],
+        stores["ctx"],
+        stores["conf"],
+        stores["hyp"],
+        stores["an"],
+        stores["pat"],
+        stores["ev"],
+        stores["obs"],
+        stores["rep"],
+        output_dir=tempfile.mkdtemp(),
+    )
+    report, status = await report_service.generate(tenant, REPORT_TYPE_JSON)
+    assert report.tenant_id == tenant
+    assert status in ("created", "duplicate")
+    assert report.content["decision_count"] >= 1
+
+    # Report -> Decision traceability, following the REAL stored data (no mocks).
+    trace = next(
+        t for t in report.content["decision_traces"] if t["decision"]["id"] == str(d.id)
+    )
+    assert trace["decision"]["id"] == str(d.id)
+    assert trace["recommendation"]["id"] == str(d.recommendation_id)
+    assert trace["confidence"]["id"] == str(d.confidence_id)
+    rec = next(r for r in art["recommendations"] if r.id == d.recommendation_id)
+    assert trace["hypothesis"]["id"] == str(rec.hypothesis_id)
+    hyp = next(h for h in art["hypotheses"] if h.id == rec.hypothesis_id)
+    assert trace["anomalies"] and trace["anomalies"][0]["id"] == str(hyp.anomaly_ids[0])
+    an = next(a for a in art["anomalies"] if a.id == hyp.anomaly_ids[0])
+    assert trace["contexts"] and trace["contexts"][0]["id"] == str(an.context_id)
+    # Every observation the report cites belongs to this tenant's pipeline.
+    reported_obs_ids = {
+        o["id"] for t in report.content["decision_traces"] for o in t["observations"]
+    }
+    assert reported_obs_ids <= {str(o.id) for o in art["observations"]}
+    assert all(o.tenant_id == tenant for o in art["observations"])
+
 
 async def test_tenant_isolation(stores):
     tenant_a = uuid.uuid4()
     tenant_b = uuid.uuid4()
-    await _run_pipeline(stores, tenant_a, num_servers=3)
+    res_a = await _run_pipeline(stores, tenant_a, num_servers=3)
     res_b = await _run_pipeline(stores, tenant_b, num_servers=3)
 
     ev_a = await stores["ev"].list_evidence(tenant_id=tenant_a)
@@ -427,6 +479,41 @@ async def test_tenant_isolation(stores):
     # No tenant A artifact references a tenant B recommendation, and vice versa.
     rec_ids_b = {r.id for r in res_b["recommendations"]}
     assert all(d.recommendation_id not in rec_ids_b for d in dec_a)
+
+    # Reports must also respect tenant scope end-to-end (Report -> Decision).
+    report_service = report_svc.ReportService(
+        stores["dec"],
+        stores["rec"],
+        stores["ctx"],
+        stores["conf"],
+        stores["hyp"],
+        stores["an"],
+        stores["pat"],
+        stores["ev"],
+        stores["obs"],
+        stores["rep"],
+        output_dir=tempfile.mkdtemp(),
+    )
+    report_a, _ = await report_service.generate(tenant_a, REPORT_TYPE_JSON)
+    report_b, _ = await report_service.generate(tenant_b, REPORT_TYPE_JSON)
+    assert report_a.tenant_id == tenant_a
+    assert report_b.tenant_id == tenant_b
+
+    rep_a = await stores["rep"].list_reports(tenant_id=tenant_a)
+    rep_b = await stores["rep"].list_reports(tenant_id=tenant_b)
+    ids_rep_a = {r.id for r in rep_a}
+    ids_rep_b = {r.id for r in rep_b}
+    assert ids_rep_a and ids_rep_b
+    # Tenant B cannot retrieve tenant A's Report (and vice versa).
+    assert ids_rep_a.isdisjoint(ids_rep_b)
+    assert all(r.tenant_id == tenant_a for r in rep_a)
+    assert all(r.tenant_id == tenant_b for r in rep_b)
+    # Every trace in tenant A's report references only tenant A's decisions.
+    dec_ids_a = {str(d.id) for d in res_a["decisions"]}
+    for r in rep_a:
+        assert all(
+            t["decision"]["id"] in dec_ids_a for t in r.content["decision_traces"]
+        )
 
 
 def test_no_action_without_confidence_and_evidence():

@@ -57,7 +57,11 @@ Reality → Observation → Evidence → Context → Pattern → Anomaly
 
 COS-Monitor ships a demonstrable, end-to-end cognitive pipeline. The full
 chain **Observation → Evidence → Context → Pattern → Anomaly → Hypothesis →
-Confidence → Recommendation → Decision** is real, not a disconnected mock.
+Confidence → Recommendation → Decision → Report** is real, not a disconnected
+mock. The automated integration test `tests/integration/test_cognitive_pipeline_e2e.py`
+walks this entire chain (including the non-canonical Report) against real
+PostgreSQL and asserts full traceability, tenant isolation and the R4 confidence
+gate.
 
 To prove it on a fresh environment:
 

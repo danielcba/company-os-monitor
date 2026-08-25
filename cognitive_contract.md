@@ -175,9 +175,10 @@ lib/contracts canónicos de cada etapa:
 - **Happy path**: Observation (Linux CPU/MEM/DISK Q1) → Evidence
   (`resource_exhaustion_evidence`) → Context (competencia de coherencia
   `resource_pressure`) → Pattern → Anomaly → Hypothesis (≥2 competidoras) →
-  Confidence (S+C+ECE ≈ 0.85) → Recommendation → Decision (commit grabado).
-- **Trazabilidad**: aserta Decision → Recommendation → Hypothesis → Anomaly →
-  Context → Evidence → Observations, todo dentro del mismo `tenant_id`.
+  Confidence (S+C+ECE ≈ 0.85) → Recommendation → Decision (commit grabado) →
+  Report (documento de salida no canónico, ADR-0002, que traza la Decision).
+- **Trazabilidad**: aserta Report → Decision → Recommendation → Hypothesis →
+  Anomaly → Context → Evidence → Observations, todo dentro del mismo `tenant_id`.
 - **Tenant isolation**: dos tenants nunca se ven sus artefactos (R1/P1 scope).
 - **R4 / sin evidencia**: `calibrate` rechaza evidencia vacía; `commit` devuelve
   `None` cuando `confidence_score < 0.75` (gate de compromiso).
