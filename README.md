@@ -53,6 +53,40 @@ Reality → Observation → Evidence → Context → Pattern → Anomaly
 
 ---
 
+## Vertical Slice & Verification
+
+COS-Monitor ships a demonstrable, end-to-end cognitive pipeline. The full
+chain **Observation → Evidence → Context → Pattern → Anomaly → Hypothesis →
+Confidence → Recommendation → Decision → Report** is real, not a disconnected
+mock. The automated integration test `tests/integration/test_cognitive_pipeline_e2e.py`
+walks this entire chain (including the non-canonical Report) against real
+PostgreSQL and asserts full traceability, tenant isolation and the R4 confidence
+gate.
+
+To prove it on a fresh environment:
+
+1. **Start infrastructure + services** (PostgreSQL + Redis, schema, migrations,
+   and the autonomous pipeline):
+   ```bash
+   ./start.sh            # boots infra, applies migrations, starts all services + linux-agent
+   ```
+
+2. **Run a reproducible synthetic scenario** (no real hosts required — uses the
+   same stores/contracts as production):
+   ```bash
+   python3 scripts/qa_seed.py --watch --max-minutes 15
+   ```
+
+3. **Run the in-process end-to-end integration test** that walks every stage
+   and asserts traceability, tenant isolation, and the confidence (R4) gate:
+   ```bash
+   DATABASE_URL=postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor \
+     pytest tests/integration/test_cognitive_pipeline_e2e.py -v
+   ```
+   This test runs as part of the CI `pytest tests/` step.
+
+---
+
 ## License
 
 Refer to the repository files. See `LICENSE` when present.

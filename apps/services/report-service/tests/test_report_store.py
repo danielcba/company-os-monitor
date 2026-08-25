@@ -81,6 +81,37 @@ async def _create_tenant(tenant_id: uuid.UUID) -> None:
         await conn.close()
 
 
+async def _truncate_cognitive_tables() -> None:
+    """Clean slate for isolation: drop all cognitive/report rows left by other
+    suites (e.g. the Root-tests e2e writes real decisions and a Report into the
+    shared Postgres). ``run_report_cycle`` scans the whole DB, so without this
+    the ``ran == 0`` assertion would be polluted by upstream data. Truncating
+    here keeps the test deterministic without changing product behaviour.
+    """
+    tables = [
+        "decisions",
+        "recommendations",
+        "confidence_scores",
+        "hypotheses",
+        "insights",
+        "anomalies",
+        "patterns",
+        "contexts",
+        "evidence",
+        "observations",
+        "reports",
+    ]
+    conn = await asyncpg.connect(DSN_RAW)
+    try:
+        await conn.execute("SET session_replication_role = replica")
+        await conn.execute(
+            "TRUNCATE {} RESTART IDENTITY CASCADE".format(", ".join(tables))
+        )
+    finally:
+        await conn.execute("SET session_replication_role = origin")
+        await conn.close()
+
+
 async def _cleanup_tenant(tenant_id: uuid.UUID) -> None:
     conn = await asyncpg.connect(DSN_RAW)
     try:
@@ -640,6 +671,7 @@ async def test_service_generates_empty_report_without_error(report_store, tmp_pa
 
 
 async def test_report_cycle_and_metrics(report_store, tmp_path):
+    await _truncate_cognitive_tables()
     service, internal = await _make_service(str(tmp_path), report_store)
     try:
         # No decisions anywhere -> the cycle generates nothing and reports no error.

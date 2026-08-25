@@ -81,6 +81,38 @@ async def _cleanup_tenant(tenant_id: uuid.UUID) -> None:
         await conn.close()
 
 
+async def _truncate_cognitive_tables() -> None:
+    """Clean slate for isolation: drop all cognitive rows left by other suites.
+
+    ``run_decision_cycle`` is global (not tenant-scoped), so its aggregate
+    counters (e.g. ``total_duplicates``) and row counts are polluted by data
+    left in the shared Postgres by other test suites. Truncating here keeps
+    this test deterministic without changing product behaviour.
+    """
+    tables = [
+        "decisions",
+        "recommendations",
+        "confidence_scores",
+        "hypotheses",
+        "insights",
+        "anomalies",
+        "patterns",
+        "contexts",
+        "evidence",
+        "observations",
+        "tenants",
+    ]
+    conn = await asyncpg.connect(DSN_RAW)
+    try:
+        await conn.execute("SET session_replication_role = replica")
+        await conn.execute(
+            "TRUNCATE {} RESTART IDENTITY CASCADE".format(", ".join(tables))
+        )
+    finally:
+        await conn.execute("SET session_replication_role = origin")
+        await conn.close()
+
+
 @pytest.fixture
 async def decision_store():
     instance = DecisionStore(DSN_STORE)
@@ -426,6 +458,7 @@ async def test_decision_save_is_idempotent(
     evidence_store,
     pattern_store,
 ):
+    await _truncate_cognitive_tables()
     tenant_id = uuid.uuid4()
     await _create_tenant(tenant_id)
     try:

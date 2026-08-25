@@ -166,6 +166,26 @@ Cada sprint valida:
 - [x] **P1**: Observaciones inmutables, nunca interpretadas
 - [x] **P5**: Confidence computada (S+C+ECE), parámetros publicados
 
+### Vertical Slice — prueba de extremo a extremo
+
+`tests/integration/test_cognitive_pipeline_e2e.py` ejercita la cadena cognitiva
+completa **en proceso** (sin microservicios) contra PostgreSQL real, usando los
+lib/contracts canónicos de cada etapa:
+
+- **Happy path**: Observation (Linux CPU/MEM/DISK Q1) → Evidence
+  (`resource_exhaustion_evidence`) → Context (competencia de coherencia
+  `resource_pressure`) → Pattern → Anomaly → Hypothesis (≥2 competidoras) →
+  Confidence (S+C+ECE ≈ 0.85) → Recommendation → Decision (commit grabado) →
+  Report (documento de salida no canónico, ADR-0002, que traza la Decision).
+- **Trazabilidad**: aserta Report → Decision → Recommendation → Hypothesis →
+  Anomaly → Context → Evidence → Observations, todo dentro del mismo `tenant_id`.
+- **Tenant isolation**: dos tenants nunca se ven sus artefactos (R1/P1 scope).
+- **R4 / sin evidencia**: `calibrate` rechaza evidencia vacía; `commit` devuelve
+  `None` cuando `confidence_score < 0.75` (gate de compromiso).
+
+Este test corre en el paso CI `pytest tests/`. El escenario reproducible sin
+infraestructura externa es `scripts/qa_seed.py`.
+
 ## 8. Trazabilidad y Provenance
 
 - **Cada artefacto referencia sus inputs**: decision → recommendation → confidence → hypothesis → anomaly → pattern → context → evidence → observations
