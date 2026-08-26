@@ -569,3 +569,49 @@ export interface Notification {
   read: boolean
   link?: string
 }
+
+// ── Cognitive Trace (read model / provenance view) ──────────────────────────
+// NOTE: this is a READ MODEL assembled from canonical cognitive stores. It is
+// NOT a new entity. The root is always a Report; edges reconstruct the provenance
+// chain Report -> Decision -> Recommendation -> Confidence -> Hypothesis ->
+// Anomaly -> Pattern -> Context -> Evidence -> Observation.
+
+export type CognitiveTraceNodeType =
+  | 'report'
+  | 'decision'
+  | 'recommendation'
+  | 'confidence'
+  | 'hypothesis'
+  | 'anomaly'
+  | 'pattern'
+  | 'context'
+  | 'evidence'
+  | 'observation'
+
+export interface CognitiveTraceNode {
+  type: CognitiveTraceNodeType
+  id: string
+  tenant_id: string
+  timestamp: string | null
+  data: Record<string, unknown>
+}
+
+export interface CognitiveTraceEdge {
+  from: string
+  to: string
+  relation: string
+}
+
+export interface CognitiveTraceRoot {
+  type: 'report'
+  id: string
+  tenant_id: string
+}
+
+export interface CognitiveTraceResponse {
+  root: CognitiveTraceRoot
+  nodes: CognitiveTraceNode[]
+  edges: CognitiveTraceEdge[]
+  completeness: 'complete' | 'partial'
+  warnings: string[]
+}

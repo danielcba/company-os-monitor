@@ -20,7 +20,7 @@ authority and routes (the canonical cycles in each service keep running as-is).
 import uuid
 from collections import Counter
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 from libs.access.errors import (
@@ -45,6 +45,16 @@ from src.boundary import (
     validate_confidence_binding,
 )
 from src.summary import CognitiveSummaryStore
+
+
+class CognitiveTraceStoreProtocol(Protocol):
+    """Structural type for the Cognitive Trace read model (read contract)."""
+
+    async def get_trace(
+        self, *, tenant_id: uuid.UUID, report_id: uuid.UUID
+    ) -> dict[str, Any] | None:
+        """Build the Cognitive Trace for ``report_id`` within ``tenant_id``."""
+        ...
 
 # Default pipeline service health targets (canonical ports; override via env).
 # In production, override via GATEWAY_SERVICE_HEALTH env var:
@@ -79,6 +89,7 @@ class GatewayService:
         dsn: str | None = None,
         blacklist: TokenBlacklist | None = None,
         confidence_store: ConfidenceStoreAdapter | None = None,
+        cognitive_trace_store: CognitiveTraceStoreProtocol | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -89,6 +100,9 @@ class GatewayService:
         self._insight_store = insight_store
         self._decision_read_store = decision_read_store
         self._recommendation_read_store = recommendation_read_store
+        self._cognitive_trace_store: CognitiveTraceStoreProtocol | None = (
+            cognitive_trace_store
+        )
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
         self.blacklist = blacklist
@@ -380,6 +394,21 @@ class GatewayService:
             decision_id=uuid.UUID(decision_id),
             actual_outcomes=actual_outcomes,
             executed_at=executed_at,
+        )
+
+    async def get_cognitive_trace(
+        self,
+        token: TokenPayload,
+        tenant_id: str,
+        report_id: str,
+    ) -> dict[str, Any] | None:
+        """READ the Cognitive Trace for a Report within the token's tenant scope."""
+        if self._cognitive_trace_store is None:
+            raise RuntimeError("cognitive_trace_store not configured in gateway")
+        ctx = self._resolve_tenant(token, tenant_id)
+        return await self._cognitive_trace_store.get_trace(
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
+            report_id=uuid.UUID(report_id),
         )
 
     async def list_observations(

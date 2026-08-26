@@ -44,6 +44,7 @@ async def main():
     from libs.shared.db import create_shared_engine
 
     from src.audit import AuditLogReadStore
+    from src.cognitive_trace import CognitiveTraceStore
     from src.confidence import ConfidenceReadStore
     from src.decisions import DecisionReadStore
     from src.hypotheses import HypothesisReadStore
@@ -84,6 +85,7 @@ async def main():
     decision_read_store = DecisionReadStore(
         engine=engine, recommendation_store=recommendation_read_store, confidence_store=confidence_store
     )
+    cognitive_trace_store = CognitiveTraceStore(engine=engine)
 
     await decision_store.verify_connection()
     await report_store.verify_connection()
@@ -94,6 +96,7 @@ async def main():
     await confidence_store.verify_connection()
     await recommendation_read_store.verify_connection()
     await decision_read_store.verify_connection()
+    await cognitive_trace_store.verify_connection()
 
     service = GatewayService(
         jwt,
@@ -105,6 +108,7 @@ async def main():
         insight_store=insight_store,
         decision_read_store=decision_read_store,
         recommendation_read_store=recommendation_read_store,
+        cognitive_trace_store=cognitive_trace_store,
         service_health=_build_service_health(),
         dsn=dsn,
         blacklist=blacklist,
@@ -122,6 +126,7 @@ async def main():
         await engine.dispose()
         await decision_store.close()
         await report_store.close()
+        await cognitive_trace_store.close()
 
 
 if __name__ == "__main__":
