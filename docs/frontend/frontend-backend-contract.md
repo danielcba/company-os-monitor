@@ -173,6 +173,33 @@ All endpoints require `Authorization: Bearer <access_token>` and are scoped by `
 | GET | `/tenants/{tenant_id}/reports` | `limit`, `offset`, `report_type`, `sort` | Paginated reports |
 | GET | `/tenants/{tenant_id}/reports/{id}` | — | Report detail with content |
 
+### Cognitive Trace (Read Model · Provenance View)
+
+> External capability (ADR-0002). NOT a new cognitive stage or persisted entity.
+> Reconstructed on demand from canonical stores; root is always a Report.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/tenants/{tenant_id}/cognitive-trace/report/{report_id}` | Reconstructed provenance graph (nodes + edges) for a Report |
+
+**Response (`CognitiveTraceResponse`):**
+
+```json
+{
+  "root": { "type": "report", "id": "uuid", "tenant_id": "uuid" },
+  "nodes": [ { "type", "id", "tenant_id", "timestamp", "data" } ],
+  "edges": [ { "from", "to", "relation" } ],
+  "completeness": "complete" | "partial",
+  "warnings": [ "..." ]
+}
+```
+
+**Notes:** Tenant-scoped — a Report from another tenant resolves to 404. If
+referenced provenance is missing, the trace returns `partial` with explicit
+`warnings`; broken links are never fabricated. Node types:
+`report → decision → recommendation → confidence → hypothesis → anomaly →
+pattern → context → evidence → observation`.
+
 ### Tenants (Superadmin)
 
 | Method | Path | Description |
