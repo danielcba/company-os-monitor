@@ -36,6 +36,10 @@ from libs.access.rbac import (
 from libs.access.security import JwtService, TokenPayload
 from libs.access.tenant_scope import AuthorizationContext, TenantScopeError
 from libs.access.token_blacklist import SecurityControlUnavailable, TokenBlacklist
+from libs.memory.consolidation import (
+    ConsolidationReport,
+    ConsolidationStoreProtocol,
+)
 
 from src.boundary import (
     ACTION_PERMISSION,
@@ -90,6 +94,7 @@ class GatewayService:
         blacklist: TokenBlacklist | None = None,
         confidence_store: ConfidenceStoreAdapter | None = None,
         cognitive_trace_store: CognitiveTraceStoreProtocol | None = None,
+        consolidation_store: ConsolidationStoreProtocol | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -102,6 +107,9 @@ class GatewayService:
         self._recommendation_read_store = recommendation_read_store
         self._cognitive_trace_store: CognitiveTraceStoreProtocol | None = (
             cognitive_trace_store
+        )
+        self._consolidation_store: ConsolidationStoreProtocol | None = (
+            consolidation_store
         )
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
@@ -410,6 +418,25 @@ class GatewayService:
             tenant_id=uuid.UUID(ctx.effective_tenant_id),
             report_id=uuid.UUID(report_id),
         )
+
+    async def get_consolidation(
+        self,
+        token: TokenPayload,
+        tenant_id: str,
+    ) -> dict[str, Any]:
+        """READ the Memory (P7) Outcome Consolidation for the tenant scope.
+
+        External read/compute capability (ADR-0002): it computes a tenant-scoped
+        consolidation of Decisions' expected vs actual outcomes. No new entity is
+        created (Memory persistence remains planned per the framework).
+        """
+        if self._consolidation_store is None:
+            raise RuntimeError("consolidation_store not configured in gateway")
+        ctx = self._resolve_tenant(token, tenant_id)
+        report: ConsolidationReport = await self._consolidation_store.consolidate_for_tenant(
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
+        )
+        return report.model_dump(mode="json")
 
     async def list_observations(
         self,

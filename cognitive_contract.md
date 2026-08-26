@@ -139,8 +139,8 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 │    ├─ Recommendation (propuesta advisory, reversible)              │
 │    └─ Decision (commit con authority + expected outcomes falsables)│
 │                                                                      │
-│ 6. Memory (planificado)                                           │
-│    └─ Consolidation outcomes → future confidence calibration        │
+│ 6. Memory (consolidación read/compute operativa; persistencia planificada)│
+│    └─ Outcome Consolidation: expected vs actual outcomes → calibración │
 │                                                                      │
 │ 7. Report Generation (documentación de lo commiteado)               │
 │    └─ Formato ejecutivo/tecnico/JSON basado en decisiones           │

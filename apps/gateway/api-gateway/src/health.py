@@ -99,6 +99,10 @@ class GatewayServer:
             "/api/v1/tenants/{tenant_id}/cognitive-trace/report/{report_id}",
             self.cognitive_trace_handler,
         )
+        self.app.router.add_get(
+            "/api/v1/tenants/{tenant_id}/memory/consolidation",
+            self.consolidation_handler,
+        )
         self.app.router.add_post(
             "/api/v1/tenants/{tenant_id}/decisions/{decision_id}/outcomes", self.decision_outcomes_handler
         )
@@ -498,6 +502,33 @@ class GatewayServer:
                 report_id,
                 len(result.get("nodes", [])),
                 len(result.get("edges", [])),
+            )
+            return web.json_response(result)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        except AccessError as exc:
+            return web.json_response(
+                {"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403
+            )
+        except Exception:  # noqa: BLE001 - surface as API error
+            self.service.total_errors += 1
+            return web.json_response({"error": "Internal server error"}, status=500)
+
+    async def consolidation_handler(self, request):
+        """READ Memory (P7) Outcome Consolidation for the tenant scope."""
+        try:
+            token = await self._authenticate(request)
+            self.service.record(action="read:consolidation")
+            tenant_id = await self._validate_tenant_id(request.match_info["tenant_id"])
+            self.service.require_authorized(
+                token=token, action="read", requested_tenant_id=tenant_id
+            )
+            result = await self.service.get_consolidation(token, tenant_id)
+            logger.info(
+                "consolidation tenant=%s status=ok decisions=%d feedback=%s",
+                tenant_id,
+                result.get("total_decisions", 0),
+                result.get("aggregate_feedback"),
             )
             return web.json_response(result)
         except InvalidTokenError as exc:

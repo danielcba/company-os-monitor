@@ -41,6 +41,7 @@ async def main():
     from libs.action.decision import DecisionStore
     from libs.action.report import ReportStore
     from libs.cognitive_core.summary import CognitiveSummaryStore
+    from libs.memory.consolidation import ConsolidationStore
     from libs.shared.db import create_shared_engine
 
     from src.audit import AuditLogReadStore
@@ -87,6 +88,10 @@ async def main():
     )
     cognitive_trace_store = CognitiveTraceStore(engine=engine)
 
+    # Memory (P7) Outcome Consolidation: read/compute over the canonical
+    # Decision store (external capability, ADR-0002). No new entity/persistence.
+    consolidation_store = ConsolidationStore(decision_store=decision_store)
+
     await decision_store.verify_connection()
     await report_store.verify_connection()
     await observation_store.verify_connection()
@@ -109,6 +114,7 @@ async def main():
         decision_read_store=decision_read_store,
         recommendation_read_store=recommendation_read_store,
         cognitive_trace_store=cognitive_trace_store,
+        consolidation_store=consolidation_store,
         service_health=_build_service_health(),
         dsn=dsn,
         blacklist=blacklist,
