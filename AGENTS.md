@@ -93,7 +93,11 @@ Company OS. Todos los cambios mantienen conformidad estricta con P1-P7/R1-R7.
   si la provenance está rota — nunca se fabrica).
 - Frontend: tipos en `apps/web/src/types/cognitive.ts`
   (`CognitiveTraceResponse`) y cliente `apps/web/src/api/gateway.ts`
-  (`fetchCognitiveTrace`). **La UI (Fase 2B) está pendiente.**
+  (`fetchCognitiveTrace`). **UI (Fase 2B) implementada** en
+  `apps/web/src/features/cognitive-trace/` (página, grafo de provenance y
+  hook `useCognitiveTrace`), con CTA desde `ReportDetail` y ruta
+  `/action/reports/:reportId/trace`. Solo lectura/provenance (ADR-0002):
+  renderiza `completeness`/`warnings`, nunca fabrica nodos.
 - PR #2 mergeado a `main` (commit `e3109a9`), CI + `docker-build` GREEN.
 - Contrato documentado en `docs/frontend/frontend-backend-contract.md`.
 

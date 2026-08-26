@@ -17,6 +17,7 @@ const ConfidencePage = lazy(() => import('@/features/confidence/ConfidencePage')
 const RecommendationsPage = lazy(() => import('@/features/recommendations/RecommendationsPage'))
 const DecisionsPage = lazy(() => import('@/features/decisions/DecisionsPage'))
 const ReportsPage = lazy(() => import('@/features/reports/ReportsPage'))
+const CognitiveTracePage = lazy(() => import('@/features/cognitive-trace/CognitiveTracePage'))
 const AuditPage = lazy(() => import('@/features/audit/AuditPage'))
 const GlobalSearchPage = lazy(() => import('@/features/search/GlobalSearchPage'))
 const UsersPage = lazy(() => import('@/features/admin/UsersPage'))
@@ -49,6 +50,7 @@ export function AppRoutes() {
             <Route path="/action/recommendations" element={<LazySuspense><RecommendationsPage /></LazySuspense>} />
             <Route path="/action/decisions" element={<LazySuspense><DecisionsPage /></LazySuspense>} />
             <Route path="/action/reports" element={<LazySuspense><ReportsPage /></LazySuspense>} />
+            <Route path="/action/reports/:reportId/trace" element={<LazySuspense><CognitiveTracePage /></LazySuspense>} />
             <Route path="/search" element={<LazySuspense><GlobalSearchPage /></LazySuspense>} />
             <Route path="/administration/users" element={<LazySuspense><UsersPage /></LazySuspense>} />
             <Route path="/administration/roles" element={<LazySuspense><RolesPage /></LazySuspense>} />
