@@ -87,6 +87,54 @@ To prove it on a fresh environment:
 
 ---
 
+## Cognitive Trace API (Phase 2A)
+
+A read-only provenance view over the canonical cognitive stores. It answers
+*"why did Company OS reach this conclusion?"* by reconstructing, from a Report
+(root), the full chain of artifacts that justify it:
+
+```
+Report → Decision → Recommendation → Confidence → Hypothesis
+       → Anomaly → Pattern → Context → Evidence → Observation
+```
+
+- **It is a READ MODEL, not a new cognitive stage and not a persisted entity.**
+  No `CognitiveTrace` table is created; the trace is assembled on demand from
+  the canonical tables (P1/P3).
+- **Report → Decision is 1:N** (canonical): a periodic Report aggregates N
+  Decisions, enumerated in its `content["decision_traces"]`. There is no
+  singular `report.decision_id` FK (ADR-0002).
+- **Tenant isolation**: every read is scoped by the authenticated tenant; a
+  Report requested by another tenant resolves to nothing (404).
+- **Deterministic**: stable node/edge ordering; two identical requests produce
+  the same logical result. No N+1 queries (bulk, tenant-scoped reads).
+- **Broken provenance is never fabricated**: a trace with a missing referenced
+  artifact is returned as `partial` with explicit `warnings`.
+
+Endpoint (gateway, tenant-scoped, `read` authority):
+
+```
+GET /api/v1/tenants/{tenant_id}/cognitive-trace/report/{report_id}
+```
+
+Response contract (stable, serializable):
+
+```json
+{
+  "root":    { "type": "report", "id": "...", "tenant_id": "..." },
+  "nodes":   [ { "type", "id", "tenant_id", "timestamp", "data" } ],
+  "edges":   [ { "from", "to", "relation" } ],
+  "completeness": "complete" | "partial",
+  "warnings": [ "..." ]
+}
+```
+
+Frontend contract: `CognitiveTraceResponse` / `fetchCognitiveTrace(tenantId, reportId)`
+in `apps/web/src/api/gateway.ts` and `apps/web/src/types/cognitive.ts`
+(types only — the full Trace UI is a future phase).
+
+---
+
 ## License
 
 Refer to the repository files. See `LICENSE` when present.

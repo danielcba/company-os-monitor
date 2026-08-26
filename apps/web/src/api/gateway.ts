@@ -38,6 +38,7 @@ import type {
   CognitiveReportSort,
   CognitiveReportType,
   CognitiveSummary,
+  CognitiveTraceResponse,
   AuditAction,
   AuditConcept,
   EvidenceDetail,
@@ -436,6 +437,16 @@ export async function fetchInsightDetail(
 ): Promise<CognitiveInsightDetail> {
   return apiFetch<CognitiveInsightDetail>(
     `/tenants/${tenantId}/insights/${insightId}`
+  )
+}
+// ── Cognitive Trace (read model / provenance view) ────────────────────────
+
+export async function fetchCognitiveTrace(
+  tenantId: string,
+  reportId: string,
+): Promise<CognitiveTraceResponse> {
+  return apiFetch<CognitiveTraceResponse>(
+    `/tenants/${tenantId}/cognitive-trace/report/${reportId}`,
   )
 }
 

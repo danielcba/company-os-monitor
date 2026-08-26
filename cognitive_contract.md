@@ -193,3 +193,43 @@ infraestructura externa es `scripts/qa_seed.py`.
 - **Dedup idempotente**: ON CONFLICT (id) DO NOTHING en todas las escrituras
 - **UUID determinísticos**: Mismo input → mismo id (testing, anti-tuning)
 - **Cadenas de trazabilidad completas**: Reportes muestran la traza completa decision → recommendation → confidence → hypothesis → anomaly → pattern → context → evidence → observations
+
+### 8.1 Cognitive Trace — Read Model (Fase 2A)
+
+El **Cognitive Trace** es un READ MODEL / PROVENANCE VIEW, no una etapa cognitiva
+nueva ni una entidad persistida. Se reconstruye bajo demanda a partir de los
+stores canónicos (nunca se crea una tabla `CognitiveTrace`):
+
+```
+canonical stores → lecturas bulk (tenant-scoped) → Trace DTO → API
+```
+
+- **Raíz = Report** (un Reporte agrega N Decisions, 1:N canónico vía
+  `content["decision_traces"]`; no existe `report.decision_id` FK, ADR-0002).
+- Cada relación surge de los modelos reales: decision → recommendation →
+  confidence → hypothesis → anomaly → pattern → context → evidence →
+  observations. Nada se inventa.
+- **Tenant isolation**: toda lectura se acota por el tenant autenticado; un
+  Reporte de otro tenant resuelve a nada (404).
+- **Determinismo**: orden estable de nodos y edges; dos requests idénticos
+  producen el mismo resultado lógico. Lecturas bulk (sin N+1).
+- **Provenance rota no se fabrica**: si falta un artefacto referenciado, el
+  trace se devuelve `partial` con `warnings` explícitos.
+
+Contrato de respuesta (estable, serializable):
+
+```json
+{
+  "root":    { "type": "report", "id": "...", "tenant_id": "..." },
+  "nodes":   [ { "type", "id", "tenant_id", "timestamp", "data" } ],
+  "edges":   [ { "from", "to", "relation" } ],
+  "completeness": "complete" | "partial",
+  "warnings": [ "..." ]
+}
+```
+
+Endpoint (gateway, tenant-scoped, autoridad `read`):
+
+```
+GET /api/v1/tenants/{tenant_id}/cognitive-trace/report/{report_id}
+```

@@ -19,6 +19,7 @@ execution. 401 = no/invalid token, 403 = authenticated but no authority,
 400 = boundary violation (e.g. missing Confidence, R4) or invalid query params.
 """
 
+import logging
 import os
 import uuid
 from typing import Any
@@ -38,6 +39,8 @@ from src.constants import VALID_ACTIONS, VALID_COGNITIVE_CONCEPTS, VALID_COGNITI
 from src.decisions import DecisionNotFoundError, InvalidOutcomesError
 from src.observations import VALID_QUALITY_CLASSES
 from src.service import GatewayService
+
+logger = logging.getLogger(__name__)
 
 VALID_SORTS = {"captured_at_desc", "captured_at_asc"}
 AUDIT_VALID_SORTS = {"timestamp_desc", "timestamp_asc"}
@@ -91,6 +94,10 @@ class GatewayServer:
         )
         self.app.router.add_get(
             "/api/v1/tenants/{tenant_id}/recommendations/{recommendation_id}", self.recommendation_detail_handler
+        )
+        self.app.router.add_get(
+            "/api/v1/tenants/{tenant_id}/cognitive-trace/report/{report_id}",
+            self.cognitive_trace_handler,
         )
         self.app.router.add_post(
             "/api/v1/tenants/{tenant_id}/decisions/{decision_id}/outcomes", self.decision_outcomes_handler
@@ -464,6 +471,41 @@ class GatewayServer:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
             return web.json_response({"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403)
+        except Exception:  # noqa: BLE001 - surface as API error
+            self.service.total_errors += 1
+            return web.json_response({"error": "Internal server error"}, status=500)
+
+    async def cognitive_trace_handler(self, request):
+        try:
+            token = await self._authenticate(request)
+            self.service.record(action="read:cognitive_trace")
+            tenant_id = await self._validate_tenant_id(request.match_info["tenant_id"])
+            report_id = await self._validate_uuid(request.match_info["report_id"], "report_id")
+            self.service.require_authorized(
+                token=token, action="read", requested_tenant_id=tenant_id
+            )
+            result = await self.service.get_cognitive_trace(token, tenant_id, report_id)
+            if result is None:
+                logger.info(
+                    "cognitive_trace tenant=%s report=%s status=not_found",
+                    tenant_id,
+                    report_id,
+                )
+                return web.json_response({"error": "Report not found"}, status=404)
+            logger.info(
+                "cognitive_trace tenant=%s report=%s status=ok nodes=%d edges=%d",
+                tenant_id,
+                report_id,
+                len(result.get("nodes", [])),
+                len(result.get("edges", [])),
+            )
+            return web.json_response(result)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        except AccessError as exc:
+            return web.json_response(
+                {"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403
+            )
         except Exception:  # noqa: BLE001 - surface as API error
             self.service.total_errors += 1
             return web.json_response({"error": "Internal server error"}, status=500)
