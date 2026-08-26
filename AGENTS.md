@@ -81,5 +81,21 @@ Company OS. Todos los cambios mantienen conformidad estricta con P1-P7/R1-R7.
 
 ### Tests: 195/198 pasan (3 CORS preexistentes)
 
+### Fase 2A — Cognitive Trace (cerrada 2026-08-26)
+
+- Read model / provenance view (ADR-0002, R7): NO es entidad persistida ni
+  etapa cognitiva nueva. Se reconstruye bajo demanda desde los stores
+  canónicos a partir de un Report (raíz).
+- Backend: `apps/gateway/api-gateway/src/cognitive_trace.py`
+  (`CognitiveTraceStore`), handler en `health.py`, servicio en `service.py`.
+- API: `GET /api/v1/tenants/{tenant_id}/cognitive-trace/report/{report_id}`
+  (tenant-scoped; 404 si el Report no es del tenant; `partial` + `warnings`
+  si la provenance está rota — nunca se fabrica).
+- Frontend: tipos en `apps/web/src/types/cognitive.ts`
+  (`CognitiveTraceResponse`) y cliente `apps/web/src/api/gateway.ts`
+  (`fetchCognitiveTrace`). **La UI (Fase 2B) está pendiente.**
+- PR #2 mergeado a `main` (commit `e3109a9`), CI + `docker-build` GREEN.
+- Contrato documentado en `docs/frontend/frontend-backend-contract.md`.
+
 ### Archivos de reporte
 Ver `docs/remediation/` para reportes completos.
