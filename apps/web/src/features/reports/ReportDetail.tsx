@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { FileText, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { FileText, X, GitBranch } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { fetchReportDetail } from '@/api/gateway'
 import type { CognitiveReport, CognitiveReportDetail } from '@/types/cognitive'
@@ -114,6 +115,7 @@ export function ReportDetail({
 }) {
   const { user } = useAuth()
   const tenantId = user?.tenant_id
+  const navigate = useNavigate()
 
   const { data, isPending, isError, error } = useQuery({
     queryKey: ['report-detail', tenantId, report?.id],
@@ -138,6 +140,16 @@ export function ReportDetail({
             <FileText className="h-5 w-5 text-muted-foreground" />
             <h2 className="font-semibold">Report detail</h2>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              onClose()
+              navigate(`/action/reports/${report.id}/trace`)
+            }}
+          >
+            <GitBranch className="h-4 w-4" /> Cognitive trace
+          </Button>
           <Button variant="ghost" size="sm" aria-label="Close" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
