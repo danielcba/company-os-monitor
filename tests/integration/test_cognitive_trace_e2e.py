@@ -10,6 +10,7 @@ Requires a live PostgreSQL; skips when unreachable.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import tempfile
 import uuid
@@ -43,7 +44,14 @@ async def test_report_trace_matches_canonical_artifacts():
         engine = create_async_engine(DSN)
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-    except Exception:  # noqa: BLE001 - skip when no DB
+    except Exception:  # noqa: BLE001
+        # In CI a missing PostgreSQL is a real failure, not a silent skip:
+        # it would otherwise hide an outage behind a green build.
+        if os.environ.get("CI") == "true":
+            pytest.fail(
+                "Cognitive Trace E2E requires a live PostgreSQL; "
+                "database unavailable in CI is a failure, not a skip."
+            )
         pytest.skip("PostgreSQL unavailable")
 
     stores = {

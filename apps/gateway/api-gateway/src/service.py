@@ -20,7 +20,7 @@ authority and routes (the canonical cycles in each service keep running as-is).
 import uuid
 from collections import Counter
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 from libs.access.errors import (
@@ -45,6 +45,16 @@ from src.boundary import (
     validate_confidence_binding,
 )
 from src.summary import CognitiveSummaryStore
+
+
+class CognitiveTraceStoreProtocol(Protocol):
+    """Structural type for the Cognitive Trace read model (read contract)."""
+
+    async def get_trace(
+        self, *, tenant_id: uuid.UUID, report_id: uuid.UUID
+    ) -> dict[str, Any] | None:
+        """Build the Cognitive Trace for ``report_id`` within ``tenant_id``."""
+        ...
 
 # Default pipeline service health targets (canonical ports; override via env).
 # In production, override via GATEWAY_SERVICE_HEALTH env var:
@@ -79,7 +89,7 @@ class GatewayService:
         dsn: str | None = None,
         blacklist: TokenBlacklist | None = None,
         confidence_store: ConfidenceStoreAdapter | None = None,
-        cognitive_trace_store=None,
+        cognitive_trace_store: CognitiveTraceStoreProtocol | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -90,7 +100,9 @@ class GatewayService:
         self._insight_store = insight_store
         self._decision_read_store = decision_read_store
         self._recommendation_read_store = recommendation_read_store
-        self._cognitive_trace_store = cognitive_trace_store
+        self._cognitive_trace_store: CognitiveTraceStoreProtocol | None = (
+            cognitive_trace_store
+        )
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
         self.blacklist = blacklist

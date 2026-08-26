@@ -377,12 +377,21 @@ class CognitiveTraceStore:
         evidence: dict[uuid.UUID, dict[str, Any]],
         observations: dict[uuid.UUID, dict[str, Any]],
     ) -> list[str]:
-        """Explicitly report broken provenance; never fabricate missing links."""
+        """Explicitly report broken provenance; never fabricate missing links.
+
+        Validates EVERY canonical reference the read model uses. Any missing
+        referenced artifact yields an explicit warning and forces a ``partial``
+        trace; broken provenance is never silently dropped.
+        """
         warnings: list[str] = []
+
+        # Report -> Decision (canonical 1:N link).
         decision_id_strs = {str(d) for d in decision_ids}
-        found = {str(d["id"]) for d in decisions.values()}
-        for missing in decision_id_strs - found:
+        found_decision_strs = {str(d["id"]) for d in decisions.values()}
+        for missing in decision_id_strs - found_decision_strs:
             warnings.append(f"decision {missing} referenced by report not found")
+
+        # Decision -> Recommendation / Confidence.
         for d in decisions.values():
             if d["recommendation_id"] not in recommendations:
                 warnings.append(
@@ -393,6 +402,8 @@ class CognitiveTraceStore:
                 warnings.append(
                     f"confidence {d['confidence_id']} for decision {d['id']} not found"
                 )
+
+        # Recommendation -> Hypothesis / Confidence.
         for r in recommendations.values():
             if r["hypothesis_id"] not in hypotheses:
                 warnings.append(
@@ -404,6 +415,61 @@ class CognitiveTraceStore:
                     f"confidence {r['confidence_id']} for recommendation "
                     f"{r['id']} not found"
                 )
+
+        # Confidence -> Hypothesis (only when it calibrates a hypothesis).
+        for c in confidences.values():
+            if c["target_type"] == "hypothesis" and c["target_id"] not in hypotheses:
+                warnings.append(
+                    f"hypothesis {c['target_id']} for confidence {c['id']} not found"
+                )
+
+        # Hypothesis -> Anomaly / Pattern.
+        for h in hypotheses.values():
+            for a_id in h.get("anomaly_ids") or []:
+                if a_id not in anomalies:
+                    warnings.append(
+                        f"anomaly {a_id} referenced by hypothesis {h['id']} not found"
+                    )
+            for p_id in h.get("pattern_ids") or []:
+                if p_id not in patterns:
+                    warnings.append(
+                        f"pattern {p_id} referenced by hypothesis {h['id']} not found"
+                    )
+
+        # Anomaly -> Pattern / Context.
+        for a in anomalies.values():
+            if a.get("pattern_id") and a["pattern_id"] not in patterns:
+                warnings.append(
+                    f"pattern {a['pattern_id']} referenced by anomaly {a['id']} not found"
+                )
+            if a.get("context_id") and a["context_id"] not in contexts:
+                warnings.append(
+                    f"context {a['context_id']} referenced by anomaly {a['id']} not found"
+                )
+
+        # Pattern -> Context.
+        for p in patterns.values():
+            if p.get("context_id") and p["context_id"] not in contexts:
+                warnings.append(
+                    f"context {p['context_id']} referenced by pattern {p['id']} not found"
+                )
+
+        # Context -> Evidence.
+        for c in contexts.values():
+            for e_id in c.get("evidence_ids") or []:
+                if e_id not in evidence:
+                    warnings.append(
+                        f"evidence {e_id} referenced by context {c['id']} not found"
+                    )
+
+        # Evidence -> Observation.
+        for e in evidence.values():
+            for o_id in e.get("observation_ids") or []:
+                if o_id not in observations:
+                    warnings.append(
+                        f"observation {o_id} referenced by evidence {e['id']} not found"
+                    )
+
         return warnings
 
     # --------------------------------------------------------------- nodes
