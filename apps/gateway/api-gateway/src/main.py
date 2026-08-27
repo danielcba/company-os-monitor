@@ -43,6 +43,7 @@ async def main():
     from libs.cognitive_core.summary import CognitiveSummaryStore
     from libs.memory.consolidation import ConsolidationStore
     from libs.memory.context_revision import ContextRevisionStore
+    from libs.memory.insight_transformation import InsightTransformationStore
     from libs.memory.pattern_refinement import PatternRefinementStore
     from libs.shared.db import create_shared_engine
 
@@ -137,6 +138,19 @@ async def main():
     await pattern_read_store.verify_connection()
     await context_read_store.verify_connection()
 
+    # Insight Transformation journaling (R6): read/compute over the canonical
+    # gateway read stores (external capability, ADR-0002). The gateway boundary
+    # forbids importing the reasoning/perception pipeline packages, so this
+    # capability consumes the read contract (dict payloads) only — it surfaces
+    # each Insight's prior -> updated mental-model transformation and (with the
+    # Decision/Recommendation readers) attributes outcome verdicts back to the
+    # Insight that informed the Recommendation.
+    insight_transformation_store = InsightTransformationStore(
+        insight_store=insight_store,
+        decision_store=decision_read_store,
+        recommendation_store=recommendation_read_store,
+    )
+
     service = GatewayService(
         jwt,
         decision_store=decision_store,
@@ -151,6 +165,7 @@ async def main():
         consolidation_store=consolidation_store,
         pattern_refinement_store=pattern_refinement_store,
         context_revision_store=context_revision_store,
+        insight_transformation_store=insight_transformation_store,
         service_health=_build_service_health(),
         dsn=dsn,
         blacklist=blacklist,

@@ -111,6 +111,10 @@ class GatewayServer:
             "/api/v1/tenants/{tenant_id}/contexts/revision",
             self.context_revision_handler,
         )
+        self.app.router.add_get(
+            "/api/v1/tenants/{tenant_id}/insights/transformations",
+            self.insight_transformation_handler,
+        )
         self.app.router.add_post(
             "/api/v1/tenants/{tenant_id}/decisions/{decision_id}/outcomes", self.decision_outcomes_handler
         )
@@ -591,6 +595,32 @@ class GatewayServer:
                 tenant_id,
                 result.get("total_contexts", 0),
                 result.get("contexts_with_outcomes", 0),
+            )
+            return web.json_response(result)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        except AccessError as exc:
+            return web.json_response(
+                {"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403
+            )
+        except Exception:  # noqa: BLE001 - surface as API error
+            self.service.total_errors += 1
+            return web.json_response({"error": "Internal server error"}, status=500)
+
+    async def insight_transformation_handler(self, request):
+        """READ Insight Transformation journal (R6) for the tenant scope."""
+        try:
+            token = await self._authenticate(request)
+            self.service.record(action="read:insight_transformation")
+            tenant_id = await self._validate_tenant_id(request.match_info["tenant_id"])
+            self.service.require_authorized(
+                token=token, action="read", requested_tenant_id=tenant_id
+            )
+            result = await self.service.get_insight_transformation(token, tenant_id)
+            logger.info(
+                "insight_transformation tenant=%s status=ok insights=%d",
+                tenant_id,
+                result.get("total_insights", 0),
             )
             return web.json_response(result)
         except InvalidTokenError as exc:

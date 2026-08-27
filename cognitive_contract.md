@@ -30,6 +30,7 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 | Action | Decision | Recommendation + Confidence + Authority → Commit → Decision + rationale + expected outcomes (falsifiable) |
 | Learning | Pattern Refinement | Decisions (outcomes) → Attribute to Patterns via traceability chain → Pattern refinement signal (keep/degrade/deactivate) |
 | Learning | Context Revision | Decisions (outcomes) → Attribute to Contexts via traceability chain → Context revision signal (keep/review/consider_competitor) |
+| Learning | Insight Transformation | Insights (prior_understanding → mental_model_update) → Journaled transformation + outcome attribution |
 
 ### Principios Clave (P1-P7, R1-R7)
 
@@ -146,8 +147,10 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 │    ├─ Outcome Consolidation: expected vs actual outcomes → calibración │
 │    ├─ Pattern Refinement: outcome → trazabilidad → señal keep/degrade/ │
 │    │  deactivate (ajusta soporte, no inventa patrones — P4)            │
-│    └─ Context Revision: outcome → trazabilidad → señal keep/review/     │
-│       consider_competitor (P2: solo sugiere, nunca activa Context)     │
+│    ├─ Context Revision: outcome → trazabilidad → señal keep/review/     │
+│    │  consider_competitor (P2: solo sugiere, nunca activa Context)     │
+│    └─ Insight Transformation: prior_understanding → mental_model_update │
+│       (journaling R6) + atribución de outcomes (P7)                    │
 │                                                                      │
 │ 7. Report Generation (documentación de lo commiteado)               │
 │    └─ Formato ejecutivo/tecnico/JSON basado en decisiones           │

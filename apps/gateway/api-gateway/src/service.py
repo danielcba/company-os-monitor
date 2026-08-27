@@ -44,6 +44,10 @@ from libs.memory.context_revision import (
     ContextRevisionReport,
     ContextRevisionStoreProtocol,
 )
+from libs.memory.insight_transformation import (
+    InsightTransformationReport,
+    InsightTransformationStoreProtocol,
+)
 from libs.memory.pattern_refinement import (
     PatternRefinementReport,
     PatternRefinementStoreProtocol,
@@ -105,6 +109,7 @@ class GatewayService:
         consolidation_store: ConsolidationStoreProtocol | None = None,
         pattern_refinement_store: PatternRefinementStoreProtocol | None = None,
         context_revision_store: ContextRevisionStoreProtocol | None = None,
+        insight_transformation_store: InsightTransformationStoreProtocol | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -126,6 +131,9 @@ class GatewayService:
         )
         self._context_revision_store: ContextRevisionStoreProtocol | None = (
             context_revision_store
+        )
+        self._insight_transformation_store: InsightTransformationStoreProtocol | None = (
+            insight_transformation_store
         )
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
@@ -493,6 +501,31 @@ class GatewayService:
         ctx = self._resolve_tenant(token, tenant_id)
         report: ContextRevisionReport = await self._context_revision_store.revise_for_tenant(
             tenant_id=uuid.UUID(ctx.effective_tenant_id),
+        )
+        return report.model_dump(mode="json")
+
+    async def get_insight_transformation(
+        self,
+        token: TokenPayload,
+        tenant_id: str,
+    ) -> dict[str, Any]:
+        """READ the Insight Transformation journal (R6) for the tenant scope.
+
+        External read/compute capability (ADR-0002): it surfaces each Insight's
+        journaled transformation (prior_understanding -> mental_model_update) and,
+        when outcome data is available, attributes Decision verdicts back to the
+        Insight. It does NOT mutate canonical entities (Memory persistence remains
+        planned per the framework).
+        """
+        if self._insight_transformation_store is None:
+            raise RuntimeError(
+                "insight_transformation_store not configured in gateway"
+            )
+        ctx = self._resolve_tenant(token, tenant_id)
+        report: InsightTransformationReport = (
+            await self._insight_transformation_store.journal_for_tenant(
+                tenant_id=uuid.UUID(ctx.effective_tenant_id),
+            )
         )
         return report.model_dump(mode="json")
 
