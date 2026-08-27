@@ -103,6 +103,10 @@ class GatewayServer:
             "/api/v1/tenants/{tenant_id}/memory/consolidation",
             self.consolidation_handler,
         )
+        self.app.router.add_get(
+            "/api/v1/tenants/{tenant_id}/patterns/refinement",
+            self.pattern_refinement_handler,
+        )
         self.app.router.add_post(
             "/api/v1/tenants/{tenant_id}/decisions/{decision_id}/outcomes", self.decision_outcomes_handler
         )
@@ -529,6 +533,33 @@ class GatewayServer:
                 tenant_id,
                 result.get("total_decisions", 0),
                 result.get("aggregate_feedback"),
+            )
+            return web.json_response(result)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        except AccessError as exc:
+            return web.json_response(
+                {"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403
+            )
+        except Exception:  # noqa: BLE001 - surface as API error
+            self.service.total_errors += 1
+            return web.json_response({"error": "Internal server error"}, status=500)
+
+    async def pattern_refinement_handler(self, request):
+        """READ Pattern Refinement (P7) signal for the tenant scope."""
+        try:
+            token = await self._authenticate(request)
+            self.service.record(action="read:pattern_refinement")
+            tenant_id = await self._validate_tenant_id(request.match_info["tenant_id"])
+            self.service.require_authorized(
+                token=token, action="read", requested_tenant_id=tenant_id
+            )
+            result = await self.service.get_pattern_refinement(token, tenant_id)
+            logger.info(
+                "pattern_refinement tenant=%s status=ok patterns=%d with_outcomes=%d",
+                tenant_id,
+                result.get("total_patterns", 0),
+                result.get("patterns_with_outcomes", 0),
             )
             return web.json_response(result)
         except InvalidTokenError as exc:
