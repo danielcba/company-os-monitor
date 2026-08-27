@@ -41,7 +41,11 @@ import type {
   CognitiveTraceResponse,
   ContextRevisionResponse,
   InsightTransformationResponse,
+  LearningMemoryResponse,
+  LearningMemoryRecord,
+  LearningMemoryTargetType,
   PatternRefinementResponse,
+  PersistLearningMemoryRequest,
   AuditAction,
   AuditConcept,
   EvidenceDetail,
@@ -475,6 +479,31 @@ export async function fetchInsightTransformations(
   return apiFetch<InsightTransformationResponse>(
     `/tenants/${tenantId}/insights/transformations`,
   )
+}
+
+// ── Learning Memory ledger (P7 persistence, authorized 2026-08-27) ──────────
+
+export async function fetchLearningMemories(
+  tenantId: string,
+  params: { target_type?: LearningMemoryTargetType; target_id?: string } = {},
+): Promise<LearningMemoryResponse> {
+  const qs = new URLSearchParams()
+  if (params.target_type) qs.set('target_type', params.target_type)
+  if (params.target_id) qs.set('target_id', params.target_id)
+  const query = qs.toString()
+  return apiFetch<LearningMemoryResponse>(
+    `/tenants/${tenantId}/memory${query ? `?${query}` : ''}`,
+  )
+}
+
+export async function persistLearningMemory(
+  tenantId: string,
+  data: PersistLearningMemoryRequest,
+): Promise<LearningMemoryRecord> {
+  return apiFetch<LearningMemoryRecord>(`/tenants/${tenantId}/memory`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
 }
 
 // ── Tenants (superadmin) ──────────────────────────────────────────────────

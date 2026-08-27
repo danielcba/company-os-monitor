@@ -142,15 +142,18 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 │    ├─ Recommendation (propuesta advisory, reversible)              │
 │    └─ Decision (commit con authority + expected outcomes falsables)│
 │                                                                      │
-│ 6. Memory (consolidación, Pattern Refinement y Context Revision         │
-│    read/compute operativas; persistencia planificada)                  │
+│ 6. Memory (consolidación, Pattern Refinement, Context Revision e      │
+│    Insight Transformation read/compute operativas; persistencia Memory │
+│    ledger autorizada 2026-08-27)                                      │
 │    ├─ Outcome Consolidation: expected vs actual outcomes → calibración │
 │    ├─ Pattern Refinement: outcome → trazabilidad → señal keep/degrade/ │
 │    │  deactivate (ajusta soporte, no inventa patrones — P4)            │
 │    ├─ Context Revision: outcome → trazabilidad → señal keep/review/     │
 │    │  consider_competitor (P2: solo sugiere, nunca activa Context)     │
-│    └─ Insight Transformation: prior_understanding → mental_model_update │
-│       (journaling R6) + atribución de outcomes (P7)                    │
+│    ├─ Insight Transformation: prior_understanding → mental_model_update │
+│    │  (journaling R6) + atribución de outcomes (P7)                    │
+│    └─ Learning Memory ledger: señal persistida (POST idempotente,      │
+│       append-only P1, entidad nueva — nunca muta canónicas)            │
 │                                                                      │
 │ 7. Report Generation (documentación de lo commiteado)               │
 │    └─ Formato ejecutivo/tecnico/JSON basado en decisiones           │

@@ -48,6 +48,11 @@ from libs.memory.insight_transformation import (
     InsightTransformationReport,
     InsightTransformationStoreProtocol,
 )
+from libs.memory.memory_ledger import (
+    LearningMemoryRecord,
+    MemoryStoreProtocol,
+    PersistLearningMemoryInput,
+)
 from libs.memory.pattern_refinement import (
     PatternRefinementReport,
     PatternRefinementStoreProtocol,
@@ -110,6 +115,7 @@ class GatewayService:
         pattern_refinement_store: PatternRefinementStoreProtocol | None = None,
         context_revision_store: ContextRevisionStoreProtocol | None = None,
         insight_transformation_store: InsightTransformationStoreProtocol | None = None,
+        memory_store: MemoryStoreProtocol | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -135,6 +141,7 @@ class GatewayService:
         self._insight_transformation_store: InsightTransformationStoreProtocol | None = (
             insight_transformation_store
         )
+        self._memory_store: MemoryStoreProtocol | None = memory_store
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
         self.blacklist = blacklist
@@ -528,6 +535,64 @@ class GatewayService:
             )
         )
         return report.model_dump(mode="json")
+
+    async def persist_learning_memory(
+        self,
+        token: TokenPayload,
+        tenant_id: str,
+        *,
+        target_type: str,
+        target_id: str,
+        signal: dict[str, Any],
+        provenance: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Persist a learning signal into the Memory ledger (P7, authorized).
+
+        Idempotent: re-persisting an identical signal for the same target is a
+        no-op (the gateway returns the existing record). Canonical entities are
+        never mutated (P1); this appends a new, immutable-by-record row.
+        """
+        if self._memory_store is None:
+            raise RuntimeError("memory_store not configured in gateway")
+        if target_type not in {"pattern", "context", "insight"}:
+            raise ValueError(f"invalid target_type: {target_type}")
+        self.require_authorized(
+            token=token, action="commit", requested_tenant_id=tenant_id
+        )
+        ctx = self._resolve_tenant(token, tenant_id)
+        record: LearningMemoryRecord = await self._memory_store.persist(
+            record=PersistLearningMemoryInput(
+                tenant_id=uuid.UUID(ctx.effective_tenant_id),
+                target_type=target_type,
+                target_id=uuid.UUID(target_id),
+                signal=signal,
+                provenance=provenance,
+            )
+        )
+        return record.to_payload()
+
+    async def get_learning_memory(
+        self,
+        token: TokenPayload,
+        tenant_id: str,
+        *,
+        target_type: str | None = None,
+        target_id: str | None = None,
+    ) -> dict[str, Any]:
+        """READ the persisted Learning Memory ledger for the tenant scope."""
+        if self._memory_store is None:
+            raise RuntimeError("memory_store not configured in gateway")
+        self.require_authorized(
+            token=token, action="read", requested_tenant_id=tenant_id
+        )
+        ctx = self._resolve_tenant(token, tenant_id)
+        records = await self._memory_store.list(
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
+            target_type=target_type,
+            target_id=uuid.UUID(target_id) if target_id else None,
+        )
+        payloads = [r.to_payload() for r in records]
+        return {"memories": payloads, "total": len(payloads)}
 
     async def list_observations(
         self,

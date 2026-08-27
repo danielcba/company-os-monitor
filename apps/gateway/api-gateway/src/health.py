@@ -115,6 +115,14 @@ class GatewayServer:
             "/api/v1/tenants/{tenant_id}/insights/transformations",
             self.insight_transformation_handler,
         )
+        self.app.router.add_get(
+            "/api/v1/tenants/{tenant_id}/memory",
+            self.learning_memory_handler,
+        )
+        self.app.router.add_post(
+            "/api/v1/tenants/{tenant_id}/memory",
+            self.learning_memory_persist_handler,
+        )
         self.app.router.add_post(
             "/api/v1/tenants/{tenant_id}/decisions/{decision_id}/outcomes", self.decision_outcomes_handler
         )
@@ -623,6 +631,85 @@ class GatewayServer:
                 result.get("total_insights", 0),
             )
             return web.json_response(result)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        except AccessError as exc:
+            return web.json_response(
+                {"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403
+            )
+        except Exception:  # noqa: BLE001 - surface as API error
+            self.service.total_errors += 1
+            return web.json_response({"error": "Internal server error"}, status=500)
+
+    async def learning_memory_handler(self, request):
+        """READ the persisted Learning Memory ledger for the tenant scope."""
+        try:
+            token = await self._authenticate(request)
+            self.service.record(action="read:learning_memory")
+            tenant_id = await self._validate_tenant_id(request.match_info["tenant_id"])
+            target_type = request.query.get("target_type")
+            if target_type is not None and target_type not in {
+                "pattern",
+                "context",
+                "insight",
+            }:
+                raise AccessError(f"Invalid target_type: {target_type}")
+            target_id = request.query.get("target_id")
+            if target_id is not None:
+                target_id = await self._validate_uuid(target_id, "target_id")
+            self.service.require_authorized(
+                token=token, action="read", requested_tenant_id=tenant_id
+            )
+            result = await self.service.get_learning_memory(
+                token,
+                tenant_id,
+                target_type=target_type,
+                target_id=target_id,
+            )
+            return web.json_response(result)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        except AccessError as exc:
+            return web.json_response(
+                {"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403
+            )
+        except Exception:  # noqa: BLE001 - surface as API error
+            self.service.total_errors += 1
+            return web.json_response({"error": "Internal server error"}, status=500)
+
+    async def learning_memory_persist_handler(self, request):
+        """Persist a learning signal into the Memory ledger (P7, authorized).
+
+        Idempotent: an identical signal for the same target is a no-op.
+        Body: { target_type, target_id, signal, provenance }.
+        """
+        try:
+            token = await self._authenticate(request)
+            self.service.record(action="write:learning_memory")
+            tenant_id = await self._validate_tenant_id(request.match_info["tenant_id"])
+            body = await request.json()
+            target_type = body.get("target_type")
+            if target_type not in {"pattern", "context", "insight"}:
+                raise AccessError(f"Invalid target_type: {target_type}")
+            target_id = await self._validate_uuid(
+                body.get("target_id", ""), "target_id"
+            )
+            signal = body.get("signal")
+            provenance = body.get("provenance")
+            if not isinstance(signal, dict) or not isinstance(provenance, dict):
+                raise AccessError("signal and provenance must be JSON objects")
+            self.service.require_authorized(
+                token=token, action="commit", requested_tenant_id=tenant_id
+            )
+            record = await self.service.persist_learning_memory(
+                token,
+                tenant_id,
+                target_type=target_type,
+                target_id=target_id,
+                signal=signal,
+                provenance=provenance,
+            )
+            return web.json_response(record, status=200)
         except InvalidTokenError as exc:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:
