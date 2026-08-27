@@ -14,6 +14,7 @@ import os
 import signal
 from typing import Any
 
+from libs.action.decision import DecisionStore
 from libs.cognitive_core.calibration_model import CalibrationParams
 from libs.learning.confidence import ConfidenceStore
 from libs.perception.context import ContextStore
@@ -89,6 +90,7 @@ async def main():
     context_store = ContextStore(dsn)
     evidence_store = EvidenceStore(dsn)
     confidence_store = ConfidenceStore(dsn)
+    decision_store = DecisionStore(dsn)
 
     shutdown = GracefulShutdown()
     for store in (
@@ -97,6 +99,7 @@ async def main():
         context_store,
         evidence_store,
         confidence_store,
+        decision_store,
     ):
         shutdown.register_store(store)
 
@@ -110,6 +113,7 @@ async def main():
     await context_store.verify_connection()
     await evidence_store.verify_connection()
     await confidence_store.verify_connection()
+    await decision_store.verify_connection()
 
     service = ConfidenceService(
         hypothesis_store,
@@ -117,6 +121,7 @@ async def main():
         context_store,
         evidence_store,
         confidence_store,
+        decision_store=decision_store,
         params=load_params(),
     )
     health = HealthServer(service, confidence_store)
