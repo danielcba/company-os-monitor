@@ -615,3 +615,76 @@ export interface CognitiveTraceResponse {
   completeness: 'complete' | 'partial'
   warnings: string[]
 }
+
+// ── Learning (P7) read/compute capabilities (ADR-0002) ──────────────────────
+// These originate in libs/memory (not libs.reasoning): the gateway exposes them
+// as external read/compute endpoints. They never mutate canonical entities.
+
+export type PatternRefinementAction = 'keep' | 'degrade' | 'deactivate'
+
+export interface PatternRefinementResult {
+  pattern_id: string
+  pattern_type: string
+  context_id: string
+  tenant_id: string
+  linked_decisions: number
+  corroborated: number
+  contradicted: number
+  inconclusive: number
+  contradiction_ratio: number
+  current_strength: number
+  recommended_strength: number
+  recommended_action: PatternRefinementAction
+}
+
+export interface PatternRefinementResponse {
+  tenant_id: string
+  total_patterns: number
+  patterns_with_outcomes: number
+  results: PatternRefinementResult[]
+}
+
+export type ContextRevisionAction = 'keep' | 'review' | 'consider_competitor'
+
+export interface ContextRevisionResult {
+  context_id: string
+  tenant_id: string
+  linked_decisions: number
+  corroborated: number
+  contradicted: number
+  inconclusive: number
+  contradiction_ratio: number
+  has_competing_models: boolean
+  recommended_revision: ContextRevisionAction
+  suggested_competitor: string | null
+}
+
+export interface ContextRevisionResponse {
+  tenant_id: string
+  total_contexts: number
+  contexts_with_outcomes: number
+  results: ContextRevisionResult[]
+}
+
+export type InsightTransformationKind = 'revised' | 'stable' | 'unchanged'
+
+export interface InsightTransformationResult {
+  insight_id: string
+  tenant_id: string
+  context_id: string | null
+  description: string
+  prior_understanding: string | null
+  mental_model_update: Record<string, unknown> | null
+  transformation_kind: InsightTransformationKind
+  linked_recommendations: number
+  linked_decisions_with_outcomes: number
+  corroborated: number
+  contradicted: number
+  inconclusive: number
+}
+
+export interface InsightTransformationResponse {
+  tenant_id: string
+  total_insights: number
+  results: InsightTransformationResult[]
+}

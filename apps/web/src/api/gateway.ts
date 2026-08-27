@@ -39,6 +39,9 @@ import type {
   CognitiveReportType,
   CognitiveSummary,
   CognitiveTraceResponse,
+  ContextRevisionResponse,
+  InsightTransformationResponse,
+  PatternRefinementResponse,
   AuditAction,
   AuditConcept,
   EvidenceDetail,
@@ -447,6 +450,30 @@ export async function fetchCognitiveTrace(
 ): Promise<CognitiveTraceResponse> {
   return apiFetch<CognitiveTraceResponse>(
     `/tenants/${tenantId}/cognitive-trace/report/${reportId}`,
+  )
+}
+
+// ── Learning (P7) read/compute capabilities (ADR-0002) ──────────────────────
+
+export async function fetchPatternRefinement(
+  tenantId: string,
+): Promise<PatternRefinementResponse> {
+  return apiFetch<PatternRefinementResponse>(
+    `/tenants/${tenantId}/patterns/refinement`,
+  )
+}
+
+export async function fetchContextRevision(
+  tenantId: string,
+): Promise<ContextRevisionResponse> {
+  return apiFetch<ContextRevisionResponse>(`/tenants/${tenantId}/contexts/revision`)
+}
+
+export async function fetchInsightTransformations(
+  tenantId: string,
+): Promise<InsightTransformationResponse> {
+  return apiFetch<InsightTransformationResponse>(
+    `/tenants/${tenantId}/insights/transformations`,
   )
 }
 
