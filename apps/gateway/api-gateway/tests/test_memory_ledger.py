@@ -15,13 +15,11 @@ from aiohttp.test_utils import TestClient, TestServer
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from libs.access.errors import TenantIsolationError
 from libs.access.rbac import ROLE_ADMIN
 from libs.access.security import JwtService
 
 from src.health import GatewayServer
 from src.service import GatewayService
-
 
 SECRET = "dev-secret-key"
 TENANT_A = "00000000-0000-0000-0000-00000000000a"
@@ -124,7 +122,7 @@ async def test_get_memory_returns_tenant_scoped_list(client, jwt):
     resp = await tc.get(f"/api/v1/tenants/{TENANT_A}/memory", headers=_hdr(jwt))
     assert resp.status == 200
     body = await resp.json()
-    assert body["total"] == 1  # noqa: PLR2004
+    assert body["total"] == 1
     assert body["memories"][0]["target_type"] == "pattern"
 
 
@@ -144,7 +142,7 @@ async def test_post_memory_persists_and_is_authorized(client, jwt):
     out = await resp.json()
     assert out["target_type"] == "pattern"
     assert out["target_id"] == pid
-    assert len(store.persisted) == 1  # noqa: PLR2004
+    assert len(store.persisted) == 1
 
 
 async def test_post_memory_rejects_invalid_target_type(client, jwt):
