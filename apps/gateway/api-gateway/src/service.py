@@ -40,6 +40,10 @@ from libs.memory.consolidation import (
     ConsolidationReport,
     ConsolidationStoreProtocol,
 )
+from libs.memory.context_revision import (
+    ContextRevisionReport,
+    ContextRevisionStoreProtocol,
+)
 from libs.memory.pattern_refinement import (
     PatternRefinementReport,
     PatternRefinementStoreProtocol,
@@ -100,6 +104,7 @@ class GatewayService:
         cognitive_trace_store: CognitiveTraceStoreProtocol | None = None,
         consolidation_store: ConsolidationStoreProtocol | None = None,
         pattern_refinement_store: PatternRefinementStoreProtocol | None = None,
+        context_revision_store: ContextRevisionStoreProtocol | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -118,6 +123,9 @@ class GatewayService:
         )
         self._pattern_refinement_store: PatternRefinementStoreProtocol | None = (
             pattern_refinement_store
+        )
+        self._context_revision_store: ContextRevisionStoreProtocol | None = (
+            context_revision_store
         )
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
@@ -464,6 +472,27 @@ class GatewayService:
             await self._pattern_refinement_store.refine_for_tenant(
                 tenant_id=uuid.UUID(ctx.effective_tenant_id),
             )
+        )
+        return report.model_dump(mode="json")
+
+    async def get_context_revision(
+        self,
+        token: TokenPayload,
+        tenant_id: str,
+    ) -> dict[str, Any]:
+        """READ the Context Revision (P7 + P2) signal for the tenant scope.
+
+        External read/compute capability (ADR-0002): it computes which Contexts
+        should be reviewed / consider a competing model, based on Decision
+        outcomes. It only *suggests* reconsidering a competitor; it never
+        activates or generates a Context (P2). No new entity is created (Memory
+        persistence remains planned per the framework).
+        """
+        if self._context_revision_store is None:
+            raise RuntimeError("context_revision_store not configured in gateway")
+        ctx = self._resolve_tenant(token, tenant_id)
+        report: ContextRevisionReport = await self._context_revision_store.revise_for_tenant(
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
         )
         return report.model_dump(mode="json")
 
