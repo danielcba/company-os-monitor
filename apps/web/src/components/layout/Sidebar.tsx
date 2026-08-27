@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
   Activity,
+  BookOpen,
   Brain,
   Compass,
   FileText,
@@ -50,6 +51,10 @@ const adminItems: NavItem[] = [
   { to: '/administration/roles', label: 'Roles', icon: ShieldCheck },
   { to: '/administration/tenants', label: 'Tenants', icon: Building2 },
   { to: '/administration/system', label: 'System', icon: Server },
+]
+
+const learningItems: NavItem[] = [
+  { to: '/learning', label: 'Learning (P7)', icon: BookOpen },
 ]
 
 function NavItemLink({ item }: { item: NavItem }) {
@@ -119,6 +124,7 @@ export function Sidebar() {
         />
         <NavGroup title="Cognition" items={cognitionItems} />
         <NavGroup title="Action" items={actionItems} />
+        <NavGroup title="Learning" items={learningItems} />
         <NavGroup title="Administration" items={adminItems} />
       </nav>
       <div className="border-t border-sidebar p-3">
