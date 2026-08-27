@@ -29,6 +29,7 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 | Action | Recommendation | Context + Hypothesis/Insight + Confidence + Action Space → Propose action → Recommendation + rationale + alternatives |
 | Action | Decision | Recommendation + Confidence + Authority → Commit → Decision + rationale + expected outcomes (falsifiable) |
 | Learning | Pattern Refinement | Decisions (outcomes) → Attribute to Patterns via traceability chain → Pattern refinement signal (keep/degrade/deactivate) |
+| Learning | Context Revision | Decisions (outcomes) → Attribute to Contexts via traceability chain → Context revision signal (keep/review/consider_competitor) |
 
 ### Principios Clave (P1-P7, R1-R7)
 
@@ -140,11 +141,13 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 │    ├─ Recommendation (propuesta advisory, reversible)              │
 │    └─ Decision (commit con authority + expected outcomes falsables)│
 │                                                                      │
-│ 6. Memory (consolidación y Pattern Refinement read/compute operativas; │
-│    persistencia planificada)                                            │
+│ 6. Memory (consolidación, Pattern Refinement y Context Revision         │
+│    read/compute operativas; persistencia planificada)                  │
 │    ├─ Outcome Consolidation: expected vs actual outcomes → calibración │
-│    └─ Pattern Refinement: outcome → trazabilidad → señal keep/degrade/ │
-│       deactivate (ajusta soporte, no inventa patrones — P4)            │
+│    ├─ Pattern Refinement: outcome → trazabilidad → señal keep/degrade/ │
+│    │  deactivate (ajusta soporte, no inventa patrones — P4)            │
+│    └─ Context Revision: outcome → trazabilidad → señal keep/review/     │
+│       consider_competitor (P2: solo sugiere, nunca activa Context)     │
 │                                                                      │
 │ 7. Report Generation (documentación de lo commiteado)               │
 │    └─ Formato ejecutivo/tecnico/JSON basado en decisiones           │

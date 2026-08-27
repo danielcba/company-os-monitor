@@ -42,12 +42,14 @@ async def main():
     from libs.action.report import ReportStore
     from libs.cognitive_core.summary import CognitiveSummaryStore
     from libs.memory.consolidation import ConsolidationStore
+    from libs.memory.context_revision import ContextRevisionStore
     from libs.memory.pattern_refinement import PatternRefinementStore
     from libs.shared.db import create_shared_engine
 
     from src.audit import AuditLogReadStore
     from src.cognitive_trace import CognitiveTraceStore
     from src.confidence import ConfidenceReadStore
+    from src.contexts import ContextReadStore
     from src.decisions import DecisionReadStore
     from src.hypotheses import HypothesisReadStore
     from src.insights import InsightReadStore
@@ -107,6 +109,21 @@ async def main():
         pattern_store=pattern_read_store,
     )
 
+    # Context Revision (P7 + P2): read/compute over the canonical gateway read
+    # stores (external capability, ADR-0002). The gateway boundary forbids
+    # importing the reasoning/perception pipeline packages, so this capability
+    # consumes the read contract (dict payloads) only — the traceability chain
+    # Decision -> Recommendation -> Hypothesis -> Pattern -> Context feeds the
+    # signal, and competing models are surfaced (never auto-activated, P2).
+    context_read_store = ContextReadStore(dsn)
+    context_revision_store = ContextRevisionStore(
+        decision_store=decision_read_store,
+        recommendation_store=recommendation_read_store,
+        hypothesis_store=hypothesis_store,
+        pattern_store=pattern_read_store,
+        context_store=context_read_store,
+    )
+
     await decision_store.verify_connection()
     await report_store.verify_connection()
     await observation_store.verify_connection()
@@ -118,6 +135,7 @@ async def main():
     await decision_read_store.verify_connection()
     await cognitive_trace_store.verify_connection()
     await pattern_read_store.verify_connection()
+    await context_read_store.verify_connection()
 
     service = GatewayService(
         jwt,
@@ -132,6 +150,7 @@ async def main():
         cognitive_trace_store=cognitive_trace_store,
         consolidation_store=consolidation_store,
         pattern_refinement_store=pattern_refinement_store,
+        context_revision_store=context_revision_store,
         service_health=_build_service_health(),
         dsn=dsn,
         blacklist=blacklist,
