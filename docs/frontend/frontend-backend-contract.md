@@ -328,6 +328,52 @@ pattern → context → evidence → observation`.
 - The frontend `/learning` page lists this ledger ("Persisted Memory") and
   offers a per-row "Save to Memory" action on each read/compute signal.
 
+### Cognitive Timeline (Investigation, read/compute)
+
+> Read-only temporal reconstruction of a tenant's cognitive activity. No new
+> persisted entity; derived on demand from the canonical read stores. Mirrors
+> the Cognitive Trace pattern: a reconstruction under demand, never fabricated.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/tenants/{tenant_id}/cognitive-timeline` | Reconstruct chronological cognitive events |
+
+**Query params:**
+- `limit` (int, default 20): max events fetched per concept.
+- `ascending` (bool, default false): chronological order (true = oldest first).
+
+**Response (`CognitiveTimelineResponse`):**
+```json
+{
+  "tenant_id": "uuid",
+  "events": [
+    {
+      "tenant_id": "uuid",
+      "layer": "perception" | "reasoning" | "action" | "memory" | "confidence",
+      "concept": "observation" | "evidence" | "context" | "pattern" | "anomaly" | "hypothesis" | "insight" | "recommendation" | "decision" | "report" | "confidence" | "audit",
+      "id": "uuid",
+      "timestamp": "ISO-8601",
+      "title": "string",
+      "detail": "string",
+      "target_type": "string | null",
+      "target_id": "string | null",
+      "status": "string | null"
+    }
+  ],
+  "total": number,
+  "per_layer_counts": { "perception": number, ... },
+  "per_concept_counts": { "observation": number, ... },
+  "ascending": boolean
+}
+```
+
+**Notes:**
+- Authorization: `read` role. 401 = no/invalid token, 403 = cross-tenant.
+- The frontend `/investigation/timeline` page renders the chronological list
+  with layer/concept badges and a summary card of activity by layer.
+- Defensive: a failing reader does not break the timeline — that concept is
+  omitted. The `per_concept_counts` and `total` reflect only available data.
+
 ### Tenants (Superadmin)
 
 | Method | Path | Description |

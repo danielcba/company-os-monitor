@@ -19,6 +19,7 @@ const DecisionsPage = lazy(() => import('@/features/decisions/DecisionsPage'))
 const ReportsPage = lazy(() => import('@/features/reports/ReportsPage'))
 const CognitiveTracePage = lazy(() => import('@/features/cognitive-trace/CognitiveTracePage'))
 const LearningPage = lazy(() => import('@/features/learning/LearningPage'))
+const TimelinePage = lazy(() => import('@/features/timeline/TimelinePage'))
 const AuditPage = lazy(() => import('@/features/audit/AuditPage'))
 const GlobalSearchPage = lazy(() => import('@/features/search/GlobalSearchPage'))
 const UsersPage = lazy(() => import('@/features/admin/UsersPage'))
@@ -53,6 +54,7 @@ export function AppRoutes() {
             <Route path="/action/reports" element={<LazySuspense><ReportsPage /></LazySuspense>} />
             <Route path="/action/reports/:reportId/trace" element={<LazySuspense><CognitiveTracePage /></LazySuspense>} />
             <Route path="/learning" element={<LazySuspense><LearningPage /></LazySuspense>} />
+            <Route path="/investigation/timeline" element={<LazySuspense><TimelinePage /></LazySuspense>} />
             <Route path="/search" element={<LazySuspense><GlobalSearchPage /></LazySuspense>} />
             <Route path="/administration/users" element={<LazySuspense><UsersPage /></LazySuspense>} />
             <Route path="/administration/roles" element={<LazySuspense><RolesPage /></LazySuspense>} />

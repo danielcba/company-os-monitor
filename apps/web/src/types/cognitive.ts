@@ -713,3 +713,27 @@ export interface PersistLearningMemoryRequest {
   signal: Record<string, unknown>
   provenance: Record<string, unknown>
 }
+
+// ── Cognitive Timeline (Investigation) ───────────────────────────────────────
+
+export interface CognitiveTimelineEvent {
+  tenant_id: string
+  layer: string
+  concept: string
+  id: string
+  timestamp: string
+  title: string
+  detail: string
+  target_type: string | null
+  target_id: string | null
+  status: string | null
+}
+
+export interface CognitiveTimelineResponse {
+  tenant_id: string
+  events: CognitiveTimelineEvent[]
+  total: number
+  per_layer_counts: Record<string, number>
+  per_concept_counts: Record<string, number>
+  ascending: boolean
+}
