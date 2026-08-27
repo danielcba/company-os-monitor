@@ -49,6 +49,9 @@ from libs.memory.insight_transformation import (
     InsightTransformationReport,
     InsightTransformationStoreProtocol,
 )
+from libs.memory.learning_loop import (
+    LearningLoopStoreProtocol,
+)
 from libs.memory.memory_ledger import (
     LearningMemoryRecord,
     MemoryStoreProtocol,
@@ -118,6 +121,7 @@ class GatewayService:
         insight_transformation_store: InsightTransformationStoreProtocol | None = None,
         memory_store: MemoryStoreProtocol | None = None,
         timeline_store: CognitiveTimelineStoreProtocol | None = None,
+        learning_loop_store: LearningLoopStoreProtocol | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -145,6 +149,9 @@ class GatewayService:
         )
         self._memory_store: MemoryStoreProtocol | None = memory_store
         self._timeline_store: CognitiveTimelineStoreProtocol | None = timeline_store
+        self._learning_loop_store: LearningLoopStoreProtocol | None = (
+            learning_loop_store
+        )
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
         self.blacklist = blacklist
@@ -427,16 +434,47 @@ class GatewayService:
         actual_outcomes: list[dict[str, Any]],
         executed_at=None,
     ) -> dict[str, Any]:
-        """Submit actual outcomes for a decision (lifecycle update, P1 allows)."""
+        """Submit actual outcomes for a decision (lifecycle update, P1 allows).
+
+        After persisting the outcomes, automatically runs the P7 Learning Loop:
+        Consolidation → Pattern Refinement → Context Revision → Insight
+        Transformation → Memory Ledger persistence.
+        """
         if self._decision_read_store is None:
             raise RuntimeError("decision_read_store not configured in gateway")
         ctx = self._resolve_tenant(token, tenant_id)
-        return await self._decision_read_store.submit_outcomes(
+        result = await self._decision_read_store.submit_outcomes(
             tenant_id=uuid.UUID(ctx.effective_tenant_id),
             decision_id=uuid.UUID(decision_id),
             actual_outcomes=actual_outcomes,
             executed_at=executed_at,
         )
+
+        # Run the automatic Learning Loop (P7) if configured
+        if self._learning_loop_store is not None:
+            try:
+                loop_result = await self._learning_loop_store.run_for_decision(
+                    tenant_id=uuid.UUID(ctx.effective_tenant_id),
+                    decision_id=uuid.UUID(decision_id),
+                )
+                result["learning_loop"] = {
+                    "consolidation_feedback": loop_result.consolidation.calibration_feedback,
+                    "brier": loop_result.consolidation.brier,
+                    "ece": loop_result.consolidation.ece,
+                    "patterns_refined": len(loop_result.pattern_refinement.results),
+                    "contexts_revised": len(loop_result.context_revision.results),
+                    "insights_transformed": len(loop_result.insight_transformation.results),
+                    "persisted_signals": len(loop_result.persisted),
+                }
+            except Exception:
+                # Learning loop is best-effort; log but don't fail the outcome submission
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "Learning loop failed for decision %s", decision_id
+                )
+
+        return result
 
     async def get_cognitive_trace(
         self,

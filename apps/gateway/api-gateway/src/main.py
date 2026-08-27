@@ -45,6 +45,7 @@ async def main():
     from libs.memory.consolidation import ConsolidationStore
     from libs.memory.context_revision import ContextRevisionStore
     from libs.memory.insight_transformation import InsightTransformationStore
+    from libs.memory.learning_loop import LearningLoopStore
     from libs.memory.memory_ledger import MemoryStore
     from libs.memory.pattern_refinement import PatternRefinementStore
     from libs.shared.db import create_shared_engine
@@ -183,6 +184,19 @@ async def main():
     memory_store = MemoryStore(dsn)
     await memory_store.verify_connection()
 
+    # Learning Loop (P7): automatic feedback Decision outcomes → Consolidation
+    # → Pattern/Context/Insight refinement → Memory Ledger.
+    learning_loop_store = LearningLoopStore(
+        decision_store=decision_read_store,
+        recommendation_store=recommendation_read_store,
+        hypothesis_store=hypothesis_store,
+        pattern_store=pattern_read_store,
+        context_store=context_read_store,
+        insight_store=insight_store,
+        memory_store=memory_store,
+    )
+    await learning_loop_store.verify_connection()
+
     service = GatewayService(
         jwt,
         decision_store=decision_store,
@@ -200,6 +214,7 @@ async def main():
         insight_transformation_store=insight_transformation_store,
         memory_store=memory_store,
         timeline_store=timeline_store,
+        learning_loop_store=learning_loop_store,
         service_health=_build_service_health(),
         dsn=dsn,
         blacklist=blacklist,
@@ -221,6 +236,7 @@ async def main():
         await memory_store.close()
         await evidence_store.close()
         await anomaly_store.close()
+        await learning_loop_store.close()
 
 
 if __name__ == "__main__":
