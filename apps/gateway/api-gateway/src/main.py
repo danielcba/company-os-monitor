@@ -41,6 +41,7 @@ async def main():
     from libs.action.decision import DecisionStore
     from libs.action.report import ReportStore
     from libs.cognitive_core.summary import CognitiveSummaryStore
+    from libs.memory.cognitive_timeline import CognitiveTimelineStore
     from libs.memory.consolidation import ConsolidationStore
     from libs.memory.context_revision import ContextRevisionStore
     from libs.memory.insight_transformation import InsightTransformationStore
@@ -48,11 +49,13 @@ async def main():
     from libs.memory.pattern_refinement import PatternRefinementStore
     from libs.shared.db import create_shared_engine
 
+    from src.anomalies import AnomalyReadStore
     from src.audit import AuditLogReadStore
     from src.cognitive_trace import CognitiveTraceStore
     from src.confidence import ConfidenceReadStore
     from src.contexts import ContextReadStore
     from src.decisions import DecisionReadStore
+    from src.evidence import EvidenceReadStore
     from src.hypotheses import HypothesisReadStore
     from src.insights import InsightReadStore
     from src.observations import ObservationReadStore
@@ -126,6 +129,26 @@ async def main():
         context_store=context_read_store,
     )
 
+    # Cognitive Timeline (Investigation): read/compute reconstruction of the
+    # tenant's chronological cognitive events from the canonical read stores
+    # (external capability, ADR-0002). Never persists (P1); derived on demand.
+    evidence_store = EvidenceReadStore(dsn)
+    anomaly_store = AnomalyReadStore(dsn)
+    timeline_store = CognitiveTimelineStore(
+        observation_store=observation_store,
+        evidence_store=evidence_store,
+        context_store=context_read_store,
+        pattern_store=pattern_read_store,
+        anomaly_store=anomaly_store,
+        hypothesis_store=hypothesis_store,
+        insight_store=insight_store,
+        recommendation_store=recommendation_read_store,
+        decision_store=decision_read_store,
+        report_store=report_store,
+        confidence_store=confidence_store,
+        audit_store=audit_store,
+    )
+
     await decision_store.verify_connection()
     await report_store.verify_connection()
     await observation_store.verify_connection()
@@ -138,6 +161,7 @@ async def main():
     await cognitive_trace_store.verify_connection()
     await pattern_read_store.verify_connection()
     await context_read_store.verify_connection()
+    await timeline_store.verify_connection()
 
     # Insight Transformation journaling (R6): read/compute over the canonical
     # gateway read stores (external capability, ADR-0002). The gateway boundary
@@ -175,6 +199,7 @@ async def main():
         context_revision_store=context_revision_store,
         insight_transformation_store=insight_transformation_store,
         memory_store=memory_store,
+        timeline_store=timeline_store,
         service_health=_build_service_health(),
         dsn=dsn,
         blacklist=blacklist,
@@ -194,6 +219,8 @@ async def main():
         await report_store.close()
         await cognitive_trace_store.close()
         await memory_store.close()
+        await evidence_store.close()
+        await anomaly_store.close()
 
 
 if __name__ == "__main__":

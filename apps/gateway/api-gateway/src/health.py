@@ -123,6 +123,10 @@ class GatewayServer:
             "/api/v1/tenants/{tenant_id}/memory",
             self.learning_memory_persist_handler,
         )
+        self.app.router.add_get(
+            "/api/v1/tenants/{tenant_id}/cognitive-timeline",
+            self.cognitive_timeline_handler,
+        )
         self.app.router.add_post(
             "/api/v1/tenants/{tenant_id}/decisions/{decision_id}/outcomes", self.decision_outcomes_handler
         )
@@ -576,6 +580,39 @@ class GatewayServer:
                 tenant_id,
                 result.get("total_patterns", 0),
                 result.get("patterns_with_outcomes", 0),
+            )
+            return web.json_response(result)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        except AccessError as exc:
+            return web.json_response(
+                {"error": str(exc)}, status=400 if _is_validation_error(str(exc)) else 403
+            )
+        except Exception:  # noqa: BLE001 - surface as API error
+            self.service.total_errors += 1
+            return web.json_response({"error": "Internal server error"}, status=500)
+
+    async def cognitive_timeline_handler(self, request):
+        """READ Cognitive Timeline (Investigation) for the tenant scope."""
+        try:
+            token = await self._authenticate(request)
+            self.service.record(action="read:cognitive_timeline")
+            tenant_id = await self._validate_tenant_id(request.match_info["tenant_id"])
+            self.service.require_authorized(
+                token=token, action="read", requested_tenant_id=tenant_id
+            )
+            try:
+                limit = int(request.query.get("limit", "20"))
+            except (TypeError, ValueError):
+                limit = 20
+            ascending = request.query.get("ascending", "false").lower() == "true"
+            result = await self.service.get_cognitive_timeline(
+                token, tenant_id, limit_per_concept=limit, ascending=ascending
+            )
+            logger.info(
+                "cognitive_timeline tenant=%s status=ok events=%d",
+                tenant_id,
+                result.get("total", 0),
             )
             return web.json_response(result)
         except InvalidTokenError as exc:

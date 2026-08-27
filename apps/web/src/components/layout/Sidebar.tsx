@@ -7,6 +7,7 @@ import {
   Compass,
   FileText,
   Gauge,
+  History,
   LayoutDashboard,
   Lightbulb,
   Radar,
@@ -55,6 +56,10 @@ const adminItems: NavItem[] = [
 
 const learningItems: NavItem[] = [
   { to: '/learning', label: 'Learning (P7)', icon: BookOpen },
+]
+
+const investigationItems: NavItem[] = [
+  { to: '/investigation/timeline', label: 'Cognitive Timeline', icon: History },
 ]
 
 function NavItemLink({ item }: { item: NavItem }) {
@@ -125,6 +130,7 @@ export function Sidebar() {
         <NavGroup title="Cognition" items={cognitionItems} />
         <NavGroup title="Action" items={actionItems} />
         <NavGroup title="Learning" items={learningItems} />
+        <NavGroup title="Investigation" items={investigationItems} />
         <NavGroup title="Administration" items={adminItems} />
       </nav>
       <div className="border-t border-sidebar p-3">

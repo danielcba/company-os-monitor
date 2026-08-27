@@ -44,6 +44,7 @@ import type {
   LearningMemoryResponse,
   LearningMemoryRecord,
   LearningMemoryTargetType,
+  CognitiveTimelineResponse,
   PatternRefinementResponse,
   PersistLearningMemoryRequest,
   AuditAction,
@@ -504,6 +505,21 @@ export async function persistLearningMemory(
     method: 'POST',
     body: JSON.stringify(data),
   })
+}
+
+// ── Cognitive Timeline (Investigation, read/compute) ───────────────────────
+
+export async function fetchCognitiveTimeline(
+  tenantId: string,
+  params: { limit?: number; ascending?: boolean } = {},
+): Promise<CognitiveTimelineResponse> {
+  const qs = new URLSearchParams()
+  if (params.limit !== undefined) qs.set('limit', String(params.limit))
+  if (params.ascending !== undefined) qs.set('ascending', String(params.ascending))
+  const query = qs.toString()
+  return apiFetch<CognitiveTimelineResponse>(
+    `/tenants/${tenantId}/cognitive-timeline${query ? `?${query}` : ''}`,
+  )
 }
 
 // ── Tenants (superadmin) ──────────────────────────────────────────────────

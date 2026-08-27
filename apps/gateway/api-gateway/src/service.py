@@ -36,6 +36,7 @@ from libs.access.rbac import (
 from libs.access.security import JwtService, TokenPayload
 from libs.access.tenant_scope import AuthorizationContext, TenantScopeError
 from libs.access.token_blacklist import SecurityControlUnavailable, TokenBlacklist
+from libs.memory.cognitive_timeline import CognitiveTimelineStoreProtocol
 from libs.memory.consolidation import (
     ConsolidationReport,
     ConsolidationStoreProtocol,
@@ -116,6 +117,7 @@ class GatewayService:
         context_revision_store: ContextRevisionStoreProtocol | None = None,
         insight_transformation_store: InsightTransformationStoreProtocol | None = None,
         memory_store: MemoryStoreProtocol | None = None,
+        timeline_store: CognitiveTimelineStoreProtocol | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -142,6 +144,7 @@ class GatewayService:
             insight_transformation_store
         )
         self._memory_store: MemoryStoreProtocol | None = memory_store
+        self._timeline_store: CognitiveTimelineStoreProtocol | None = timeline_store
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
         self.blacklist = blacklist
@@ -449,6 +452,29 @@ class GatewayService:
             tenant_id=uuid.UUID(ctx.effective_tenant_id),
             report_id=uuid.UUID(report_id),
         )
+
+    async def get_cognitive_timeline(
+        self,
+        token: TokenPayload,
+        tenant_id: str,
+        limit_per_concept: int = 20,
+        ascending: bool = False,
+    ) -> dict[str, Any]:
+        """READ the Cognitive Timeline (Investigation) for the tenant scope.
+
+        External read/compute capability (ADR-0002): reconstructs the temporal
+        sequence of cognitive events from the canonical read stores. It never
+        fabricates events (P1) and creates no new entity.
+        """
+        if self._timeline_store is None:
+            raise RuntimeError("timeline_store not configured in gateway")
+        ctx = self._resolve_tenant(token, tenant_id)
+        report = await self._timeline_store.build_for_tenant(
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
+            limit_per_concept=limit_per_concept,
+            ascending=ascending,
+        )
+        return report.to_payload()
 
     async def get_consolidation(
         self,
