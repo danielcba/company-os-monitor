@@ -541,3 +541,40 @@ CREATE TABLE users (
 
 CREATE INDEX idx_users_tenant_email ON users(tenant_id, email);
 CREATE INDEX idx_users_tenant_role ON users(tenant_id, role);
+
+-- ============================================
+-- LEARNING MEMORY LEDGER (P7 PERSISTENCE, ADR-0002 authorized 2026-08-27)
+-- ============================================
+-- New persisted entity that records the learning signal derived by the P7
+-- read/compute capabilities (Pattern Refinement, Context Revision, Insight
+-- Transformation). Immutable-by-record and append-only: re-persisting an
+-- identical signal is a no-op (UNIQUE signal_hash). Canonical cognitive
+-- entities are NEVER mutated (P1) — this is a separate ledger.
+
+CREATE TABLE learning_memory (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL,
+    target_type   VARCHAR(32) NOT NULL,           -- pattern | context | insight
+    target_id     UUID NOT NULL,
+    signal        JSONB NOT NULL,                 -- the learned adjustment
+    provenance    JSONB NOT NULL,                 -- decision_ids, counts, verdicts
+    signal_hash   VARCHAR(64) NOT NULL,           -- sha256 of canonical signal
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_learning_memory_tenant ON learning_memory (tenant_id);
+CREATE INDEX idx_learning_memory_target ON learning_memory (tenant_id, target_type, target_id);
+CREATE UNIQUE INDEX uq_learning_memory_signal
+    ON learning_memory (tenant_id, target_type, target_id, signal_hash);
+
+-- Append-only: a persisted learning record is never UPDATEd or DELETEd (P1).
+CREATE OR REPLACE FUNCTION prevent_learning_memory_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'Learning Memory is append-only (P1): no UPDATE/DELETE allowed.';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER learning_memory_immutable_trigger
+    BEFORE UPDATE OR DELETE ON learning_memory
+    FOR EACH ROW EXECUTE FUNCTION prevent_learning_memory_update();

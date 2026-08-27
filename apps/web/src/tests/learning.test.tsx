@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { LearningPage } from '@/features/learning/LearningPage'
@@ -115,11 +115,16 @@ function renderLearning(initialEntry = '/learning') {
 function mockFetch(responses: Record<string, unknown>, status = 200) {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockImplementation(async (input: string) => {
+    vi.fn().mockImplementation(async (input: string, init?: { method?: string }) => {
+      const url = String(input)
       let body: unknown = {}
-      if (String(input).includes('/patterns/refinement')) body = responses.patterns ?? {}
-      else if (String(input).includes('/contexts/revision')) body = responses.contexts ?? {}
-      else if (String(input).includes('/insights/transformations')) body = responses.insights ?? {}
+      if (url.includes('/patterns/refinement')) body = responses.patterns ?? {}
+      else if (url.includes('/contexts/revision')) body = responses.contexts ?? {}
+      else if (url.includes('/insights/transformations')) body = responses.insights ?? {}
+      else if (url.includes('/memory') && init?.method === 'POST')
+        body = responses.memoryPost ?? {}
+      else if (url.includes('/memory'))
+        body = responses.memories ?? { memories: [], total: 0 }
       return { ok: status >= 200 && status < 300, status, json: async () => body }
     }),
   )
@@ -155,6 +160,86 @@ describe('LearningPage', () => {
     expect(screen.getByText('Disk pressure is the dominant cause')).toBeInTheDocument()
     // prior -> updated journaling is shown
     expect(screen.getByText(/prior:/)).toBeInTheDocument()
+
+    // Persisted Memory section renders (empty in this scenario)
+    expect(await screen.findByText('Persisted Memory')).toBeInTheDocument()
+    expect(screen.getByText('No persisted memory yet')).toBeInTheDocument()
+  })
+
+  it('renders persisted memory records when present', async () => {
+    mockFetch({
+      patterns: { tenant_id: tenantId, total_patterns: 0, patterns_with_outcomes: 0, results: [] },
+      contexts: { tenant_id: tenantId, total_contexts: 0, contexts_with_outcomes: 0, results: [] },
+      insights: { tenant_id: tenantId, total_insights: 0, results: [] },
+      memories: {
+        memories: [
+          {
+            id: 'm1',
+            tenant_id: tenantId,
+            target_type: 'pattern',
+            target_id: '11111111-1111-1111-1111-111111111111',
+            signal: { recommended_action: 'degrade' },
+            provenance: { corroborated: 3, contradicted: 1 },
+            signal_hash: 'h',
+            created_at: '2026-01-01T00:00:00Z',
+          },
+        ],
+        total: 1,
+      },
+    })
+    renderLearning()
+    expect(await screen.findByText('Persisted Memory')).toBeInTheDocument()
+    expect(await screen.findByText(/recommended_action/)).toBeInTheDocument()
+  })
+
+  it('persists a learning signal via the Save to Memory button', async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      async (input: string, init?: { method?: string; body?: string }) => {
+        const url = String(input)
+        if (url.includes('/patterns/refinement'))
+          return { ok: true, status: 200, json: async () => makePatternRefinement() }
+        if (url.includes('/contexts/revision'))
+          return { ok: true, status: 200, json: async () => ({ tenant_id: tenantId, total_contexts: 0, contexts_with_outcomes: 0, results: [] }) }
+        if (url.includes('/insights/transformations'))
+          return { ok: true, status: 200, json: async () => ({ tenant_id: tenantId, total_insights: 0, results: [] }) }
+        if (url.includes('/memory') && init?.method === 'POST') {
+          const parsed = JSON.parse(init.body ?? '{}')
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              id: 'm1',
+              tenant_id: tenantId,
+              target_type: parsed.target_type,
+              target_id: parsed.target_id,
+              signal: parsed.signal,
+              provenance: parsed.provenance,
+              signal_hash: 'h',
+              created_at: '2026-01-01T00:00:00Z',
+            }),
+          }
+        }
+        if (url.includes('/memory'))
+          return { ok: true, status: 200, json: async () => ({ memories: [], total: 0 }) }
+        return { ok: true, status: 200, json: async () => ({}) }
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    renderLearning()
+
+    const saveBtn = await screen.findByRole('button', { name: 'Save to Memory' })
+    fireEvent.click(saveBtn)
+
+    // Button reflects the saved state (implies the POST succeeded)
+    expect(await screen.findByRole('button', { name: 'Saved' })).toBeInTheDocument()
+
+    // POST was issued to /memory with the pattern signal
+    const postCall = (fetchMock.mock.calls as Array<[string, { method?: string; body?: string }]>)
+      .find(([u, o]) => String(u).includes('/memory') && o?.method === 'POST')
+    expect(postCall).toBeTruthy()
+    const payload = JSON.parse(postCall![1].body ?? '{}')
+    expect(payload.target_type).toBe('pattern')
+    expect(payload.signal.recommended_action).toBe('degrade')
   })
 
   it('shows forbidden state when the gateway denies access (403)', async () => {

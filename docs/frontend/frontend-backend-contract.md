@@ -200,6 +200,134 @@ referenced provenance is missing, the trace returns `partial` with explicit
 `report → decision → recommendation → confidence → hypothesis → anomaly →
 pattern → context → evidence → observation`.
 
+### Learning (P7) Read/Compute Capabilities
+
+> External capabilities (ADR-0002). NOT new cognitive stages or persisted
+> entities. Each derives a ***learning signal*** from Decision outcomes
+> (via Outcome Consolidation, the single source of truth for verdicts — no
+> fabrication of failures). The gateway consumes its read stores and never
+> imports the reasoning/perception pipeline.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/tenants/{tenant_id}/patterns/refinement` | Pattern Refinement signal (P7+P4): keep / degrade / deactivate |
+| GET | `/tenants/{tenant_id}/contexts/revision` | Context Revision signal (P7+P2): keep / review / consider_competitor |
+| GET | `/tenants/{tenant_id}/insights/transformations` | Insight Transformation journal (R6): prior → updated mental-model + outcome attribution |
+
+**`PatternRefinementResponse`:**
+```json
+{
+  "tenant_id": "uuid",
+  "total_patterns": "number",
+  "patterns_with_outcomes": "number",
+  "results": [
+    {
+      "pattern_id": "uuid", "pattern_type": "string", "context_id": "uuid",
+      "tenant_id": "uuid", "linked_decisions": "number",
+      "corroborated": "number", "contradicted": "number", "inconclusive": "number",
+      "contradiction_ratio": "number",
+      "current_strength": "number", "recommended_strength": "number",
+      "recommended_action": "keep" | "degrade" | "deactivate"
+    }
+  ]
+}
+```
+
+**`ContextRevisionResponse`:**
+```json
+{
+  "tenant_id": "uuid",
+  "total_contexts": "number",
+  "contexts_with_outcomes": "number",
+  "results": [
+    {
+      "context_id": "uuid", "tenant_id": "uuid", "linked_decisions": "number",
+      "corroborated": "number", "contradicted": "number", "inconclusive": "number",
+      "contradiction_ratio": "number",
+      "has_competing_models": "boolean",
+      "recommended_revision": "keep" | "review" | "consider_competitor",
+      "suggested_competitor": "string | null"
+    }
+  ]
+}
+```
+
+**`InsightTransformationResponse`:**
+```json
+{
+  "tenant_id": "uuid",
+  "total_insights": "number",
+  "results": [
+    {
+      "insight_id": "uuid", "tenant_id": "uuid", "context_id": "uuid | null",
+      "description": "string", "prior_understanding": "string | null",
+      "mental_model_update": "object | null",
+      "transformation_kind": "revised" | "stable" | "unchanged",
+      "linked_recommendations": "number",
+      "linked_decisions_with_outcomes": "number",
+      "corroborated": "number", "contradicted": "number", "inconclusive": "number"
+    }
+  ]
+}
+```
+
+**Notes:**
+- Verdicts come from Outcome Consolidation (`actual_outcomes` missing/ambiguous →
+  `inconclusive`, never a fabricated failure, P1).
+- Pattern Refinement only *adjusts support* — it never invents or removes
+  patterns (P4). `deactivate` lowers `recommended_strength` to 0.
+- Context Revision only *suggests* a competing model (`consider_competitor` +
+  `suggested_competitor`); it never activates or generates a Context (P2).
+- Insight Transformation journals the prior → updated mental-model
+  transformation (R6); classification is descriptive, never a causal claim (P4).
+- All three are surfaced in the frontend at `/learning` (read/only UI).
+
+### Learning Memory Ledger (P7 Persistence, authorized 2026-08-27)
+
+> New persisted entity (`learning_memory`). Append-only and immutable-by-record
+> (P1); idempotent. Canonical entities are NEVER mutated. This is the only P7
+> capability that writes; it is triggered by an explicit, authorized POST.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/tenants/{tenant_id}/memory` | List persisted learning records (query: `target_type`, `target_id`) |
+| POST | `/tenants/{tenant_id}/memory` | Persist a learning signal (idempotent; requires Decision Authority `commit`) |
+
+**Request (`PersistLearningMemoryRequest`):**
+```json
+{
+  "target_type": "pattern" | "context" | "insight",
+  "target_id": "uuid",
+  "signal": { "...": "learned adjustment (free object)" },
+  "provenance": { "...": "decision_ids / counts / verdicts" }
+}
+```
+
+**Response (`LearningMemoryRecord`):**
+```json
+{
+  "id": "uuid",
+  "tenant_id": "uuid",
+  "target_type": "pattern" | "context" | "insight",
+  "target_id": "uuid",
+  "signal": { "...": "..." },
+  "provenance": { "...": "..." },
+  "signal_hash": "sha256-hex",
+  "created_at": "ISO-8601"
+}
+```
+
+**`LearningMemoryResponse` (GET list):** `{ "memories": [LearningMemoryRecord], "total": number }`
+
+**Notes:**
+- Idempotency: re-POSTing an identical `signal` for the same `target_type`/
+  `target_id` is a no-op (UNIQUE `(tenant_id, target_type, target_id, signal_hash)`).
+- Authorization: POST requires `commit` authority (admin/superadmin); GET
+  requires `read`. 401 = no/invalid token, 403 = insufficient authority,
+  400 = invalid `target_type` or non-object `signal`/`provenance`.
+- The frontend `/learning` page lists this ledger ("Persisted Memory") and
+  offers a per-row "Save to Memory" action on each read/compute signal.
+
 ### Tenants (Superadmin)
 
 | Method | Path | Description |

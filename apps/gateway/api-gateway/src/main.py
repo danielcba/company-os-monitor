@@ -44,6 +44,7 @@ async def main():
     from libs.memory.consolidation import ConsolidationStore
     from libs.memory.context_revision import ContextRevisionStore
     from libs.memory.insight_transformation import InsightTransformationStore
+    from libs.memory.memory_ledger import MemoryStore
     from libs.memory.pattern_refinement import PatternRefinementStore
     from libs.shared.db import create_shared_engine
 
@@ -151,6 +152,13 @@ async def main():
         recommendation_store=recommendation_read_store,
     )
 
+    # Learning Memory ledger (P7 persistence, authorized 2026-08-27): a NEW
+    # append-only entity. Distinct from the read/compute capabilities above —
+    # this is the only one that writes (idempotent POST). Canonical entities
+    # are never mutated (P1).
+    memory_store = MemoryStore(dsn)
+    await memory_store.verify_connection()
+
     service = GatewayService(
         jwt,
         decision_store=decision_store,
@@ -166,6 +174,7 @@ async def main():
         pattern_refinement_store=pattern_refinement_store,
         context_revision_store=context_revision_store,
         insight_transformation_store=insight_transformation_store,
+        memory_store=memory_store,
         service_health=_build_service_health(),
         dsn=dsn,
         blacklist=blacklist,
@@ -184,6 +193,7 @@ async def main():
         await decision_store.close()
         await report_store.close()
         await cognitive_trace_store.close()
+        await memory_store.close()
 
 
 if __name__ == "__main__":

@@ -238,6 +238,33 @@ def test_one_active_context_per_purpose_constraint():
 
 
 # ---------------------------------------------------------------------------
+# Learning Memory ledger (P7 persistence, authorized 2026-08-27).
+# ---------------------------------------------------------------------------
+
+
+def test_learning_memory_ledger_migration_is_complete():
+    """P1 + idempotency: the ledger migration defines table, immutability
+    trigger and unique signal index."""
+    schema = Path("infrastructure/docker/init-sql/01-schema.sql").read_text(
+        encoding="utf-8"
+    )
+    migration = Path(
+        "infrastructure/db-migrations/learning-memory-ledger.sql"
+    ).read_text(encoding="utf-8")
+    combined = schema + "\n" + migration
+    assert "learning_memory" in combined, "learning_memory table missing"
+    assert (
+        "learning_memory_immutable_trigger" in combined
+    ), "append-only immutability trigger missing (P1)"
+    assert (
+        "uq_learning_memory_signal" in combined
+    ), "idempotent unique signal index missing"
+    assert "ON CONFLICT" in migration or "DO NOTHING" in migration, (
+        "persist must be idempotent"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Boundary: gateway enforces cognitive boundary (R3).
 # ---------------------------------------------------------------------------
 

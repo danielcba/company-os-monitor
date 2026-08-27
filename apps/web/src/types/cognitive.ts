@@ -688,3 +688,28 @@ export interface InsightTransformationResponse {
   total_insights: number
   results: InsightTransformationResult[]
 }
+
+export type LearningMemoryTargetType = 'pattern' | 'context' | 'insight'
+
+export interface LearningMemoryRecord {
+  id: string
+  tenant_id: string
+  target_type: LearningMemoryTargetType
+  target_id: string
+  signal: Record<string, unknown>
+  provenance: Record<string, unknown>
+  signal_hash: string
+  created_at: string
+}
+
+export interface LearningMemoryResponse {
+  memories: LearningMemoryRecord[]
+  total: number
+}
+
+export interface PersistLearningMemoryRequest {
+  target_type: LearningMemoryTargetType
+  target_id: string
+  signal: Record<string, unknown>
+  provenance: Record<string, unknown>
+}
