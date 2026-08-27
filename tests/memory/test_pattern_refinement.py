@@ -8,12 +8,9 @@ from __future__ import annotations
 import uuid
 
 from libs.memory.pattern_refinement import (
-    MIN_SAMPLES_FOR_REFINEMENT,
-    DEACTIVATE_THRESHOLD,
     PatternRefinementStore,
     _attribute_outcomes,
     _refine_pattern,
-    build_pattern_refinement,
 )
 
 
@@ -77,7 +74,7 @@ def test_attribute_outcomes_counts_corroborated_and_contradicted():
     attr = _attribute_outcomes([d1, d2], [rec], [hyp], [pat])
     assert attr[p1]["corroborated"] == 1
     assert attr[p1]["contradicted"] == 1
-    assert attr[p1]["linked"] == 2
+    assert attr[p1]["linked"] == 2  # noqa: PLR2004
 
 
 def test_attribute_outcomes_skips_missing_actuals():
@@ -113,14 +110,14 @@ def test_refine_pattern_keep_when_few_samples():
     attr = {"corroborated": 1, "contradicted": 0, "inconclusive": 0, "linked": 1}
     res = _refine_pattern(pat, attr)
     assert res.recommended_action == "keep"
-    assert res.recommended_strength == 0.9
+    assert res.recommended_strength == 0.9  # noqa: PLR2004
 
 
 def test_refine_pattern_deactivate_on_high_contradiction():
     pat = _pattern(str(uuid.uuid4()), strength=0.9)
     attr = {"corroborated": 1, "contradicted": 3, "inconclusive": 0, "linked": 4}
     res = _refine_pattern(pat, attr)
-    assert res.contradiction_ratio == 0.75
+    assert res.contradiction_ratio == 0.75  # noqa: PLR2004
     assert res.recommended_action == "deactivate"
     assert res.recommended_strength == 0.0
 
@@ -129,9 +126,9 @@ def test_refine_pattern_degrade_on_some_contradiction():
     pat = _pattern(str(uuid.uuid4()), strength=1.0)
     attr = {"corroborated": 3, "contradicted": 1, "inconclusive": 0, "linked": 4}
     res = _refine_pattern(pat, attr)
-    assert res.contradiction_ratio == 0.25
+    assert res.contradiction_ratio == 0.25  # noqa: PLR2004
     assert res.recommended_action == "degrade"
-    assert res.recommended_strength == 0.75
+    assert res.recommended_strength == 0.75  # noqa: PLR2004
 
 
 def test_refine_pattern_inconclusive_never_counted_as_contradiction():
@@ -149,7 +146,7 @@ def test_refine_pattern_no_fabrication_low_samples_with_contradiction():
     attr = {"corroborated": 0, "contradicted": 1, "inconclusive": 0, "linked": 1}
     res = _refine_pattern(pat, attr)
     assert res.recommended_action == "keep"
-    assert res.recommended_strength == 0.9
+    assert res.recommended_strength == 0.9  # noqa: PLR2004
 
 
 class _DecisionStore:
@@ -204,8 +201,8 @@ async def test_build_pattern_refinement_full_chain():
     )
     report = await store.refine_for_tenant(tenant_id=uuid.UUID(int=1))
     by_pattern = {r.pattern_id: r for r in report.results}
-    assert report.total_patterns == 2
-    assert report.patterns_with_outcomes == 2
+    assert report.total_patterns == 2  # noqa: PLR2004
+    assert report.patterns_with_outcomes == 2  # noqa: PLR2004
     # Both patterns share the same hypothesis => both get corr+contr.
     assert by_pattern[uuid.UUID(p1)].corroborated == 1
     assert by_pattern[uuid.UUID(p1)].contradicted == 1

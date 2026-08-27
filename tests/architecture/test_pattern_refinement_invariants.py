@@ -32,9 +32,11 @@ def test_p4_refinement_only_adjusts_support_never_invents_or_deletes():
     assert "CREATE TABLE" not in src
     tree = ast.parse(src)
     for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute):
-            if node.attr in ("is_active", "strength_measure"):
-                assert not isinstance(node.ctx, ast.Store)
+        if isinstance(node, ast.Attribute) and node.attr in (
+            "is_active",
+            "strength_measure",
+        ):
+            assert not isinstance(node.ctx, ast.Store)
 
 
 def test_r1_single_capability():
