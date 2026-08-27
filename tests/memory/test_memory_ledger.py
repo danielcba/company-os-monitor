@@ -7,10 +7,10 @@ the MemoryStoreProtocol.
 import uuid
 
 from libs.memory.memory_ledger import (
+    TARGET_TYPES,
     LearningMemoryRecord,
     MemoryStoreProtocol,
     PersistLearningMemoryInput,
-    TARGET_TYPES,
     compute_signal_hash,
 )
 
@@ -29,7 +29,7 @@ def _record(target_type="pattern", target_id=None, signal=None) -> LearningMemor
 
 
 def test_target_types_are_canonical():
-    assert TARGET_TYPES == {"pattern", "context", "insight"}
+    assert {"pattern", "context", "insight"} == TARGET_TYPES
 
 
 def test_signal_hash_is_deterministic_and_order_independent():
@@ -89,7 +89,11 @@ class _FakeMemoryStore:
 
     async def get_latest(self, *, tenant_id, target_type, target_id):
         for rec in self._rows.values():
-            if rec.tenant_id == tenant_id and rec.target_type == target_type and rec.target_id == target_id:
+            if (
+                rec.tenant_id == tenant_id
+                and rec.target_type == target_type
+                and rec.target_id == target_id
+            ):
                 return rec
         return None
 
