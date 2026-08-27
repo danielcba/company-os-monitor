@@ -24,8 +24,10 @@ from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
+from libs.action.decision import DecisionStore
 from libs.cognitive_core.calibration_model import CalibrationParams
 from libs.learning.confidence import ConfidenceCreate, ConfidenceStore, build_confidence
+from libs.learning.learning_loop import build_learning_history
 from libs.perception.context import ContextStore
 from libs.perception.evidence import EvidenceStore
 from libs.reasoning.anomaly import AnomalyStore
@@ -79,6 +81,7 @@ class ConfidenceService:
         context_store: ContextStore,
         evidence_store: EvidenceStore,
         confidence_store: ConfidenceStore,
+        decision_store: DecisionStore | None = None,
         params: CalibrationParams | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ):
@@ -87,6 +90,7 @@ class ConfidenceService:
         self.context_store = context_store
         self.evidence_store = evidence_store
         self.confidence_store = confidence_store
+        self.decision_store = decision_store
         self.params = params or CalibrationParams()
         self.batch_size = batch_size
         self.total_confidence_scores = 0
@@ -111,6 +115,43 @@ class ConfidenceService:
     async def _calibrate_tenant(self, tenant_id) -> None:
         # Process hypotheses in batches to avoid loading all into memory
         offset = 0
+
+        # Load learning history for this tenant (P7 feedback loop).
+        # Reads Decisions with actual_outcomes and their Confidence scores
+        # to build (confidence, outcome) pairs for ECE computation.
+        learning_history = None
+        if self.decision_store is not None:
+            try:
+                decisions = await self.decision_store.list_decisions(
+                    tenant_id=tenant_id
+                )
+                decisions_with_outcomes = [
+                    d for d in decisions if d.actual_outcomes
+                ]
+                if decisions_with_outcomes:
+                    all_confidence = await self.confidence_store.list_confidence(
+                        tenant_id=tenant_id
+                    )
+                    learning_history = build_learning_history(
+                        tenant_id, decisions_with_outcomes, all_confidence
+                    )
+            except Exception:
+                log.exception(
+                    "Failed to load learning history for tenant %s; "
+                    "falling back to no-history calibration",
+                    tenant_id,
+                )
+
+        # Build historical pairs for calibrator: [(confidence, outcome), ...]
+        historical = None
+        if (
+            learning_history is not None
+            and learning_history.historical_calibration is not None
+        ):
+            historical = [
+                (p.confidence_score, p.outcome) for p in learning_history.pairs
+            ]
+
         while True:
             hypotheses = await self.hypothesis_store.list_hypotheses(
                 tenant_id=tenant_id, limit=self.batch_size, offset=offset
@@ -138,7 +179,7 @@ class ConfidenceService:
                     "incoherent_with": [],
                 }
                 create = calibrate(
-                    hypothesis, evidence, scope, coherence_inputs, self.params, None
+                    hypothesis, evidence, scope, coherence_inputs, self.params, historical
                 )
                 await self._persist(create)
 
