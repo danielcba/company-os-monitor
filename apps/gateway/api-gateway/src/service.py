@@ -40,6 +40,10 @@ from libs.memory.consolidation import (
     ConsolidationReport,
     ConsolidationStoreProtocol,
 )
+from libs.memory.pattern_refinement import (
+    PatternRefinementReport,
+    PatternRefinementStoreProtocol,
+)
 
 from src.boundary import (
     ACTION_PERMISSION,
@@ -95,6 +99,7 @@ class GatewayService:
         confidence_store: ConfidenceStoreAdapter | None = None,
         cognitive_trace_store: CognitiveTraceStoreProtocol | None = None,
         consolidation_store: ConsolidationStoreProtocol | None = None,
+        pattern_refinement_store: PatternRefinementStoreProtocol | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -110,6 +115,9 @@ class GatewayService:
         )
         self._consolidation_store: ConsolidationStoreProtocol | None = (
             consolidation_store
+        )
+        self._pattern_refinement_store: PatternRefinementStoreProtocol | None = (
+            pattern_refinement_store
         )
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
@@ -435,6 +443,27 @@ class GatewayService:
         ctx = self._resolve_tenant(token, tenant_id)
         report: ConsolidationReport = await self._consolidation_store.consolidate_for_tenant(
             tenant_id=uuid.UUID(ctx.effective_tenant_id),
+        )
+        return report.model_dump(mode="json")
+
+    async def get_pattern_refinement(
+        self,
+        token: TokenPayload,
+        tenant_id: str,
+    ) -> dict[str, Any]:
+        """READ the Pattern Refinement (P7) signal for the tenant scope.
+
+        External read/compute capability (ADR-0002): it computes which Patterns
+        should be kept/degraded/deactivated based on Decision outcomes. No new
+        entity is created (Memory persistence remains planned per the framework).
+        """
+        if self._pattern_refinement_store is None:
+            raise RuntimeError("pattern_refinement_store not configured in gateway")
+        ctx = self._resolve_tenant(token, tenant_id)
+        report: PatternRefinementReport = (
+            await self._pattern_refinement_store.refine_for_tenant(
+                tenant_id=uuid.UUID(ctx.effective_tenant_id),
+            )
         )
         return report.model_dump(mode="json")
 

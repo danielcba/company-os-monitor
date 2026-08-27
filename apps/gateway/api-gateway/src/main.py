@@ -42,6 +42,7 @@ async def main():
     from libs.action.report import ReportStore
     from libs.cognitive_core.summary import CognitiveSummaryStore
     from libs.memory.consolidation import ConsolidationStore
+    from libs.memory.pattern_refinement import PatternRefinementStore
     from libs.shared.db import create_shared_engine
 
     from src.audit import AuditLogReadStore
@@ -51,6 +52,7 @@ async def main():
     from src.hypotheses import HypothesisReadStore
     from src.insights import InsightReadStore
     from src.observations import ObservationReadStore
+    from src.patterns import PatternReadStore
     from src.recommendations import RecommendationReadStore
 
     algorithm = os.getenv("JWT_ALGORITHM", "HS256")
@@ -92,6 +94,19 @@ async def main():
     # Decision store (external capability, ADR-0002). No new entity/persistence.
     consolidation_store = ConsolidationStore(decision_store=decision_store)
 
+    # Pattern Refinement (P7): read/compute over the canonical gateway read
+    # stores (external capability, ADR-0002). The gateway boundary forbids
+    # importing the reasoning/perception pipeline packages, so this capability
+    # consumes the read contract (dict payloads) only — the traceability chain
+    # Decision -> Recommendation -> Hypothesis -> Pattern feeds the signal.
+    pattern_read_store = PatternReadStore(dsn)
+    pattern_refinement_store = PatternRefinementStore(
+        decision_store=decision_read_store,
+        recommendation_store=recommendation_read_store,
+        hypothesis_store=hypothesis_store,
+        pattern_store=pattern_read_store,
+    )
+
     await decision_store.verify_connection()
     await report_store.verify_connection()
     await observation_store.verify_connection()
@@ -102,6 +117,7 @@ async def main():
     await recommendation_read_store.verify_connection()
     await decision_read_store.verify_connection()
     await cognitive_trace_store.verify_connection()
+    await pattern_read_store.verify_connection()
 
     service = GatewayService(
         jwt,
@@ -115,6 +131,7 @@ async def main():
         recommendation_read_store=recommendation_read_store,
         cognitive_trace_store=cognitive_trace_store,
         consolidation_store=consolidation_store,
+        pattern_refinement_store=pattern_refinement_store,
         service_health=_build_service_health(),
         dsn=dsn,
         blacklist=blacklist,
