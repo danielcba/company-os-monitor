@@ -143,7 +143,7 @@ class TimelineEvent:
     target_id: str | None = None
     status: str | None = None
 
-    def to_payload(self) -> dict[str, str]:
+    def to_payload(self) -> dict[str, str | None]:
         return {
             "tenant_id": str(self.tenant_id),
             "layer": self.layer,
