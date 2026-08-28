@@ -44,6 +44,17 @@ SELECT_OBSERVATIONS = text(
     """
 )
 
+SELECT_OBSERVATIONS_SINCE = text(
+    """
+    SELECT id, tenant_id, source_id, source_type, fact_type, fact_value,
+           unit, captured_at, quality_class, raw_payload
+    FROM observations
+    WHERE tenant_id = :tenant_id AND captured_at >= :since
+    ORDER BY captured_at, id
+    LIMIT :limit
+    """
+)
+
 
 class ObservationStore:
     """Persistence gateway for the Evidence Store (PostgreSQL observations table)."""
@@ -104,6 +115,28 @@ class ObservationStore:
             result = await session.execute(
                 SELECT_OBSERVATIONS,
                 {"tenant_id": tenant_id, "limit": limit, "offset": offset},
+            )
+            rows = []
+            for mapping in result.mappings():
+                row = dict(mapping)
+                if isinstance(row["fact_value"], str):
+                    row["fact_value"] = json.loads(row["fact_value"])
+                if isinstance(row["raw_payload"], str):
+                    row["raw_payload"] = json.loads(row["raw_payload"])
+                rows.append(row)
+            return rows
+
+    async def list_observations_since(
+        self, *, tenant_id: uuid.UUID, since: datetime, limit: int = 1000
+    ) -> list[dict[str, Any]]:
+        """Read-only load of observations since a given timestamp.
+
+        Used by the Evaluation Service to get new evidence for hypothesis evaluation.
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                SELECT_OBSERVATIONS_SINCE,
+                {"tenant_id": tenant_id, "since": since, "limit": limit},
             )
             rows = []
             for mapping in result.mappings():

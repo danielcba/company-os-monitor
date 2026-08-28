@@ -157,10 +157,20 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     needs: lint-and-test
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      github.event_name == 'pull_request' ||
+      startsWith(github.ref, 'refs/heads/feature/')
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Build Evaluation Service image
+        run: |
+          docker build \
+            -f apps/services/evaluation-service/Dockerfile \
+            -t evaluation-service:ci \
+            .
 
       - name: Build Docker images
         run: |

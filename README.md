@@ -48,7 +48,9 @@ company-os-monitor/
 ```
 Reality → Observation → Evidence → Context → Pattern → Anomaly
        → Hypothesis → Confidence → Recommendation → Decision
-       → Report → Memory (planned)
+       → Report → Memory (consolidation, pattern_refinement, context_revision,
+                         insight_transformation read/compute operativas;
+                         learning_memory ledger append-only, authorized)
 ```
 
 ---
@@ -132,6 +134,61 @@ Response contract (stable, serializable):
 Frontend contract: `CognitiveTraceResponse` / `fetchCognitiveTrace(tenantId, reportId)`
 in `apps/web/src/api/gateway.ts` and `apps/web/src/types/cognitive.ts`
 (types only — the full Trace UI is a future phase).
+
+---
+
+## Hypothesis Evaluation Service (Reasoning / Evaluate)
+
+The Evaluation Service closes the Learning Loop: it periodically evaluates each
+tenant's **candidate** Hypotheses against **new Evidence** produced by Perception
+since the hypothesis was generated, applies the formal Evaluation Policy, and
+persists immutable, idempotent `Evaluation` records. It updates the Hypothesis
+status (the only allowed lifecycle mutation) only on a reliable evidence basis.
+
+| Property | Value |
+| --- | --- |
+| Port | `8102` (`EVALUATION_HEALTH_PORT`) — distinct from decision-service `8097` |
+| Health | `GET /health` (readiness: reports `unhealthy`/503 if the DB is down) |
+| Metrics | `GET /metrics` (cycles, evaluations, confirmed/falsified/insufficient, duplicates, errors, last successful cycle) |
+| Runtime | started/stopped by `./start.sh` / `./stop.sh` (in `SERVICE_SPECS`) |
+
+**Cognitive boundary (R3/R7).** The Evaluate capability consumes **Evidence**
+(the canonical Perception artifact), never the raw Observation store. Evaluation
+is a Reasoning-stage operation and must act on organized knowledge, not on raw
+perception data.
+
+**Formal semantics.**
+- *Falsified* — the falsification criterion is met by evidence. Confidence is a
+  metacognitive calibration and does **not** override contradictory evidence:
+  high Confidence never blocks falsification.
+- *Confirmed* — enough predictions corroborated AND calibrated Confidence above
+  threshold AND no falsification met. Confidence is necessary-but-not-sufficient
+  gating, never a substitute for evidence.
+- *Insufficient* — otherwise; the Hypothesis stays candidate.
+
+The MVP matcher over Evidence descriptions is explicitly **heuristic**
+(`MATCHER_RELIABILITY = "heuristic"`). Because textual matching is not a reliable
+evaluator, the service does **not** auto-promote a Hypothesis to a terminal state
+on a heuristic signal: it records the evaluation as `insufficient` and preserves
+the candidate. The formal rules (confirmed/falsified) are exercised on a reliable
+evidence basis (future structured matcher).
+
+**Immutability & idempotence.** Each `Evaluation` is append-only (DB trigger
+blocks UPDATE/DELETE). The deterministic `evaluation_id` is content-addressed
+from tenant + hypothesis + evidence ids + result (no timestamp), so a re-run with
+the same evidence is deduped (`ON CONFLICT DO NOTHING`) while new evidence yields
+a new row, preserving the full history.
+
+---
+
+## Framework / Monitor Relationship
+
+Company OS (Framework) is the cognitive authority (read-only for this product).
+COS-Monitor is the product (ADR-0002). Where the Framework lists a capability as
+*planned* (e.g. Memory), the Monitor's **Learning Memory ledger** and **Learning
+Loop** are implemented as **authorized product capabilities** of the Monitor — not
+a silent modification of the Framework. The framework is never edited by this
+repository.
 
 ---
 

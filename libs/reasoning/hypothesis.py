@@ -1,11 +1,11 @@
-"""Hypothesis model + append-only persistence (Reasoning - Predict).
+"""Hypothesis model + append-only persistence + evaluation (Reasoning - Predict).
 
 P1: a Hypothesis is immutable once generated; it is only appended. All content
 columns (anomaly_ids, pattern_ids, description, predicted_consequences,
 falsification_criterion, coherence_score, generated_at) are assigned at
 generation and never retrofitted; ``status`` is a lifecycle field
-(candidate -> confirmed/falsified is decided later by future evidence and
-Confidence, Sprint 8), so only ``status`` may change afterwards. The row is
+(candidate -> confirmed/falsified is decided by evidence evaluation),
+so only ``status`` may change afterwards. The row is
 never deleted (persistent audit trail; enforced by the content trigger).
 
 The deterministic ``hypothesis_id`` includes the tenant, the anomalies and
@@ -15,6 +15,12 @@ the framework: premature convergence on a single explanation is a cognitive
 failure) while re-generating the same hypothesis over the same facts produces
 the same id (idempotent dedup by primary key). ``generated_at`` is deliberately
 NOT part of the id: it would break idempotence between runs.
+
+Hypothesis Evaluation (P7): ``evaluate_hypothesis`` closes the loop by comparing
+new evidence against ``predicted_consequences`` and ``falsification_criterion``.
+It considers evidence sufficiency, corroboration, and falsification - NOT just
+confidence threshold. The evaluation produces an ``EvaluationResult`` with full
+provenance for the Learning Memory ledger.
 """
 import json
 import uuid
@@ -38,6 +44,145 @@ STATUS_FALSIFIED = "falsified"
 HYPOTHESIS_STATUSES: frozenset[str] = frozenset(
     {STATUS_CANDIDATE, STATUS_CONFIRMED, STATUS_FALSIFIED}
 )
+
+
+class EvaluationResult(BaseModel):
+    """Result of evaluating a hypothesis against evidence.
+
+    Follows P1 (no fabrication): inconclusive evidence never fabricates
+    a status change. The evaluation is traceable and deterministic.
+    """
+
+    hypothesis_id: uuid.UUID
+    prior_status: str
+    new_status: str
+    evaluation_rationale: str
+    supporting_evidence_count: int
+    contradicting_evidence_count: int
+    evidence_sufficient: bool
+    falsification_criterion_met: bool
+    predicted_consequences_corroborated: int
+    predicted_consequences_total: int
+    confidence_score: float | None = None
+    evaluation_timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    model_config = ConfigDict(frozen=True)
+
+
+def _evidence_matches_prediction(evidence: dict[str, Any], prediction: str) -> bool:
+    """Check if evidence matches a predicted consequence (simple substring match for MVP).
+
+    In future, this could use structured matching against evidence fields.
+    """
+    evidence_text = json.dumps(evidence, default=str).lower()
+    return prediction.lower() in evidence_text
+
+
+def _evidence_matches_falsification(evidence: dict[str, Any], falsification_criterion: str) -> bool:
+    """Check if evidence matches the falsification criterion."""
+    evidence_text = json.dumps(evidence, default=str).lower()
+    return falsification_criterion.lower() in evidence_text
+
+
+def evaluate_hypothesis(
+    hypothesis: "Hypothesis",
+    *,
+    supporting_evidence: list[dict[str, Any]] | None = None,
+    contradicting_evidence: list[dict[str, Any]] | None = None,
+    confidence_score: float | None = None,
+) -> EvaluationResult:
+    """Evaluate a hypothesis against new evidence.
+
+    Implements the framework's hypothesis evaluation rules:
+    - Insufficient evidence -> candidate (no change)
+    - Evidence satisfying falsification criterion -> falsified
+    - Sufficient evidence corroborating predictions -> confirmed
+    - Contradictory but insufficient evidence -> candidate (no change)
+
+    Confidence is NOT the sole criterion. The evaluation considers:
+    - predicted_consequences (observable, falsifiable predictions)
+    - falsification_criterion (concrete outcome that would falsify)
+    - supporting evidence (evidence matching predictions)
+    - contradicting evidence (evidence matching falsification criterion)
+    - confidence (calibrated estimate, supporting not deciding)
+    - evidence sufficiency (minimum threshold for status change)
+
+    Returns an EvaluationResult with the new status and full rationale.
+    """
+    supporting_evidence = supporting_evidence or []
+    contradicting_evidence = contradicting_evidence or []
+
+    # Count predicted consequences that have supporting evidence
+    corroborated_count = 0
+    for prediction in hypothesis.predicted_consequences:
+        for ev in supporting_evidence:
+            if _evidence_matches_prediction(ev, prediction):
+                corroborated_count += 1
+                break
+
+    # Check if falsification criterion is met by contradicting evidence
+    falsification_met = False
+    for ev in contradicting_evidence:
+        if _evidence_matches_falsification(ev, hypothesis.falsification_criterion):
+            falsification_met = True
+            break
+
+    # Evidence sufficiency: need at least one prediction tested AND
+    # either corroborated OR falsification criterion tested
+    total_predictions = len(hypothesis.predicted_consequences)
+    predictions_tested = sum(
+        1
+        for pred in hypothesis.predicted_consequences
+        if any(
+            _evidence_matches_prediction(ev, pred)
+            for ev in supporting_evidence + contradicting_evidence
+        )
+    )
+    evidence_sufficient = predictions_tested > 0 and (
+        corroborated_count > 0 or falsification_met
+    )
+
+    # Determine new status
+    prior_status = hypothesis.status
+    if prior_status in (STATUS_CONFIRMED, STATUS_FALSIFIED):
+        # Terminal states: no re-evaluation (append-only, P1)
+        new_status = prior_status
+        rationale = f"Hypothesis already {prior_status}; evaluation is append-only per P1"
+    elif falsification_met:
+        new_status = STATUS_FALSIFIED
+        rationale = "Falsification criterion met by contradicting evidence"
+    elif evidence_sufficient and corroborated_count > total_predictions * 0.5:
+        # Strict majority of predictions corroborated and evidence sufficient
+        new_status = STATUS_CONFIRMED
+        rationale = (
+            f"Sufficient evidence corroborates {corroborated_count}/"
+            f"{total_predictions} predictions (strict majority)"
+        )
+    elif evidence_sufficient and corroborated_count > 0:
+        # Some corroboration but not majority; remain candidate
+        new_status = STATUS_CANDIDATE
+        rationale = (
+            f"Partial corroboration ({corroborated_count}/{total_predictions}) "
+            f"but not majority; remains candidate"
+        )
+    else:
+        # Insufficient evidence or no relevant evidence
+        new_status = STATUS_CANDIDATE
+        rationale = "Insufficient evidence for status change; remains candidate"
+
+    return EvaluationResult(
+        hypothesis_id=hypothesis.id,
+        prior_status=prior_status,
+        new_status=new_status,
+        evaluation_rationale=rationale,
+        supporting_evidence_count=len(supporting_evidence),
+        contradicting_evidence_count=len(contradicting_evidence),
+        evidence_sufficient=evidence_sufficient,
+        falsification_criterion_met=falsification_met,
+        predicted_consequences_corroborated=corroborated_count,
+        predicted_consequences_total=total_predictions,
+        confidence_score=confidence_score,
+    )
 
 
 def hypothesis_id(
@@ -164,6 +309,27 @@ SELECT_HYPOTHESES = text(
 
 SELECT_TENANT_IDS = text("SELECT DISTINCT tenant_id FROM hypotheses")
 
+SELECT_HYPOTHESIS_BY_ID = text(
+    """
+    SELECT id, tenant_id, anomaly_ids, pattern_ids, description,
+           predicted_consequences, falsification_criterion, coherence_score,
+           status, generated_at
+    FROM hypotheses
+    WHERE id = :id AND tenant_id = :tenant_id
+    """
+)
+
+UPDATE_HYPOTHESIS_STATUS = text(
+    """
+    UPDATE hypotheses
+    SET status = :status
+    WHERE id = :id AND tenant_id = :tenant_id
+    RETURNING id, tenant_id, anomaly_ids, pattern_ids, description,
+              predicted_consequences, falsification_criterion, coherence_score,
+              status, generated_at
+    """
+)
+
 
 class HypothesisStore:
     """Persistence gateway for the Hypothesis Store (PostgreSQL hypotheses table)."""
@@ -235,6 +401,54 @@ class HypothesisStore:
         async with self._session_factory() as session:
             result = await session.execute(SELECT_TENANT_IDS)
             return [row[0] for row in result.all()]
+
+    async def get_hypothesis_by_id(
+        self, *, tenant_id: uuid.UUID, hypothesis_id: uuid.UUID
+    ) -> Hypothesis | None:
+        """Get a specific hypothesis by ID (tenant-scoped).
+
+        Returns the hypothesis if found and belongs to the tenant, None otherwise.
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                SELECT_HYPOTHESIS_BY_ID,
+                {"tenant_id": tenant_id, "id": hypothesis_id},
+            )
+            row = result.mappings().one_or_none()
+            if row is None:
+                return None
+            row_dict = dict(row)
+            if isinstance(row_dict["predicted_consequences"], str):
+                row_dict["predicted_consequences"] = json.loads(
+                    row_dict["predicted_consequences"]
+                )
+            return Hypothesis(**row_dict)
+
+    async def update_hypothesis_status(
+        self, *, tenant_id: uuid.UUID, hypothesis_id: uuid.UUID, status: str
+    ) -> Hypothesis | None:
+        """Update the status of a hypothesis (the only allowed mutation).
+
+        Only 'confirmed' or 'falsified' are valid status transitions from 'candidate'.
+        Returns the updated hypothesis, or None if not found.
+        """
+        if status not in (STATUS_CONFIRMED, STATUS_FALSIFIED):
+            raise ValueError("Invalid status transition")  # noqa: TRY003
+        async with self._session_factory() as session:
+            result = await session.execute(
+                UPDATE_HYPOTHESIS_STATUS,
+                {"tenant_id": tenant_id, "id": hypothesis_id, "status": status},
+            )
+            await session.commit()
+            row = result.mappings().one_or_none()
+            if row is None:
+                return None
+            row_dict = dict(row)
+            if isinstance(row_dict["predicted_consequences"], str):
+                row_dict["predicted_consequences"] = json.loads(
+                    row_dict["predicted_consequences"]
+                )
+            return Hypothesis(**row_dict)
 
     async def verify_connection(self) -> None:
         """Fail fast if the database is unreachable."""

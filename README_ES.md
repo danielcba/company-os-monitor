@@ -77,7 +77,9 @@ Disciplina de diseño:
 ```
 Realidad → Observación → Evidencia → Contexto → Patrón → Anomalía
        → Hipótesis → Confianza → Recomendación → Decisión
-       → Reporte → Memoria (futura)
+       → Reporte → Memoria (consolidación, pattern_refinement, context_revision,
+                           insight_transformation read/compute operativas;
+                           learning_memory ledger append-only, autorizada)
 ```
 
 Cada paso consume solo los artefactos de los pasos anteriores (conocimiento), nunca observaciones crudas después de Perception, y nunca produce acción antes de Confidence.

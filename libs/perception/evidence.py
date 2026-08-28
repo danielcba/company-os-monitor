@@ -142,6 +142,18 @@ class EvidenceStore:
             )
             return [Evidence(**dict(row)) for row in result.mappings()]
 
+    async def list_evidence_since(
+        self, *, tenant_id: uuid.UUID, since: datetime
+    ) -> list[Evidence]:
+        """Load Evidence organized at or after ``since`` (inclusive).
+
+        Used by the Evaluate capability to fetch only the knowledge produced
+        after a Hypothesis was generated. Evidence is the canonical Perception
+        artifact consumed by Reasoning/Evaluate (never raw Observations).
+        """
+        rows = await self.list_evidence(tenant_id=tenant_id)
+        return [ev for ev in rows if ev.organized_at >= since]
+
     async def list_tenant_ids(self) -> list[uuid.UUID]:
         """Tenants that currently have at least one Evidence row (competition inputs)."""
         async with self._session_factory() as session:
