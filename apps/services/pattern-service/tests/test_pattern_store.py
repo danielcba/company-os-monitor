@@ -109,11 +109,19 @@ async def _seed_observation(tenant_id: uuid.UUID) -> uuid.UUID:
 
 
 async def _seed_context_stream(tenant_id: uuid.UUID, context_store: ContextStore, evidence_ids) -> list[Context]:
-    """Three capacity_risk/infrastructure_health activations, one week apart."""
+    """Three capacity_risk/infrastructure_health activations, one week apart.
+
+    Uses ``datetime.now(UTC)`` (not the fixed module-level ``NOW``) so the
+    activations stay inside the detector's 28-day window regardless of when the
+    test runs. ``PatternService.run_detection_cycle`` evaluates against the real
+    clock, so the seed must be relative to it (otherwise the oldest activation
+    drifts out of the window and only 2 of 3 are counted).
+    """
+    now = datetime.now(UTC)
     contexts = [
-        make_context(tenant_id, "capacity_risk", "infrastructure_health", NOW - timedelta(days=14), evidence_ids),
-        make_context(tenant_id, "capacity_risk", "infrastructure_health", NOW - timedelta(days=7), evidence_ids),
-        make_context(tenant_id, "capacity_risk", "infrastructure_health", NOW, evidence_ids),
+        make_context(tenant_id, "capacity_risk", "infrastructure_health", now - timedelta(days=14), evidence_ids),
+        make_context(tenant_id, "capacity_risk", "infrastructure_health", now - timedelta(days=7), evidence_ids),
+        make_context(tenant_id, "capacity_risk", "infrastructure_health", now, evidence_ids),
     ]
     for ctx in contexts:
         await context_store.save_context(ctx)
