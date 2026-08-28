@@ -249,3 +249,59 @@ Endpoint (gateway, tenant-scoped, autoridad `read`):
 ```
 GET /api/v1/tenants/{tenant_id}/cognitive-trace/report/{report_id}
 ```
+
+---
+
+## 9. Hypothesis Evaluation — Límites y Semántica Formal (Learning-Loop Hardening)
+
+### 9.1 Frontera Cognitiva: Evaluation consume Evidence, no Observation
+
+El Evaluate (Reasoning) **nunca** lee el `ObservationStore`. Consume **Evidence**,
+el artefacto canónico de Perception (Observation → Evidence → Context → ... →
+Hypothesis → Evaluation). Leer observaciones crudas directamente viola R3/R7
+(Reasoning actúa sobre conocimiento organizado, no sobre el mundo crudo).
+
+### 9.2 Matcher explícito y confiabilidad
+
+El matcher MVP es **heurístico** (textual sobre `description`/`organization_type`
+de Evidence, `MATCHER_RELIABILITY = "heuristic"`). El matching textual puede
+producir falsos positivos, por lo que **no es un evaluator confiable**: el
+servicio **no auto-promueve** una Hypothesis a estado terminal (confirmed/falsified)
+sobre señal heurística. Registra la Evaluation como `insufficient` y preserva el
+candidato. Las reglas formales (confirmed/falsified) se ejercen sobre una base de
+evidencia confiable/estructurada (futuro).
+
+### 9.3 Falsificación no depende de Confidence
+
+`falsified` se decide por evidencia: si el falsification criterion se cumple, la
+hypothesis queda falsificada **independientemente del Confidence**. Confidence es
+calibración metacognitiva del sistema, no una propiedad de la realidad; un
+Confidence alto no hace desaparecer evidencia contradictoria. El audit anterior
+("criterion met pero confidence high ⇒ no falsified") se corrigió: esa regla no
+tiene fundamento en el Framework.
+
+### 9.4 Confirmación: Confidence como gating, no sustituto
+
+`confirmed` requiere (a) suficientes predicciones corroboradas, (b) Confidence por
+encima del umbral de calibración, y (c) ningún falsification criterion cumplido.
+La corroboración de evidencia es el driver primario; Confidence es
+necesario-pero-no-suficiente (calibra la fuerza de la conclusión, no la crea).
+
+### 9.5 Inmutabilidad, idempotencia y lifecycle
+
+- `Evaluation` es append-only (trigger bloquea UPDATE/DELETE).
+- `evaluation_id` es content-addressed: tenant + hypothesis + evidence_ids + result
+  (sin timestamp). Mismo input ⇒ mismo id ⇒ dedup; nueva evidencia ⇒ nueva fila
+  (historia preservada).
+- lifecycle: candidate → confirmed/falsified (terminal) vía evidencia; si no,
+  permanece candidate. El servicio MVP no transiciona a terminal sobre señal
+  heurística.
+- Port `8102` (`EVALUATION_HEALTH_PORT`), distinto de decision-service `8097`.
+
+### 9.6 Framework vs Monitor (drift controlado)
+
+Company OS (Framework) es la autoridad cognitiva (read-only para este producto).
+COS-Monitor es el producto (ADR-0002). Donde el Framework lista una capacidad como
+*planned* (p.ej. Memory), el **Learning Memory ledger** y el **Learning Loop** del
+Monitor son **capacidades de producto autorizadas**, no una modificación silenciosa
+del Framework. Este repositorio nunca edita el Framework.
