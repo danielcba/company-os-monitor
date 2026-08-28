@@ -146,13 +146,51 @@ infra_up() {
   docker compose -f "$COMPOSE_FILE" up -d
 
   local i
-  log "waiting for postgres"
+  log "waiting for postgres (connection)"
   for i in $(seq 1 60); do
     if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U cosmonitor >/dev/null 2>&1; then
-      echo "  [ok] postgres ready"
+      echo "  [ok] postgres connection ready"
       break
     fi
     [ "$i" = "60" ] && die "postgres did not become ready (docker compose logs postgres)"
+    sleep 2
+  done
+
+  # The postgres entrypoint runs the init SQL (01-schema.sql, 02-seed.sql,
+  # 03-add-indexes.sql) against a temporary server, then SHUTS THAT SERVER DOWN
+  # and restarts PostgreSQL for normal operation. On a reused volume it skips
+  # init entirely and starts the final server directly. Either way, the reliable
+  # signal that the LIVE server is ready for connections is a STABLE postmaster
+  # start time: during the fresh-init restart the start time changes, so we wait
+  # until two consecutive reads (with a short gap) agree AND pg_isready is ready
+  # in between. This is safe for both fresh and reused volumes and avoids running
+  # migrations against the temporary init server.
+  log "waiting for postgres (live server ready, init restart settled)"
+  local t1 t2
+  for i in $(seq 1 120); do
+    if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U cosmonitor >/dev/null 2>&1; then
+      t1="$(docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U cosmonitor -d cosmonitor -tAc "SELECT extract(epoch from pg_postmaster_start_time())" 2>/dev/null)"
+      sleep 3
+      if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U cosmonitor >/dev/null 2>&1; then
+        t2="$(docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U cosmonitor -d cosmonitor -tAc "SELECT extract(epoch from pg_postmaster_start_time())" 2>/dev/null)"
+        if [ -n "$t1" ] && [ "$t1" = "$t2" ]; then
+          echo "  [ok] postgres live server ready (stable)"
+          break
+        fi
+      fi
+    fi
+    [ "$i" = "120" ] && die "postgres did not become ready (docker compose logs postgres)"
+    sleep 2
+  done
+
+  # Final confirmation that the base schema is present (table created last by
+  # 01-schema.sql). Safe now that the live server is stable.
+  for i in $(seq 1 30); do
+    if docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U cosmonitor -d cosmonitor -tc "SELECT 1 FROM information_schema.tables WHERE table_name='learning_memory'" 2>/dev/null | grep -q 1; then
+      echo "  [ok] base schema present"
+      break
+    fi
+    [ "$i" = "30" ] && die "postgres base schema missing (docker compose logs postgres)"
     sleep 2
   done
 

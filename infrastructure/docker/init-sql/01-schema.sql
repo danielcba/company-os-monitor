@@ -270,42 +270,12 @@ CREATE TRIGGER hypothesis_content_immutable_trigger
     BEFORE UPDATE OR DELETE ON hypotheses
     FOR EACH ROW EXECUTE FUNCTION prevent_hypothesis_content_update();
 
--- Hypothesis Evaluations: Assessment of hypotheses against new evidence (Reasoning - Evaluate)
-CREATE TABLE hypothesis_evaluations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    hypothesis_id UUID NOT NULL REFERENCES hypotheses(id) ON DELETE CASCADE,
-    evidence_ids UUID[] NOT NULL DEFAULT '{}',
-    observed_outcomes JSONB NOT NULL DEFAULT '[]',
-    support_count INTEGER NOT NULL DEFAULT 0 CHECK (support_count >= 0),
-    contradiction_count INTEGER NOT NULL DEFAULT 0 CHECK (contradiction_count >= 0),
-    confidence_id UUID REFERENCES confidence_scores(id) ON DELETE SET NULL,
-    result VARCHAR(20) NOT NULL CHECK (result IN ('confirmed', 'falsified', 'insufficient')),
-    rationale TEXT NOT NULL,
-    evaluated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_evaluations_tenant_hypothesis ON hypothesis_evaluations(tenant_id, hypothesis_id, evaluated_at DESC);
-CREATE INDEX idx_evaluations_tenant_result ON hypothesis_evaluations(tenant_id, result, evaluated_at DESC);
-
--- Evaluation content is immutable (P1): tenant_id, hypothesis_id, evidence_ids,
--- observed_outcomes, support_count, contradiction_count, confidence_id, result,
--- rationale and evaluated_at are assigned at evaluation and never retrofitted.
--- There is NO lifecycle flag: an evaluation is a one-shot assessment, so both
--- UPDATE and DELETE are blocked (same policy as evidence). A re-evaluation with
--- new evidence produces a NEW deterministic row (idempotent dedup), never an
--- UPDATE of an existing one.
-CREATE OR REPLACE FUNCTION prevent_evaluation_content_update()
-RETURNS TRIGGER AS $$
-BEGIN
-    RAISE EXCEPTION 'Hypothesis evaluations are immutable (P1). No UPDATE/DELETE allowed.';
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER evaluation_content_immutable_trigger
-    BEFORE UPDATE OR DELETE ON hypothesis_evaluations
-    FOR EACH ROW EXECUTE FUNCTION prevent_evaluation_content_update();
-
+-- Hypothesis Evaluations table is created by the idempotent migration
+-- infrastructure/db-migrations/sprint18-hypothesis-evaluation.sql, which is the
+-- single canonical definition. It is intentionally NOT defined here to avoid a
+-- forward-FK ordering issue (the table references confidence_scores, defined
+-- later in this file) and a duplicate DDL definition. The migration is applied
+-- by both CI and start.sh after the base schema is loaded.
 -- Insights: Restructured understanding (Reasoning - Restructure)
 CREATE TABLE insights (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

@@ -40,7 +40,6 @@ async def main():
     from libs.access.token_blacklist import TokenBlacklist
     from libs.action.decision import DecisionStore
     from libs.action.report import ReportStore
-    from libs.cognitive_core.summary import CognitiveSummaryStore
     from libs.memory.cognitive_timeline import CognitiveTimelineStore
     from libs.memory.consolidation import ConsolidationStore
     from libs.memory.context_revision import ContextRevisionStore
@@ -62,6 +61,7 @@ async def main():
     from src.observations import ObservationReadStore
     from src.patterns import PatternReadStore
     from src.recommendations import RecommendationReadStore
+    from src.summary import CognitiveSummaryStore
 
     algorithm = os.getenv("JWT_ALGORITHM", "HS256")
     jwt = JwtService(
