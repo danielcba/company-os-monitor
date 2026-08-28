@@ -12,6 +12,7 @@ from libs.reasoning.evaluation import (
     create_evaluation,
     evaluation_id,
 )
+from pydantic import ValidationError
 
 
 def test_evaluation_id_is_deterministic_and_content_addressed():
@@ -87,7 +88,7 @@ def test_evaluation_model_is_frozen():
         rationale="Test rationale",
     )
     evaluation = build_evaluation(create)
-    with pytest.raises(Exception):  # Pydantic frozen model
+    with pytest.raises(ValidationError):  # Pydantic frozen model
         evaluation.result = "falsified"
 
 
@@ -149,7 +150,7 @@ def test_evaluation_results_constants():
 
 def test_evaluation_create_validation():
     """Test that result must be one of the valid results."""
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         EvaluationCreate(
             tenant_id=uuid.uuid4(),
             hypothesis_id=uuid.uuid4(),
