@@ -48,7 +48,9 @@ company-os-monitor/
 ```
 Reality → Observation → Evidence → Context → Pattern → Anomaly
        → Hypothesis → Confidence → Recommendation → Decision
-       → Report → Memory (planned)
+       → Report → Memory (consolidation, pattern_refinement, context_revision,
+                         insight_transformation read/compute operativas;
+                         learning_memory ledger append-only, authorized)
 ```
 
 ---

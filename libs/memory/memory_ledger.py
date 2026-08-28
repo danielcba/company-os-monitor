@@ -26,7 +26,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-TARGET_TYPES = frozenset({"pattern", "context", "insight"})
+TARGET_TYPES = frozenset({"pattern", "context", "insight", "decision"})
 
 
 @dataclass(slots=True)

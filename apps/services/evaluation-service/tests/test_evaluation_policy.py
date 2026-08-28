@@ -13,21 +13,18 @@ I. re-evaluation (new evidence produces new evaluation row)
 """
 import uuid
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
-
-import pytest
 
 from libs.learning.confidence import Confidence, ConfidenceCreate, build_confidence
 from libs.reasoning.evaluation_policy import (
-    MIN_CONTRADICTIONS_FOR_FALSIFICATION,
-    MIN_PREDICTIONS_FOR_CONFIRMATION,
     CONFIDENCE_THRESHOLD_CONFIRM,
     CONFIDENCE_THRESHOLD_FALSIFY,
+    MIN_CONTRADICTIONS_FOR_FALSIFICATION,
+    MIN_PREDICTIONS_FOR_CONFIRMATION,
     EvaluationInputs,
     apply_evaluation_policy,
     evaluate_evidence_against_hypothesis,
 )
-from libs.reasoning.hypothesis import Hypothesis, STATUS_CANDIDATE
+from libs.reasoning.hypothesis import STATUS_CANDIDATE, Hypothesis
 
 
 def make_hypothesis(

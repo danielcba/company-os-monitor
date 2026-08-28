@@ -77,7 +77,9 @@ Design discipline:
 ```
 Reality → Observation → Evidence → Context → Pattern → Anomaly
        → Hypothesis → Confidence → Recommendation → Decision
-       → Report → Memory (planned)
+       → Report → Memory (consolidation, pattern_refinement, context_revision,
+                         insight_transformation read/compute operativas;
+                         learning_memory ledger append-only, authorized)
 ```
 
 Each step consumes only the artifacts of the previous steps (knowledge), never raw observations after Perception, and never produces action before Confidence.

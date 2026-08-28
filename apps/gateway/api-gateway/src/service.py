@@ -439,6 +439,11 @@ class GatewayService:
         After persisting the outcomes, automatically runs the P7 Learning Loop:
         Consolidation → Pattern Refinement → Context Revision → Insight
         Transformation → Memory Ledger persistence.
+
+        Returns a result that distinguishes:
+        - outcome accepted + learning completed
+        - outcome accepted + learning failed
+        - outcome accepted + learning pending (not configured)
         """
         if self._decision_read_store is None:
             raise RuntimeError("decision_read_store not configured in gateway")
@@ -458,6 +463,7 @@ class GatewayService:
                     decision_id=uuid.UUID(decision_id),
                 )
                 result["learning_loop"] = {
+                    "status": "completed",
                     "consolidation_feedback": loop_result.consolidation.calibration_feedback,
                     "brier": loop_result.consolidation.brier,
                     "ece": loop_result.consolidation.ece,
@@ -466,13 +472,24 @@ class GatewayService:
                     "insights_transformed": len(loop_result.insight_transformation.results),
                     "persisted_signals": len(loop_result.persisted),
                 }
-            except Exception:
-                # Learning loop is best-effort; log but don't fail the outcome submission
+            except Exception as e:
+                # Learning loop failed; log but don't fail the outcome submission
+                # Distinguish: outcome accepted, learning failed
                 import logging
 
                 logging.getLogger(__name__).exception(
                     "Learning loop failed for decision %s", decision_id
                 )
+                result["learning_loop"] = {
+                    "status": "failed",
+                    "error": str(e),
+                }
+        else:
+            # Learning loop not configured
+            result["learning_loop"] = {
+                "status": "pending",
+                "reason": "learning_loop_store not configured",
+            }
 
         return result
 

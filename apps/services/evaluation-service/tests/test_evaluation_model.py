@@ -1,15 +1,12 @@
 """Unit tests for the Evaluation model and store (pure, no I/O)."""
 import uuid
-from datetime import UTC, datetime
 
 import pytest
-
 from libs.reasoning.evaluation import (
+    EVALUATION_RESULTS,
     RESULT_CONFIRMED,
     RESULT_FALSIFIED,
     RESULT_INSUFFICIENT,
-    EVALUATION_RESULTS,
-    Evaluation,
     EvaluationCreate,
     build_evaluation,
     create_evaluation,

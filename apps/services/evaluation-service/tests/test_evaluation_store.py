@@ -2,27 +2,22 @@
 
 Requires the sandbox infra (postgres at 127.0.0.1:5433).
 """
-import asyncio
 import uuid
 from datetime import UTC, datetime
 
 import asyncpg
 import pytest
-
-from libs.learning.confidence import ConfidenceStore, ConfidenceCreate, build_confidence
-from libs.perception.evidence import EvidenceStore
+from libs.learning.confidence import ConfidenceStore
 from libs.perception.store import ObservationStore
 from libs.reasoning.evaluation import (
     RESULT_CONFIRMED,
-    RESULT_FALSIFIED,
     RESULT_INSUFFICIENT,
     EvaluationStore,
     create_evaluation,
 )
 from libs.reasoning.hypothesis import (
-    HypothesisStore,
-    STATUS_CANDIDATE,
     HypothesisCreate,
+    HypothesisStore,
     build_hypothesis,
 )
 

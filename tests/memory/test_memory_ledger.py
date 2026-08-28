@@ -29,7 +29,7 @@ def _record(target_type="pattern", target_id=None, signal=None) -> LearningMemor
 
 
 def test_target_types_are_canonical():
-    assert {"pattern", "context", "insight"} == TARGET_TYPES
+    assert {"pattern", "context", "insight", "decision"} == TARGET_TYPES
 
 
 def test_signal_hash_is_deterministic_and_order_independent():
