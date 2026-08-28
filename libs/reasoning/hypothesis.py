@@ -164,6 +164,27 @@ SELECT_HYPOTHESES = text(
 
 SELECT_TENANT_IDS = text("SELECT DISTINCT tenant_id FROM hypotheses")
 
+SELECT_HYPOTHESIS_BY_ID = text(
+    """
+    SELECT id, tenant_id, anomaly_ids, pattern_ids, description,
+           predicted_consequences, falsification_criterion, coherence_score,
+           status, generated_at
+    FROM hypotheses
+    WHERE id = :id AND tenant_id = :tenant_id
+    """
+)
+
+UPDATE_HYPOTHESIS_STATUS = text(
+    """
+    UPDATE hypotheses
+    SET status = :status
+    WHERE id = :id AND tenant_id = :tenant_id
+    RETURNING id, tenant_id, anomaly_ids, pattern_ids, description,
+              predicted_consequences, falsification_criterion, coherence_score,
+              status, generated_at
+    """
+)
+
 
 class HypothesisStore:
     """Persistence gateway for the Hypothesis Store (PostgreSQL hypotheses table)."""
@@ -235,6 +256,54 @@ class HypothesisStore:
         async with self._session_factory() as session:
             result = await session.execute(SELECT_TENANT_IDS)
             return [row[0] for row in result.all()]
+
+    async def get_hypothesis_by_id(
+        self, *, tenant_id: uuid.UUID, hypothesis_id: uuid.UUID
+    ) -> Hypothesis | None:
+        """Get a specific hypothesis by ID (tenant-scoped).
+
+        Returns the hypothesis if found and belongs to the tenant, None otherwise.
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                SELECT_HYPOTHESIS_BY_ID,
+                {"tenant_id": tenant_id, "id": hypothesis_id},
+            )
+            row = result.mappings().one_or_none()
+            if row is None:
+                return None
+            row_dict = dict(row)
+            if isinstance(row_dict["predicted_consequences"], str):
+                row_dict["predicted_consequences"] = json.loads(
+                    row_dict["predicted_consequences"]
+                )
+            return Hypothesis(**row_dict)
+
+    async def update_hypothesis_status(
+        self, *, tenant_id: uuid.UUID, hypothesis_id: uuid.UUID, status: str
+    ) -> Hypothesis | None:
+        """Update the status of a hypothesis (the only allowed mutation).
+
+        Only 'confirmed' or 'falsified' are valid status transitions from 'candidate'.
+        Returns the updated hypothesis, or None if not found.
+        """
+        if status not in (STATUS_CONFIRMED, STATUS_FALSIFIED):
+            raise ValueError(f"Invalid status transition to {status!r}")
+        async with self._session_factory() as session:
+            result = await session.execute(
+                UPDATE_HYPOTHESIS_STATUS,
+                {"tenant_id": tenant_id, "id": hypothesis_id, "status": status},
+            )
+            await session.commit()
+            row = result.mappings().one_or_none()
+            if row is None:
+                return None
+            row_dict = dict(row)
+            if isinstance(row_dict["predicted_consequences"], str):
+                row_dict["predicted_consequences"] = json.loads(
+                    row_dict["predicted_consequences"]
+                )
+            return Hypothesis(**row_dict)
 
     async def verify_connection(self) -> None:
         """Fail fast if the database is unreachable."""

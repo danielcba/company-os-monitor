@@ -16,7 +16,7 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 ## 2. Cómo lo hace (Implementation)
 
 ### Arquitectura por Capas
-
+ 
 | Capa | Capacidad | Contract Input → Transform → Output |
 |------|-----------|-------------------------------------|
 | Perception | Observation Capture | Reality → Capture immutable fact → Observation |
@@ -25,6 +25,7 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 | Reasoning | Pattern Detection | Active Context → Detect regularities → Pattern + strength |
 | Reasoning | Anomaly Detection | Context + Pattern + Tolerance → Measure deviation → Anomaly + score |
 | Reasoning | Hypothesis Generation | Context + Patterns + Anomalies → Testable explanations → Hypothesis + predictions + falsification |
+| Reasoning | Hypothesis Evaluation | Candidate Hypothesis + New Evidence + Confidence → Evaluation Policy → Evaluation + status change |
 | Learning | Confidence Calibration | Judgment + Evidence + Coherence + History → Calibration Model → Confidence + justification + ECE |
 | Action | Recommendation | Context + Hypothesis/Insight + Confidence + Action Space → Propose action → Recommendation + rationale + alternatives |
 | Action | Decision | Recommendation + Confidence + Authority → Commit → Decision + rationale + expected outcomes (falsifiable) |
@@ -52,18 +53,19 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 
 ## 3. Alcance
 
-### Capacidades Cognitivas Implementadas (10 servicios):
-
+### Capacidades Cognitivas Implementadas (11 servicios):
+ 
 1. **Observation Capturer** (Perception) - Agentes Linux/Windows/VMware/Red
 2. **Evidence Organizer** (Perception) - Collector Service con reglas por dominio
 3. **Context Activator** (Perception) - Competencia de coherencia explicativa
 4. **Pattern Detector** (Reasoning) - Detección de regularidades
 5. **Anomaly Detector** (Reasoning) - Detección de desviaciones vs patrones
 6. **Hypothesis Generator** (Reasoning) - Hipótesis testables con criterios de falsificación
-7. **Confidence Calibrator** (Learning) - Calibración S + C + ECE
-8. **Recommendation Formulator** (Action) - Propuesta de acción con rationale trazable
-9. **Decision Committer** (Action) - Compromiso con autoridad y outcomes falsificables
-10. **Report Generator** (Action - external) - Formateo de documentos de salida
+7. **Hypothesis Evaluator** (Reasoning) - Evaluación de hipótesis candidatas contra nueva evidencia
+8. **Confidence Calibrator** (Learning) - Calibración S + C + ECE
+9. **Recommendation Formulator** (Action) - Propuesta de acción con rationale trazable
+10. **Decision Committer** (Action) - Compromiso con autoridad y outcomes falsificables
+11. **Report Generator** (Action - external) - Formateo de documentos de salida
 
 ### Calidad de Datos
 
@@ -108,8 +110,8 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 - **Agentes**: Python SSH para Linux, WinRM para Windows, pyVmomi para VMware
 
 ### Puertos del Sistema:
-
-- 8090-8099: Servicios cognitivos (pattern, anomaly, hypothesis, confidence, recommendation, decision)
+ 
+- 8090-8099: Servicios cognitivos (pattern, anomaly, hypothesis, evaluation, confidence, recommendation, decision)
 - 8100: API Gateway (cognitive boundary enforcement)
 - 8098: Report Service
 - 8099: User Service (Auth/RBAC)
@@ -132,6 +134,7 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 │    ├─ Pattern Detection (regularidades en Context)                │
 │    ├─ Anomaly Detection (desviación vs patrón + tolerance)         │
 │    ├─ Hypothesis Generation (explicaciones testables + falsification)│
+│    ├─ Hypothesis Evaluation (candidatas vs nueva evidencia → confirmed/falsified/insufficient)│
 │    └─ Insight Restructuring (reorganización conocimiento)          │
 │                                                                      │
 │ 4. Confidence Layer                                               │
