@@ -17,7 +17,7 @@
 -- HYPOTHESIS EVALUATIONS TABLE
 -- ============================================
 
-CREATE TABLE hypothesis_evaluations (
+CREATE TABLE IF NOT EXISTS hypothesis_evaluations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     hypothesis_id UUID NOT NULL REFERENCES hypotheses(id) ON DELETE CASCADE,
@@ -31,8 +31,8 @@ CREATE TABLE hypothesis_evaluations (
     evaluated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_evaluations_tenant_hypothesis ON hypothesis_evaluations(tenant_id, hypothesis_id, evaluated_at DESC);
-CREATE INDEX idx_evaluations_tenant_result ON hypothesis_evaluations(tenant_id, result, evaluated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_evaluations_tenant_hypothesis ON hypothesis_evaluations(tenant_id, hypothesis_id, evaluated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_evaluations_tenant_result ON hypothesis_evaluations(tenant_id, result, evaluated_at DESC);
 
 -- Evaluation content is immutable (P1): tenant_id, hypothesis_id, evidence_ids,
 -- observed_outcomes, support_count, contradiction_count, confidence_id, result,
@@ -49,6 +49,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS evaluation_content_immutable_trigger ON hypothesis_evaluations;
 CREATE TRIGGER evaluation_content_immutable_trigger
     BEFORE UPDATE OR DELETE ON hypothesis_evaluations
     FOR EACH ROW EXECUTE FUNCTION prevent_evaluation_content_update();

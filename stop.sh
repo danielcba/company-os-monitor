@@ -34,6 +34,7 @@ STOP_SPECS=(
   "decision|apps/services/decision-service|DECISION_HEALTH_PORT|8097"
   "recommendation|apps/services/recommendation-service|RECOMMENDATION_HEALTH_PORT|8096"
   "confidence|apps/services/confidence-service|CONFIDENCE_HEALTH_PORT|8095"
+  "insight|apps/services/insight-service|INSIGHT_HEALTH_PORT|8101"
   "hypothesis|apps/services/hypothesis-service|HYPOTHESIS_HEALTH_PORT|8094"
   "anomaly|apps/services/anomaly-service|ANOMALY_HEALTH_PORT|8093"
   "pattern|apps/services/pattern-service|PATTERN_HEALTH_PORT|8092"
