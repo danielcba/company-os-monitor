@@ -36,14 +36,19 @@ This PR implements the Learning Loop Hardening per the audit requirements (audit
 - Documentation updated (README.md, README_EN.md, README_ES.md)
 
 ## Test Results
-- 462 tests pass (including 39 new tests)
-- ruff: clean (our changes)
+- 462 tests pass (including 39 new tests) + pattern-service suite (pre-existing flaky test fixed)
+- ruff: clean
 - mypy: clean
 - bandit: no HIGH/MEDIUM issues
 - Frontend: 182 tests pass
 
-### Pre-existing CI failures (not introduced by this PR)
-- `test_pattern_service_detects_and_persists_with_traceability` in pattern-service: test expects `strength_measure=1.0` but code produces `0.6667` (min_occurrences=3 with 2 occurrences). Introduced in commit `97cb17d`.
+### Pre-existing test fixed (not part of the audit)
+- `test_pattern_service_detects_and_persists_with_traceability` in pattern-service was
+  temporally flaky: it seeded contexts relative to a fixed `NOW=2026-08-14` while
+  `PatternService.run_detection_cycle` evaluates against `datetime.now(UTC)` with a 28-day
+  window. As real time advanced, the oldest activation drifted out of the window (only 2/3
+  counted -> strength 0.6667). Fixed by seeding relative to `datetime.now(UTC)`. The
+  assertion expecting `1.0` was correct.
 
 ## Files Changed
 - libs/reasoning/hypothesis.py (evaluation logic)
