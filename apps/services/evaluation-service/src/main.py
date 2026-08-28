@@ -8,7 +8,6 @@ import sys
 from aiohttp import web
 from libs.learning.confidence import ConfidenceStore
 from libs.perception.evidence import EvidenceStore
-from libs.perception.store import ObservationStore
 from libs.reasoning.evaluation import EvaluationStore
 from libs.reasoning.hypothesis import HypothesisStore
 
@@ -26,26 +25,26 @@ DSN = os.getenv(
     "postgresql+asyncpg://cosmonitor:cosmonitor@127.0.0.1:5433/cosmonitor",
 )
 
+# Port must not collide with decision-service (8097). 8102 is free in the
+# service port map (see start.sh SERVICE_SPECS).
+PORT = int(os.getenv("EVALUATION_HEALTH_PORT", "8102"))
 BATCH_SIZE = int(os.getenv("EVALUATION_BATCH_SIZE", "500"))
 INTERVAL_SECONDS = int(os.getenv("EVALUATION_INTERVAL_SECONDS", "60"))
 
 
 async def run_service() -> None:
     hypothesis_store = HypothesisStore(DSN)
-    observation_store = ObservationStore(DSN)
     evidence_store = EvidenceStore(DSN)
     confidence_store = ConfidenceStore(DSN)
     evaluation_store = EvaluationStore(DSN)
 
     await hypothesis_store.verify_connection()
-    await observation_store.verify_connection()
     await evidence_store.verify_connection()
     await confidence_store.verify_connection()
     await evaluation_store.verify_connection()
 
     service = EvaluationService(
         hypothesis_store=hypothesis_store,
-        observation_store=observation_store,
         evidence_store=evidence_store,
         confidence_store=confidence_store,
         evaluation_store=evaluation_store,
@@ -58,9 +57,9 @@ async def run_service() -> None:
 
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", 8097)
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
-    log.info("Evaluation Service HTTP started on port 8097")
+    log.info("Evaluation Service HTTP started on port %s", PORT)
 
     stop_event = asyncio.Event()
 
@@ -90,7 +89,6 @@ async def run_service() -> None:
     log.info("Shutting down...")
     await runner.cleanup()
     await hypothesis_store.close()
-    await observation_store.close()
     await evidence_store.close()
     await confidence_store.close()
     await evaluation_store.close()

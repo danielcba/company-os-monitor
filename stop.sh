@@ -30,6 +30,7 @@ STOP_SPECS=(
   "gateway|apps/gateway/api-gateway|GATEWAY_HEALTH_PORT|8100"
   "user|apps/services/user-service|USER_HEALTH_PORT|8099"
   "report|apps/services/report-service|REPORT_HEALTH_PORT|8098"
+  "evaluation|apps/services/evaluation-service|EVALUATION_HEALTH_PORT|8102"
   "decision|apps/services/decision-service|DECISION_HEALTH_PORT|8097"
   "recommendation|apps/services/recommendation-service|RECOMMENDATION_HEALTH_PORT|8096"
   "confidence|apps/services/confidence-service|CONFIDENCE_HEALTH_PORT|8095"
