@@ -25,7 +25,7 @@ def test_target_types_includes_decision():
     assert "pattern" in TARGET_TYPES
     assert "context" in TARGET_TYPES
     assert "insight" in TARGET_TYPES
-    assert len(TARGET_TYPES) == 4
+    assert len(TARGET_TYPES) == len({"pattern", "context", "insight", "decision"})
 
 
 def test_decision_target_type_accepts_decision_id():
@@ -107,7 +107,8 @@ def test_signal_hash_deterministic():
     hash1 = compute_signal_hash(signal)
     hash2 = compute_signal_hash(signal)
     assert hash1 == hash2
-    assert len(hash1) == 64  # SHA-256 hex
+    SHA256_HEX_LEN = 64
+    assert len(hash1) == SHA256_HEX_LEN  # SHA-256 hex
 
 
 def test_signal_hash_order_independent():

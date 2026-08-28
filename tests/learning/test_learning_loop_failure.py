@@ -8,13 +8,19 @@ Verifies that the system distinguishes:
 import sys
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from aiohttp.test_utils import TestClient, TestServer
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from libs.access.rbac import ROLE_ADMIN
 from libs.access.security import JwtService
+from libs.memory.consolidation import ConsolidationResult
+from libs.memory.context_revision import ContextRevisionReport
+from libs.memory.insight_transformation import InsightTransformationReport
+from libs.memory.pattern_refinement import PatternRefinementReport
 
 # Import from the gateway app's module
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "apps" / "gateway" / "api-gateway"))
@@ -24,6 +30,7 @@ from src.service import GatewayService
 SECRET = "dev-secret-key"
 TENANT_A = "00000000-0000-0000-0000-00000000000a"
 USER_ADMIN = "00000000-0000-0000-0000-0000000000aa"
+HTTP_OK = 200
 
 
 class FakeDecisionReadStore:
@@ -47,7 +54,7 @@ class FailingLearningLoopStore:
     """Learning loop store that always fails."""
 
     async def run_for_decision(self, *, tenant_id, decision_id):
-        raise RuntimeError("Simulated learning loop failure")
+        raise RuntimeError("Simulated learning loop failure")  # noqa: TRY003
 
     async def verify_connection(self):
         return None
@@ -61,12 +68,6 @@ class WorkingLearningLoopStore:
 
     async def run_for_decision(self, *, tenant_id, decision_id):
         self.call_count += 1
-        from types import SimpleNamespace
-
-        from libs.memory.consolidation import ConsolidationResult
-        from libs.memory.context_revision import ContextRevisionReport
-        from libs.memory.insight_transformation import InsightTransformationReport
-        from libs.memory.pattern_refinement import PatternRefinementReport
 
         consolidation = ConsolidationResult(
             decision_id=decision_id,
@@ -80,9 +81,15 @@ class WorkingLearningLoopStore:
             calibration_feedback=1.0,
             details=[],
         )
-        pattern_refinement = PatternRefinementReport(tenant_id=tenant_id, total_patterns=0, patterns_with_outcomes=0, results=[])
-        context_revision = ContextRevisionReport(tenant_id=tenant_id, total_contexts=0, contexts_with_outcomes=0, results=[])
-        insight_transformation = InsightTransformationReport(tenant_id=tenant_id, total_insights=0, results=[])
+        pattern_refinement = PatternRefinementReport(
+            tenant_id=tenant_id, total_patterns=0, patterns_with_outcomes=0, results=[]
+        )
+        context_revision = ContextRevisionReport(
+            tenant_id=tenant_id, total_contexts=0, contexts_with_outcomes=0, results=[]
+        )
+        insight_transformation = InsightTransformationReport(
+            tenant_id=tenant_id, total_insights=0, results=[]
+        )
         return SimpleNamespace(
             tenant_id=tenant_id,
             decision_id=decision_id,
@@ -112,7 +119,6 @@ async def client_with_failing_loop(jwt):
         learning_loop_store=learning_loop_store,
     )
     server = GatewayServer(service, jwt)
-    from aiohttp.test_utils import TestClient, TestServer
     tc = TestClient(TestServer(server.app))
     await tc.start_server()
     yield tc
@@ -129,7 +135,6 @@ async def client_with_working_loop(jwt):
         learning_loop_store=learning_loop_store,
     )
     server = GatewayServer(service, jwt)
-    from aiohttp.test_utils import TestClient, TestServer
     tc = TestClient(TestServer(server.app))
     await tc.start_server()
     yield tc, learning_loop_store
@@ -145,7 +150,6 @@ async def client_without_loop(jwt):
         learning_loop_store=None,
     )
     server = GatewayServer(service, jwt)
-    from aiohttp.test_utils import TestClient, TestServer
     tc = TestClient(TestServer(server.app))
     await tc.start_server()
     yield tc
@@ -169,9 +173,10 @@ async def test_learning_loop_completed_status(client_with_working_loop, jwt):
     body = {"actual_outcomes": [{"verifiable_by": "metric1", "value": True}]}
     resp = await tc.post(
         f"/api/v1/tenants/{TENANT_A}/decisions/{decision_id}/outcomes",
-        headers=_hdr(jwt), json=body,
+        headers=_hdr(jwt),
+        json=body,
     )
-    assert resp.status == 200
+    assert resp.status == HTTP_OK
     result = await resp.json()
     assert result["status"] == "outcomes_submitted"
     assert "learning_loop" in result
@@ -187,9 +192,10 @@ async def test_learning_loop_failed_status(client_with_failing_loop, jwt):
     body = {"actual_outcomes": [{"verifiable_by": "metric1", "value": True}]}
     resp = await tc.post(
         f"/api/v1/tenants/{TENANT_A}/decisions/{decision_id}/outcomes",
-        headers=_hdr(jwt), json=body,
+        headers=_hdr(jwt),
+        json=body,
     )
-    assert resp.status == 200
+    assert resp.status == HTTP_OK
     result = await resp.json()
     assert result["status"] == "outcomes_submitted"
     assert "learning_loop" in result
@@ -204,9 +210,10 @@ async def test_learning_loop_pending_status(client_without_loop, jwt):
     body = {"actual_outcomes": [{"verifiable_by": "metric1", "value": True}]}
     resp = await tc.post(
         f"/api/v1/tenants/{TENANT_A}/decisions/{decision_id}/outcomes",
-        headers=_hdr(jwt), json=body,
+        headers=_hdr(jwt),
+        json=body,
     )
-    assert resp.status == 200
+    assert resp.status == HTTP_OK
     result = await resp.json()
     assert result["status"] == "outcomes_submitted"
     assert "learning_loop" in result
@@ -214,17 +221,20 @@ async def test_learning_loop_pending_status(client_without_loop, jwt):
     assert "reason" in result["learning_loop"]
 
 
-async def test_outcome_submission_succeeds_even_when_learning_fails(client_with_failing_loop, jwt):
+async def test_outcome_submission_succeeds_even_when_learning_fails(
+    client_with_failing_loop, jwt
+):
     """Outcome submission succeeds even when learning loop fails (decoupled)."""
     tc = client_with_failing_loop
     decision_id = str(uuid.uuid4())
     body = {"actual_outcomes": [{"verifiable_by": "metric1", "value": True}]}
     resp = await tc.post(
         f"/api/v1/tenants/{TENANT_A}/decisions/{decision_id}/outcomes",
-        headers=_hdr(jwt), json=body,
+        headers=_hdr(jwt),
+        json=body,
     )
     # Outcome submission should succeed (200) even though learning failed
-    assert resp.status == 200
+    assert resp.status == HTTP_OK
     result = await resp.json()
     assert result["status"] == "outcomes_submitted"
     # But learning_loop status should indicate failure
