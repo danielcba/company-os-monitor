@@ -201,6 +201,7 @@ def test_canonical_tables_have_immutability_triggers():
         "patterns",
         "anomalies",
         "hypotheses",
+        "insights",
         "confidence_scores",
         "recommendations",
         "decisions",

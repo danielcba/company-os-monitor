@@ -55,7 +55,8 @@ COS-Monitor implementa el pipeline canónico: **Perception → Reasoning → Con
 | Reasoning | Pattern Detection | Pattern | pattern-service |
 | Reasoning | Anomaly Detection | Anomaly | anomaly-service |
 | Reasoning | Hypothesis Generation | Hypothesis | hypothesis-service |
-| Reasoning | Insight Restructuring | Insight | (planificado) |
+| Reasoning | Insight Restructuring | Insight | insight-service |
+| Reasoning | Hypothesis Evaluation | — | evaluation-service |
 | Learning | Confidence Calibration | Confidence | confidence-service |
 | Action | Recommendation | Recommendation | recommendation-service |
 | Action | Decision | Decision | decision-service |
@@ -101,9 +102,11 @@ company-os-monitor/
 │   │   ├── pattern-service/
 │   │   ├── anomaly-service/
 │   │   ├── hypothesis-service/
+│   │   ├── insight-service/
 │   │   ├── confidence-service/
 │   │   ├── recommendation-service/
 │   │   ├── decision-service/
+│   │   ├── evaluation-service/
 │   │   ├── report-service/
 │   │   └── user-service/
 │   └── gateway/
@@ -122,7 +125,6 @@ company-os-monitor/
 │   └── db-migrations/        # Migraciones idempotentes por sprint
 ├── docs/                     # Documentos de arquitectura y dominio
 ├── journal/                  # Registros de progreso y descubrimientos
-├── specs/                    # Especificaciones de componentes
 └── tests/                    # Tests de contrato, integración y calibración
 ```
 
@@ -178,13 +180,13 @@ El tenant sandbox (`TENANT_ID` default) debe existir en `tenants` (seed: `02-see
 - [x] Recommendation Formulator (gateado por confianza)
 - [x] Decision Committer (resultados esperados falsificables)
 
-### Fase 5 — Salida + Seguridad (En Progreso)
+### Fase 5 — Salida + Seguridad
 
 - [x] Report Generator (ejecutivo, técnico, JSON)
 - [x] Multi-tenant + Auth + RBAC + API Gateway (Cognitive Boundary)
-- [ ] Insight Restructuring (Insight)
-- [ ] Calibración histórica y Memory / Learning loop
-- [ ] Procedural Memory v2 y patrones avanzados
+- [x] Insight Restructuring (Insight)
+- [x] Calibración histórica y Memory / Learning loop
+- [x] Procedural Memory v1 (pattern_library, tolerance_library, hypothesis_templates, action_space, decision_policy, insight_rules)
 
 ---
 

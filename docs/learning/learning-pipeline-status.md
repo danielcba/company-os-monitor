@@ -1,13 +1,14 @@
 # Learning Layer (P7) — Status and Pipeline
 
-## Current Status: PARTIAL
+## Current Status: OPERATIONAL
 
-P7 (Learning Through Outcome) is partially implemented:
-- ** IMPLEMENTED **: Expected vs actual outcomes comparison (Brier score, ECE)
-- ** IMPLEMENTED **: Confidence calibration with historical calibration factor
-- ** PLANNED **: Automatic calibration update from outcome comparison
-- ** PLANNED **: Memory persistence of learning signals
-- ** NOT IMPLEMENTED **: Automated feedback loop
+P7 (Learning Through Outcome) is fully implemented since PR #14 (learning loop) and PR #10 (learning memory ledger):
+
+- **IMPLEMENTED**: Expected vs actual outcomes comparison (Brier score, ECE)
+- **IMPLEMENTED**: Confidence calibration with historical calibration factor
+- **IMPLEMENTED**: Automatic calibration update from outcome comparison
+- **IMPLEMENTED**: Memory persistence of learning signals (append-only ledger)
+- **IMPLEMENTED**: Automated feedback loop (Decision → Outcome → Consolidation → Memory)
 
 ## Learning Pipeline
 
@@ -18,40 +19,63 @@ Expected Outcomes (declared before execution)
     ↓
 Actual Outcomes (observed after execution)
     ↓
-Outcome Error (Brier score, ECE)
+Outcome Consolidation (corroborated/contradicted/inconclusive)
     ↓
-Calibration Update (historical_calibration = 1 - ECE)
+Pattern Refinement (keep/degrade/deactivate signals)
     ↓
-Memory (future: persist learning signals)
+Context Revision (keep/review/consider_competitor signals)
+    ↓
+Insight Transformation (revised/stable/unchanged classification)
+    ↓
+Learning Memory Ledger (append-only, idempotent by signal_hash)
 ```
 
-## Key Functions
+## Key Components
 
-### compare_expected_actual_outcomes (IMPLEMENTED)
-
-Located in `libs/action/decision.py`.
+### Consolidation (`libs/memory/consolidation.py`)
 
 Compares expected vs actual outcomes and computes:
+- `calibration_feedback`: (corroborated - contradicted) / (corroborated + contradicted)
 - `brier_score`: Mean squared error between predicted probabilities and actual outcomes
 - `ece`: Expected Calibration Error
-- `historical_calibration`: 1 - ECE
-- `confidence_adjustment`: Change in the (1-ECE) factor
+- Classification: corroborated, contradicted, inconclusive per outcome
 
-### build_confidence (IMPLEMENTED)
+### Pattern Refinement (`libs/memory/pattern_refinement.py`)
 
-Located in `libs/learning/confidence.py`.
+Attributes outcomes to Patterns via traceability chain:
+- Decision → Recommendation → Hypothesis → Pattern
+- Computes `contradiction_ratio` per pattern
+- Signals: keep (< 2 samples), degrade (> 0 contradictions), deactivate (>= 50% contradiction)
 
-Builds a calibrated confidence from:
-- `evidential_support`: S(H|E)
-- `explanatory_coherence`: C(H)
-- `historical_calibration`: 1 - ECE
-- `alpha`: mixing coefficient
+### Context Revision (`libs/memory/context_revision.py`)
 
-## What's Missing
+Attributes outcomes to Contexts via traceability chain:
+- Decision → Recommendation → Hypothesis → Pattern → Context
+- Signals: keep, review, consider_competitor
+- Never auto-activates Context (P2 compliant)
 
-1. **Automatic calibration update**: The comparison results are not automatically fed back to update confidence scores
-2. **Memory persistence**: Learning signals are not stored in a dedicated memory table
-3. **Feedback loop**: No automated mechanism to trigger re-calibration based on outcomes
+### Insight Transformation (`libs/memory/insight_transformation.py`)
+
+Journals transformation of Insights:
+- Classification: revised, stable, unchanged (descriptive, P4 compliant)
+- Attributes outcomes via recommendation.insight_id
+
+### Learning Memory Ledger (`libs/memory/memory_ledger.py`)
+
+Persists learning signals as append-only ledger:
+- Idempotency by UNIQUE index (tenant_id, target_type, target_id, signal_hash)
+- 4 signal types: consolidation, pattern_refinement, context_revision, insight_transformation
+- Deterministic IDs via uuid5
+
+## What Was Implemented
+
+1. **Consolidation** (libs/memory/consolidation.py): Expected vs actual comparison with cross-tenant validation
+2. **Pattern Refinement** (libs/memory/pattern_refinement.py): Outcome attribution to patterns
+3. **Context Revision** (libs/memory/context_revision.py): Outcome attribution to contexts
+4. **Insight Transformation** (libs/memory/insight_transformation.py): Transformation journaling
+5. **Learning Loop** (libs/memory/learning_loop.py): Orchestration of all refinement signals
+6. **Memory Ledger** (libs/memory/memory_ledger.py): Append-only persistence with dedup
+7. **Learning Memory Table** (infrastructure/db-migrations/learning-memory-ledger.sql): DB schema
 
 ## Falsifiability
 
@@ -63,6 +87,6 @@ P7 is designed to be falsifiable:
 
 ## Future Work
 
-- Sprint 10+: Implement automatic calibration update
-- Sprint 12+: Implement memory persistence
-- Sprint 14+: Implement feedback loop
+- Calibration Dashboard: Visualize calibration metrics over time
+- Historical ECE computation: Accumulate outcome history for accurate ECE
+- Automated re-calibration triggers: Re-calibrate confidence when new outcomes arrive

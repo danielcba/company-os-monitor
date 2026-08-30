@@ -290,6 +290,24 @@ CREATE TABLE insights (
 
 CREATE INDEX idx_insights_tenant_context ON insights(tenant_id, context_id, generated_at DESC);
 
+-- Insights content is immutable (P1): every column is content — an Insight is
+-- a journaled transformation, so NO UPDATE is ever allowed; DELETE is blocked
+-- (persistent audit trail). A new restructuring produces a NEW deterministic
+-- row, never an UPDATE of an existing one.
+CREATE OR REPLACE FUNCTION prevent_insight_content_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (TG_OP = 'UPDATE') THEN
+        RAISE EXCEPTION 'Insights content is immutable (P1). No UPDATE allowed.';
+    END IF;
+    RAISE EXCEPTION 'Insights are immutable (P1). No DELETE allowed.';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER insight_content_immutable_trigger
+    BEFORE UPDATE OR DELETE ON insights
+    FOR EACH ROW EXECUTE FUNCTION prevent_insight_content_update();
+
 -- ============================================
 -- LEARNING LAYER TABLES
 -- ============================================

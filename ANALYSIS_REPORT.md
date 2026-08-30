@@ -1,3 +1,7 @@
+# HISTORICAL RECORD — Pre-Remediation Analysis (2026-08-23)
+
+> **Note:** This report reflects the state before the 19-phase remediation. Some findings have been addressed. For current status, see `state/project-state.md`.
+
 # Comprehensive Architecture & Security Analysis Report
 ## Company OS Monitor — All Phases (1 through Latest)
 
