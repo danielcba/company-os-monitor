@@ -53,7 +53,7 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 
 ## 3. Alcance
 
-### Capacidades Cognitivas Implementadas (11 servicios):
+### Capacidades Cognitivas Implementadas (12 servicios):
  
 1. **Observation Capturer** (Perception) - Agentes Linux/Windows/VMware/Red
 2. **Evidence Organizer** (Perception) - Collector Service con reglas por dominio
@@ -62,10 +62,11 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 5. **Anomaly Detector** (Reasoning) - Detección de desviaciones vs patrones
 6. **Hypothesis Generator** (Reasoning) - Hipótesis testables con criterios de falsificación
 7. **Hypothesis Evaluator** (Reasoning) - Evaluación de hipótesis candidatas contra nueva evidencia
-8. **Confidence Calibrator** (Learning) - Calibración S + C + ECE
-9. **Recommendation Formulator** (Action) - Propuesta de acción con rationale trazable
-10. **Decision Committer** (Action) - Compromiso con autoridad y outcomes falsificables
-11. **Report Generator** (Action - external) - Formateo de documentos de salida
+8. **Insight Restructuring** (Reasoning) - Restructuración de conocimiento existente
+9. **Confidence Calibrator** (Learning) - Calibración S + C + ECE
+10. **Recommendation Formulator** (Action) - Propuesta de acción con rationale trazable
+11. **Decision Committer** (Action) - Compromiso con autoridad y outcomes falsificables
+12. **Report Generator** (Action - external) - Formateo de documentos de salida
 
 ### Calidad de Datos
 
@@ -111,10 +112,20 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 
 ### Puertos del Sistema:
  
-- 8090-8099: Servicios cognitivos (pattern, anomaly, hypothesis, evaluation, confidence, recommendation, decision)
-- 8100: API Gateway (cognitive boundary enforcement)
+- 8080: Linux Agent
+- 8090: Collector Service
+- 8091: Context Service
+- 8092: Pattern Service
+- 8093: Anomaly Service
+- 8094: Hypothesis Service
+- 8095: Confidence Service
+- 8096: Recommendation Service
+- 8097: Decision Service
 - 8098: Report Service
-- 8099: User Service (Auth/RBAC)
+- 8099: User Service
+- 8100: API Gateway
+- 8101: Insight Service
+- 8102: Evaluation Service
 
 ## 6. Secuencia de Funcionamiento
 

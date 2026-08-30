@@ -37,7 +37,6 @@ company-os-monitor/
 │   └── db-migrations/        # Idempotent migrations per sprint
 ├── docs/                     # Architecture and domain documents
 ├── journal/                  # Progress and discovery records
-├── specs/                    # Component specifications
 └── tests/                    # Contract, integration, calibration tests
 ```
 

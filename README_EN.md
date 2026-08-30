@@ -55,7 +55,8 @@ COS-Monitor implements the canonical pipeline: **Perception → Reasoning → Co
 | Reasoning | Pattern Detection | Pattern | pattern-service |
 | Reasoning | Anomaly Detection | Anomaly | anomaly-service |
 | Reasoning | Hypothesis Generation | Hypothesis | hypothesis-service |
-| Reasoning | Insight Restructuring | Insight | (planned) |
+| Reasoning | Insight Restructuring | Insight | insight-service |
+| Reasoning | Hypothesis Evaluation | — | evaluation-service |
 | Learning | Confidence Calibration | Confidence | confidence-service |
 | Action | Recommendation | Recommendation | recommendation-service |
 | Action | Decision | Decision | decision-service |
@@ -101,9 +102,11 @@ company-os-monitor/
 │   │   ├── pattern-service/
 │   │   ├── anomaly-service/
 │   │   ├── hypothesis-service/
+│   │   ├── insight-service/
 │   │   ├── confidence-service/
 │   │   ├── recommendation-service/
 │   │   ├── decision-service/
+│   │   ├── evaluation-service/
 │   │   ├── report-service/
 │   │   └── user-service/
 │   └── gateway/
@@ -122,7 +125,6 @@ company-os-monitor/
 │   └── db-migrations/        # Idempotent migrations per sprint
 ├── docs/                     # Architecture and domain documents
 ├── journal/                  # Progress and discovery records
-├── specs/                    # Component specifications
 └── tests/                    # Contract, integration, calibration tests
 ```
 
@@ -178,13 +180,13 @@ The sandbox tenant (`TENANT_ID` default) must exist in `tenants` (seed: `02-seed
 - [x] Recommendation Formulator (confidence-gated)
 - [x] Decision Committer (falsifiable expected outcomes)
 
-### Phase 5 — Output + Security (In Progress)
+### Phase 5 — Output + Security
 
 - [x] Report Generator (executive, technical, JSON)
 - [x] Multi-tenant + Auth + RBAC + API Gateway (Cognitive Boundary)
-- [ ] Insight Restructuring (Insight)
-- [ ] Historical calibration and Memory / Learning loop
-- [ ] Procedural Memory v2 and advanced patterns
+- [x] Insight Restructuring (Insight)
+- [x] Historical calibration and Memory / Learning loop
+- [x] Procedural Memory v1 (pattern_library, tolerance_library, hypothesis_templates, action_space, decision_policy, insight_rules)
 
 ---
 

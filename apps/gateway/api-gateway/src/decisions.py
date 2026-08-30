@@ -261,9 +261,10 @@ class DecisionReadStore:
                     f"Decision {decision_id} not found for tenant {tenant_id}"
                 )
 
-            # Update outcomes directly
+            # Update outcomes directly — tenant_id MUST be part of the write
+            # to enforce defense-in-depth isolation (H1 fix, 2026-08-30).
             set_parts: list[str] = []
-            params: dict[str, Any] = {"id": decision_id}
+            params: dict[str, Any] = {"id": decision_id, "tenant_id": tenant_id}
 
             set_parts.append("actual_outcomes = :actual_outcomes")
             params["actual_outcomes"] = json.dumps(actual_outcomes, default=str)
@@ -278,7 +279,7 @@ class DecisionReadStore:
                 f"""
                 UPDATE decisions
                 SET {set_clause}
-                WHERE id = :id
+                WHERE id = :id AND tenant_id = :tenant_id
                 RETURNING id, tenant_id, recommendation_id, confidence_id, authority_id,
                           commitment, expected_outcomes, risk_tolerance, status, committed_at,
                           executed_at, actual_outcomes

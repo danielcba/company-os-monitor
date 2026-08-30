@@ -56,7 +56,7 @@ Cada sprint construye una **capacidad cognitiva** del pipeline canónico, no fea
 
 | Sprint | Capacidad Cognitiva | Entregable | Cognitive Contract Validado |
 |--------|---------------------|------------|----------------------------|
-| 0 | Infraestructura Cognitiva | Docker, PostgreSQL, TimescaleDB, Redis, CI/CD | Data Layer soporta immutable Observations + Evidence |
+| 0 | Infraestructura Cognitiva | Docker, PostgreSQL 16, Redis, CI/CD | Data Layer soporta immutable Observations + Evidence |
 | 1 | Observation Capture (Linux) | `linux-agent` (psutil/SSH) → Observation Bus | P1: Immutable capture, Q1 Quality Class |
 | 2 | Observation Capture (Windows) | `windows-agent` (WMI/WinRM) → Observation Bus | P1: Immutable capture, Q1 Quality Class |
 | 3 | Evidence Organization | `collector-service` → Evidence (resource_exhaustion, service_degradation) | Evidence Spec: Q1-Q4, weights, no interpretation |
