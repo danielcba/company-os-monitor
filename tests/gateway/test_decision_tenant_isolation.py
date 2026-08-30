@@ -71,9 +71,9 @@ async def _create_decision(conn, tenant_id: uuid.UUID) -> uuid.UUID:
         """,
         decision_id,
         tenant_id,
-        uuid.uuid4(),  # recommendation_id (FK not enforced in test)
+        uuid.uuid4(),  # recommendation_id
         uuid.uuid4(),  # confidence_id
-        "test-authority",
+        uuid.uuid4(),  # authority_id
         "test commitment",
         json.dumps([{"prediction": "p1", "verifiable_by": "v1", "deadline": "2026-09-01"}]),
         "low",
