@@ -61,25 +61,35 @@ async def _ensure_tenant(conn, tenant_id: uuid.UUID) -> None:
 
 
 async def _create_decision(conn, tenant_id: uuid.UUID) -> uuid.UUID:
-    decision_id = uuid.uuid4()
-    await conn.execute(
-        """
-        INSERT INTO decisions (id, tenant_id, recommendation_id, confidence_id,
-                               authority_id, commitment, expected_outcomes,
-                               risk_tolerance, status, committed_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)
-        """,
-        decision_id,
-        tenant_id,
-        uuid.uuid4(),  # recommendation_id
-        uuid.uuid4(),  # confidence_id
-        uuid.uuid4(),  # authority_id
-        "test commitment",
-        json.dumps([{"prediction": "p1", "verifiable_by": "v1", "deadline": "2026-09-01"}]),
-        "low",
-        "committed",
-        datetime.now(UTC),
-    )
+    """Insert a decision row with FK checks disabled.
+
+    The test only verifies tenant isolation on the UPDATE path, not the
+    full cognitive chain, so we bypass FK constraints to keep the test
+    focused and free of deep fixture dependencies.
+    """
+    await conn.execute("SET session_replication_role = 'replica'")
+    try:
+        decision_id = uuid.uuid4()
+        await conn.execute(
+            """
+            INSERT INTO decisions (id, tenant_id, recommendation_id, confidence_id,
+                                   authority_id, commitment, expected_outcomes,
+                                   risk_tolerance, status, committed_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)
+            """,
+            decision_id,
+            tenant_id,
+            uuid.uuid4(),
+            uuid.uuid4(),
+            uuid.uuid4(),
+            "test commitment",
+            json.dumps([{"prediction": "p1", "verifiable_by": "v1", "deadline": "2026-09-01"}]),
+            "low",
+            "committed",
+            datetime.now(UTC),
+        )
+    finally:
+        await conn.execute("SET session_replication_role = 'origin'")
     return decision_id
 
 
