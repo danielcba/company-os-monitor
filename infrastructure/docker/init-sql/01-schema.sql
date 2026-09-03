@@ -602,3 +602,90 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER learning_memory_immutable_trigger
     BEFORE UPDATE OR DELETE ON learning_memory
     FOR EACH ROW EXECUTE FUNCTION prevent_learning_memory_update();
+
+-- ============================================
+-- H3 — LEARNING HARDENING (outcome revisions + execution lifecycle)
+-- ============================================
+
+-- Outcome Revisions: append-only outcome history (Phase 1, lock-free)
+CREATE TABLE IF NOT EXISTS outcome_revisions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL,
+    decision_id     UUID NOT NULL,
+    actual_outcomes JSONB NOT NULL,
+    executed_at     TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_outcome_revisions_tenant
+    ON outcome_revisions (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_outcome_revisions_decision
+    ON outcome_revisions (tenant_id, decision_id, created_at DESC);
+
+CREATE OR REPLACE FUNCTION prevent_outcome_revision_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'Outcome revisions are append-only (P6). No UPDATE/DELETE allowed.';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS outcome_revision_immutable_trigger ON outcome_revisions;
+CREATE TRIGGER outcome_revision_immutable_trigger
+    BEFORE UPDATE OR DELETE ON outcome_revisions
+    FOR EACH ROW EXECUTE FUNCTION prevent_outcome_revision_update();
+
+-- Learning Executions: durable execution lifecycle (Phase 2, advisory-locked)
+CREATE TABLE IF NOT EXISTS learning_executions (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id           UUID NOT NULL,
+    decision_id         UUID NOT NULL,
+    outcome_revision_id UUID NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'pending',
+    attempt_number      INTEGER NOT NULL DEFAULT 1,
+    parent_execution_id UUID,
+    started_at          TIMESTAMPTZ,
+    completed_at        TIMESTAMPTZ,
+    heartbeat_at        TIMESTAMPTZ,
+    signal_count        INTEGER DEFAULT 0,
+    failure_reason      TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT chk_learning_execution_status
+        CHECK (status IN ('pending', 'running', 'completed', 'failed', 'stale')),
+    CONSTRAINT fk_learning_execution_outcome_revision
+        FOREIGN KEY (outcome_revision_id) REFERENCES outcome_revisions(id),
+    CONSTRAINT fk_learning_execution_parent
+        FOREIGN KEY (parent_execution_id) REFERENCES learning_executions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_learning_executions_tenant
+    ON learning_executions (tenant_id);
+CREATE INDEX IF NOT EXISTS idx_learning_executions_decision
+    ON learning_executions (tenant_id, decision_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_learning_executions_status
+    ON learning_executions (tenant_id, status, heartbeat_at);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_learning_execution_active
+    ON learning_executions (outcome_revision_id)
+    WHERE status IN ('pending', 'running');
+
+-- Add execution_id FK to learning_memory for provenance traceability
+ALTER TABLE learning_memory
+    ADD COLUMN IF NOT EXISTS execution_id UUID;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_learning_memory_execution'
+        AND table_name = 'learning_memory'
+    ) THEN
+        ALTER TABLE learning_memory
+            ADD CONSTRAINT fk_learning_memory_execution
+            FOREIGN KEY (execution_id) REFERENCES learning_executions(id);
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_learning_memory_execution
+    ON learning_memory (execution_id)
+    WHERE execution_id IS NOT NULL;

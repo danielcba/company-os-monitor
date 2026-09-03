@@ -36,6 +36,7 @@ class PersistLearningMemoryInput:
     target_id: uuid.UUID
     signal: dict[str, Any]
     provenance: dict[str, Any]
+    execution_id: uuid.UUID | None = None
 
 
 @dataclass(slots=True)
@@ -47,6 +48,7 @@ class LearningMemoryRecord:
     signal: dict[str, Any]
     provenance: dict[str, Any]
     signal_hash: str
+    execution_id: uuid.UUID | None
     created_at: datetime
 
     def to_payload(self) -> dict[str, Any]:
@@ -58,6 +60,7 @@ class LearningMemoryRecord:
             "signal": self.signal,
             "provenance": self.provenance,
             "signal_hash": self.signal_hash,
+            "execution_id": str(self.execution_id) if self.execution_id else None,
             "created_at": self.created_at.isoformat(),
         }
 
@@ -74,7 +77,18 @@ def compute_signal_hash(signal: dict[str, Any]) -> str:
 class MemoryStoreProtocol(Protocol):
     """Contract for the Learning Memory ledger store (testable seam)."""
 
-    async def persist(self, *, record: PersistLearningMemoryInput) -> LearningMemoryRecord:
+    async def persist(
+        self, *, record: PersistLearningMemoryInput
+    ) -> LearningMemoryRecord:
+        ...
+
+    async def persist_in_session(
+        self,
+        *,
+        session: AsyncSession,
+        record: PersistLearningMemoryInput,
+        execution_id: uuid.UUID | None = None,
+    ) -> LearningMemoryRecord:
         ...
 
     async def list(
@@ -95,12 +109,13 @@ class MemoryStoreProtocol(Protocol):
 _INSERT_SQL = text(
     """
     INSERT INTO learning_memory
-        (tenant_id, target_type, target_id, signal, provenance, signal_hash)
+        (tenant_id, target_type, target_id, signal, provenance, signal_hash, execution_id)
     VALUES
-        (:tenant_id, :target_type, :target_id, :signal::jsonb, :provenance::jsonb, :signal_hash)
+        (:tenant_id, :target_type, :target_id, CAST(:signal AS jsonb),
+         CAST(:provenance AS jsonb), :signal_hash, :execution_id)
     ON CONFLICT (tenant_id, target_type, target_id, signal_hash) DO NOTHING
     RETURNING id, tenant_id, target_type, target_id, signal, provenance,
-              signal_hash, created_at
+              signal_hash, execution_id, created_at
     """
 )
 
@@ -110,7 +125,7 @@ _LIST_SQL = text(
            signal_hash, created_at
     FROM learning_memory
     WHERE tenant_id = :tenant_id
-      AND (:target_type::text IS NULL OR target_type = :target_type::text)
+      AND (CAST(:target_type AS text) IS NULL OR target_type = CAST(:target_type AS text))
       AND (:target_id IS NULL OR target_id = :target_id)
     ORDER BY created_at DESC
     """
@@ -119,10 +134,10 @@ _LIST_SQL = text(
 _GET_LATEST_SQL = text(
     """
     SELECT id, tenant_id, target_type, target_id, signal, provenance,
-           signal_hash, created_at
+           signal_hash, execution_id, created_at
     FROM learning_memory
     WHERE tenant_id = :tenant_id
-      AND target_type = :target_type::text
+      AND target_type = CAST(:target_type AS text)
       AND target_id = :target_id
     ORDER BY created_at DESC
     LIMIT 1
@@ -139,6 +154,7 @@ def _row_to_record(row) -> LearningMemoryRecord:
         signal=row["signal"],
         provenance=row["provenance"],
         signal_hash=row["signal_hash"],
+        execution_id=row["execution_id"],
         created_at=row["created_at"],
     )
 
@@ -180,6 +196,7 @@ class MemoryStore:
                     "signal": json.dumps(record.signal, default=str),
                     "provenance": json.dumps(record.provenance, default=str),
                     "signal_hash": signal_hash,
+                    "execution_id": record.execution_id,
                 },
             )
             row = result.mappings().one_or_none()
@@ -201,6 +218,51 @@ class MemoryStore:
             target_type=record.target_type,
             target_id=record.target_id,
         ))
+
+    async def persist_in_session(
+        self,
+        *,
+        session: AsyncSession,
+        record: PersistLearningMemoryInput,
+        execution_id: uuid.UUID | None = None,
+    ) -> LearningMemoryRecord:
+        """Persist a learning signal using an external session (F-01 remediation).
+
+        The caller owns the transaction. This method does NOT commit or create
+        a new session. Used by Phase 2 to keep signal persistence inside the
+        advisory-locked transaction.
+        """
+        if record.target_type not in TARGET_TYPES:
+            raise ValueError(f"invalid target_type: {record.target_type}")  # noqa: TRY003
+        signal_hash = compute_signal_hash(record.signal)
+        # Use record.execution_id if provided, otherwise fall back to parameter
+        exec_id = record.execution_id if record.execution_id is not None else execution_id
+        result = await session.execute(
+            _INSERT_SQL,
+            {
+                "tenant_id": record.tenant_id,
+                "target_type": record.target_type,
+                "target_id": record.target_id,
+                "signal": json.dumps(record.signal, default=str),
+                "provenance": json.dumps(record.provenance, default=str),
+                "signal_hash": signal_hash,
+                "execution_id": exec_id,
+            },
+        )
+        row = result.mappings().one_or_none()
+        if row is not None:
+            return _row_to_record(row)
+        # Idempotent: identical signal already persisted — re-fetch.
+        existing = await session.execute(
+            _GET_LATEST_SQL,
+            {
+                "tenant_id": record.tenant_id,
+                "target_type": record.target_type,
+                "target_id": record.target_id,
+            },
+        )
+        existing_row = existing.mappings().one_or_none()
+        return _row_to_record(existing_row) if existing_row is not None else _row_to_record(row)  # type: ignore[arg-type]
 
     async def list(
         self,

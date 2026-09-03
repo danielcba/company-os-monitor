@@ -36,6 +36,7 @@ from libs.access.rbac import (
 from libs.access.security import JwtService, TokenPayload
 from libs.access.tenant_scope import AuthorizationContext, TenantScopeError
 from libs.access.token_blacklist import SecurityControlUnavailable, TokenBlacklist
+from libs.learning.learning_execution_store import LearningExecutionStore
 from libs.memory.cognitive_timeline import CognitiveTimelineStoreProtocol
 from libs.memory.consolidation import (
     ConsolidationReport,
@@ -122,6 +123,7 @@ class GatewayService:
         memory_store: MemoryStoreProtocol | None = None,
         timeline_store: CognitiveTimelineStoreProtocol | None = None,
         learning_loop_store: LearningLoopStoreProtocol | None = None,
+        execution_store: LearningExecutionStore | None = None,
     ):
         self.jwt = jwt
         self.decision_store = decision_store
@@ -152,6 +154,7 @@ class GatewayService:
         self._learning_loop_store: LearningLoopStoreProtocol | None = (
             learning_loop_store
         )
+        self._execution_store: LearningExecutionStore | None = execution_store
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
         self.blacklist = blacklist
@@ -448,15 +451,60 @@ class GatewayService:
         if self._decision_read_store is None:
             raise RuntimeError("decision_read_store not configured in gateway")
         ctx = self._resolve_tenant(token, tenant_id)
-        result = await self._decision_read_store.submit_outcomes(
-            tenant_id=uuid.UUID(ctx.effective_tenant_id),
-            decision_id=uuid.UUID(decision_id),
-            actual_outcomes=actual_outcomes,
-            executed_at=executed_at,
-        )
 
         # Run the automatic Learning Loop (P7) if configured
-        if self._learning_loop_store is not None:
+        if self._execution_store is not None and self._learning_loop_store is not None:
+            # H3 path: Phase 1 (atomic) + Phase 2 (advisory-locked, single transaction)
+            try:
+                tenant_uuid = uuid.UUID(ctx.effective_tenant_id)
+                decision_uuid = uuid.UUID(decision_id)
+
+                # Phase 1: Atomic INSERT outcome_revision + UPDATE decisions (F-02)
+                outcome_rev = await self._execution_store.submit_outcomes_with_revision(
+                    tenant_id=tenant_uuid,
+                    decision_id=decision_uuid,
+                    actual_outcomes=actual_outcomes,
+                    executed_at=executed_at,
+                )
+
+                # Phase 2: H3 learning loop (advisory-locked, single transaction — F-01)
+                h3_result = await self._learning_loop_store.run_for_decision(
+                    tenant_id=tenant_uuid,
+                    decision_id=decision_uuid,
+                    outcome_revision_id=outcome_rev.id,
+                )
+                result: dict[str, Any] = {"decision": {"status": "outcomes_submitted"}}
+                result["learning_loop"] = {
+                    "status": h3_result.status,
+                    "execution_id": str(h3_result.execution_id) if h3_result.execution_id else None,
+                    "outcome_revision_id": str(h3_result.outcome_revision_id),
+                    "consolidation_feedback": h3_result.consolidation.calibration_feedback,
+                    "brier": h3_result.consolidation.brier,
+                    "ece": h3_result.consolidation.ece,
+                    "patterns_refined": len(h3_result.pattern_refinement.results),
+                    "contexts_revised": len(h3_result.context_revision.results),
+                    "insights_transformed": len(h3_result.insight_transformation.results),
+                    "persisted_signals": len(h3_result.persisted),
+                }
+            except Exception as e:
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "H3 learning loop failed for decision %s", decision_id
+                )
+                result = {"decision": {"status": "outcomes_submitted"}}
+                result["learning_loop"] = {
+                    "status": "failed",
+                    "error": str(e),
+                }
+        elif self._learning_loop_store is not None:
+            # Legacy path: no execution store, use original learning loop
+            result = await self._decision_read_store.submit_outcomes(
+                tenant_id=uuid.UUID(ctx.effective_tenant_id),
+                decision_id=uuid.UUID(decision_id),
+                actual_outcomes=actual_outcomes,
+                executed_at=executed_at,
+            )
             try:
                 loop_result = await self._learning_loop_store.run_for_decision(
                     tenant_id=uuid.UUID(ctx.effective_tenant_id),
@@ -473,8 +521,6 @@ class GatewayService:
                     "persisted_signals": len(loop_result.persisted),
                 }
             except Exception as e:
-                # Learning loop failed; log but don't fail the outcome submission
-                # Distinguish: outcome accepted, learning failed
                 import logging
 
                 logging.getLogger(__name__).exception(
@@ -485,7 +531,13 @@ class GatewayService:
                     "error": str(e),
                 }
         else:
-            # Learning loop not configured
+            # Learning loop not configured — still submit outcomes
+            result = await self._decision_read_store.submit_outcomes(
+                tenant_id=uuid.UUID(ctx.effective_tenant_id),
+                decision_id=uuid.UUID(decision_id),
+                actual_outcomes=actual_outcomes,
+                executed_at=executed_at,
+            )
             result["learning_loop"] = {
                 "status": "pending",
                 "reason": "learning_loop_store not configured",

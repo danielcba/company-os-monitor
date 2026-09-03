@@ -15,7 +15,7 @@ from libs.memory.memory_ledger import (
 )
 
 
-def _record(target_type="pattern", target_id=None, signal=None) -> LearningMemoryRecord:
+def _record(target_type="pattern", target_id=None, signal=None, execution_id=None) -> LearningMemoryRecord:
     return LearningMemoryRecord(
         id=uuid.uuid4(),
         tenant_id=uuid.UUID(int=1),
@@ -24,6 +24,7 @@ def _record(target_type="pattern", target_id=None, signal=None) -> LearningMemor
         signal=signal or {"action": "keep"},
         provenance={"decisions": 1},
         signal_hash="x" * 64,
+        execution_id=execution_id,
         created_at=__import__("datetime").datetime(2026, 1, 1),
     )
 
@@ -71,9 +72,13 @@ class _FakeMemoryStore:
         )
         rec.tenant_id = record.tenant_id
         rec.signal_hash = h
+        rec.execution_id = record.execution_id
         self._rows[key] = rec
         self.persisted.append(rec)
         return rec
+
+    async def persist_in_session(self, *, session, record: PersistLearningMemoryInput, execution_id: uuid.UUID | None = None) -> LearningMemoryRecord:
+        return await self.persist(record=record)
 
     async def list(self, *, tenant_id, target_type=None, target_id=None):
         out = []
