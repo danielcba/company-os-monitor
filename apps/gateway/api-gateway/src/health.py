@@ -130,9 +130,334 @@ class GatewayServer:
         self.app.router.add_post(
             "/api/v1/tenants/{tenant_id}/decisions/{decision_id}/outcomes", self.decision_outcomes_handler
         )
+        self.app.router.add_post(
+            "/api/v1/auth/machine/token", self.machine_token_handler
+        )
+        self.app.router.add_post(
+            "/api/v1/agents/instance/register", self.agent_register_handler
+        )
+        self.app.router.add_delete(
+            "/api/v1/agents/instance/{instance_id}", self.agent_stop_handler
+        )
         self.app.router.add_post("/api/v1/actions/{action}", self.action_handler)
         self.runner = None
 
+    async def machine_token_handler(self, request):
+        """POST /api/v1/auth/machine/token - exchange registration or refresh token for access+refresh tokens (ADR-0005)."""
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            body = {}
+
+        registration_token = body.get("registration_token")
+        refresh_token = body.get("refresh_token")
+
+        from libs.access.errors import InvalidTokenError
+        from libs.access.token_blacklist import SecurityControlUnavailable
+
+        if registration_token:
+            try:
+                payload = self.jwt.decode_payload(registration_token, expected_type="registration_token")
+            except InvalidTokenError:
+                return web.json_response({"error": "invalid registration token"}, status=401)
+
+            jti = payload.jti
+            try:
+                await self._db_execute(
+                    "INSERT INTO machine_jwt_blacklist (jti) VALUES ($1)", jti
+                )
+            except Exception:  # noqa: BLE001
+                raise SecurityControlUnavailable.check_failed(jti)
+
+            tenant_id = payload.tenant_id
+            installation_id = payload.installation_id
+            credential_id = payload.sub
+
+            inst = await self._db_fetchrow(
+                "SELECT status FROM agent_installations WHERE id = $1 AND tenant_id = $2",
+                installation_id, tenant_id,
+            )
+            if not inst or inst["status"] != "ACTIVE":
+                return web.json_response({"error": "installation not active or not found"}, status=401)
+
+            cred = await self._db_fetchrow(
+                "SELECT status FROM agent_credentials WHERE installation_id = $1 AND tenant_id = $2 AND id = $3",
+                installation_id, tenant_id, credential_id,
+            )
+            if not cred or cred["status"] != "ACTIVE":
+                return web.json_response({"error": "credential not active or not found"}, status=401)
+
+            access_token = self.jwt.create_access_token(
+                user_id=str(credential_id),
+                tenant_id=tenant_id,
+                email="",
+                role="",
+            )
+            refresh_token_val = self.jwt.create_refresh_token(
+                user_id=str(credential_id),
+                tenant_id=tenant_id,
+                email="",
+                role="",
+            )
+
+            import os
+
+            from redis.asyncio import Redis
+            try:
+                redis = Redis.from_url(os.getenv("JWT_REDIS_URL", "redis://localhost:6379/2"))
+                await redis.set(
+                    f"machine_refresh:{credential_id}",
+                    refresh_token_val,
+                    ex=86400 * 25 + 3600,
+                )
+            except Exception:  # noqa: BLE001
+                return web.json_response({"error": "security control unavailable"}, status=503)
+
+            return web.json_response({
+                "access_token": access_token,
+                "refresh_token": refresh_token_val,
+                "token_type": "Bearer",
+                "expires_in": 60,
+            })
+
+        if refresh_token:
+            try:
+                payload = self.jwt.decode_payload(refresh_token, expected_type="machine_access")
+                credential_id = payload.sub
+            except InvalidTokenError:
+                return web.json_response({"error": "invalid refresh token"}, status=401)
+
+            import os
+
+            from redis.asyncio import Redis
+            redis = Redis.from_url(os.getenv("JWT_REDIS_URL", "redis://localhost:6379/2"))
+            stored = await redis.get(f"machine_refresh:{credential_id}")
+            if stored != refresh_token:
+                return web.json_response({"error": "refresh token mismatch or consumed"}, status=401)
+
+            await redis.setnx(f"machine_refresh_consumed:{credential_id}", "1", ex=86400 * 25)
+
+            access_token = self.jwt.create_access_token(
+                user_id=str(credential_id),
+                tenant_id="",
+                email="",
+                role="",
+            )
+            new_refresh_token = self.jwt.create_refresh_token(
+                user_id=str(credential_id),
+                tenant_id="",
+                email="",
+                role="",
+            )
+
+            try:
+                await redis.set(
+                    f"machine_refresh:{credential_id}",
+                    new_refresh_token,
+                    ex=86400 * 25 + 3600,
+                )
+                await redis.delete(f"machine_refresh_consumed:{credential_id}")
+            except Exception:  # noqa: BLE001
+                return web.json_response({"error": "security control unavailable"}, status=503)
+
+            old_jti = None
+            try:
+                old_payload = self.jwt.decode(refresh_token)
+                old_jti = old_payload.get("jti", "")
+            except Exception:    # noqa: BLE001, S110
+                pass
+
+            if old_jti:
+                try:
+                    await self._db_execute(
+                        "INSERT INTO machine_jwt_blacklist (jti) VALUES ($1)", old_jti
+                    )
+                except Exception:  # noqa: BLE001
+                    raise SecurityControlUnavailable.check_failed(old_jti)
+
+            return web.json_response({
+                "access_token": access_token,
+                "refresh_token": new_refresh_token,
+                "token_type": "Bearer",
+                "expires_in": 60,
+            })
+
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+            try:
+                payload = self.jwt.verify_access_token(token)
+            except InvalidTokenError:
+                return web.json_response({"error": "invalid machine access token"}, status=401)
+
+            tenant_id = payload.tenant_id
+            installation_id = payload.installation_id
+            credential_id = payload.sub
+
+            inst = await self._db_fetchrow(
+                "SELECT status FROM agent_installations WHERE id = $1 AND tenant_id = $2",
+                installation_id, tenant_id,
+            )
+            if not inst or inst["status"] != "ACTIVE":
+                return web.json_response({"error": "installation not active or not found"}, status=401)
+
+            cred = await self._db_fetchrow(
+                "SELECT status FROM agent_credentials WHERE installation_id = $1 AND tenant_id = $2 AND id = $3",
+                installation_id, tenant_id, credential_id,
+            )
+            if not cred or cred["status"] != "ACTIVE":
+                return web.json_response({"error": "credential not active or not found"}, status=401)
+
+            return web.json_response({
+                "sub": credential_id,
+                "tenant_id": tenant_id,
+                "installation_id": installation_id,
+                "scopes": ["telemetry:ingest"],
+            })
+
+        return web.json_response({"error": "no valid token provided"}, status=401)
+
+    async def agent_register_handler(self, request):
+        """POST /api/v1/agents/instance/register - register a new agent instance (ADR-0006)."""
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001
+            return web.json_response({"error": "invalid request"}, status=400)
+
+        installation_id = body.get("installation_id")
+        host_fingerprint = body.get("host_fingerprint")
+
+
+
+        if not installation_id or not host_fingerprint:
+            return web.json_response({"error": "installation_id and host_fingerprint required"}, status=400)
+
+        auth_header = request.headers.get("Authorization", "")
+        from libs.access.errors import InvalidTokenError
+
+        try:
+            token = await self.service.authenticate(auth_header)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+
+        tenant_id = token.tenant_id
+
+        inst = await self._db_fetchrow(
+            "SELECT status, host_fingerprint, agent_type FROM agent_installations "
+            "WHERE id = $1 AND tenant_id = $2",
+            installation_id, tenant_id,
+        )
+        if not inst:
+            return web.json_response({"error": "installation not found or tenant mismatch"}, status=401)
+        if inst["status"] != "ACTIVE":
+            return web.json_response({"error": "installation not in ACTIVE status"}, status=401)
+
+        cred = await self._db_fetchrow(
+            "SELECT status FROM agent_credentials "
+            "WHERE installation_id = $1 AND tenant_id = $2 AND id = $3",
+            installation_id, tenant_id, token.sub,
+        )
+        if not cred or cred["status"] != "ACTIVE":
+            return web.json_response({"error": "credential not active or not found"}, status=401)
+
+        if inst["host_fingerprint"] != host_fingerprint:
+            return web.json_response({"error": "host fingerprint mismatch (possible cloned VM)"}, status=401)
+
+        HEARTBEAT_TIMEOUT_SECONDS = 120
+        from datetime import UTC, datetime
+
+        existing = await self._db_fetchrow(
+            "SELECT id, status, last_heartbeat_at FROM agent_instances "
+            "WHERE installation_id = $1 AND status = RUNNING",
+            installation_id,
+        )
+
+        if existing:
+            if existing["last_heartbeat_at"]:
+                heartbeat_age = (datetime.now(UTC) - existing["last_heartbeat_at"]).total_seconds()
+            else:
+                heartbeat_age = float("inf")
+
+            if heartbeat_age < HEARTBEAT_TIMEOUT_SECONDS:
+                return web.json_response({
+                    "error": "another instance is already running for this installation"
+                }, status=409)
+
+            await self._db_execute(
+                "UPDATE agent_instances SET status = STOPPED, stopped_at = now() "
+                "WHERE installation_id = $1 AND status = RUNNING",
+                installation_id,
+            )
+
+        import uuid as _uuid
+        new_instance_id = str(_uuid.uuid4())
+
+        await self._db_execute(
+            "INSERT INTO agent_instances (id, tenant_id, installation_id, credential_id, "
+            "host_fingerprint, status, registered_at, last_heartbeat_at) "
+            "VALUES ($1, $2, $3, $4, $5, RUNNING, now(), now())",
+            new_instance_id, tenant_id, installation_id, token.sub, host_fingerprint,
+        )
+
+        await self._db_execute(
+            "UPDATE agent_installations SET last_seen_at = now() WHERE id = $1",
+            installation_id,
+        )
+
+        heartbeat_interval = 30
+        heartbeat_timeout = 120
+        telemetry_endpoint = "https://gateway/api/v1/telemetry/ingest"
+
+        return web.json_response({
+            "instance_id": new_instance_id,
+            "heartbeat_interval_seconds": heartbeat_interval,
+            "heartbeat_timeout_seconds": heartbeat_timeout,
+            "telemetry_endpoint": telemetry_endpoint,
+        }, status=201)
+
+    async def agent_stop_handler(self, request):
+        """DELETE /api/v1/agents/instance/{instance_id} - gracefully stop an agent instance (ADR-0006)."""
+        instance_id = request.match_info.get("instance_id")
+        if not instance_id:
+            return web.json_response({"error": "instance_id required"}, status=400)
+
+        auth_header = request.headers.get("Authorization", "")
+        from libs.access.errors import InvalidTokenError
+
+        try:
+            token = await self.service.authenticate(auth_header)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+
+        tenant_id = token.tenant_id
+        credential_id_from_token = token.sub
+
+        inst = await self._db_fetchrow(
+            "SELECT id, status, installation_id, credential_id FROM agent_instances "
+            "WHERE id = $1 AND tenant_id = $2",
+            instance_id, tenant_id,
+        )
+        if not inst:
+            return web.json_response({"error": "instance not found"}, status=404)
+
+        if inst["credential_id"] != credential_id_from_token:
+            return web.json_response({"error": "credential mismatch for this instance"}, status=401)
+
+        if inst["status"] == "RUNNING":
+            await self._db_execute(
+                "UPDATE agent_instances SET status = STOPPED, stopped_at = now() "
+                "WHERE id = $1",
+                instance_id,
+            )
+        elif inst["status"] == "STOPPED":
+            pass
+        else:
+            return web.json_response({"error": "instance in invalid state"}, status=400)
+
+        return web.json_response({
+            "instance_id": instance_id,
+            "status": inst["status"],
+        })
     def _setup_cors(self) -> None:
         allowed_origins = [
             o.strip()

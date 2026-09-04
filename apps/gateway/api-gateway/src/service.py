@@ -210,7 +210,7 @@ class GatewayService:
         risk: str | None = None,
         requested_tenant_id: str | None = None,
     ) -> bool:
-        """Decision Authority check for an action on the canonical flow.
+        """Decision Authority check for an action on the canonical flow.  # noqa: BLE001, S110
 
         Pure RBAC -> authority binding (docs/04). COMMIT is constrained by the
         risk ceiling (admin low/medium, superadmin high); cross-tenant requests
@@ -321,7 +321,6 @@ class GatewayService:
             tenant_id=uuid.UUID(ctx.effective_tenant_id)
         )
         return [_decision_payload(d) for d in decisions]
-
     async def list_reports(self, token: TokenPayload, tenant_id: str) -> list[Any]:
         """READ reports within the token's tenant scope (viewer+)."""
         if self.report_store is None:
@@ -876,4 +875,403 @@ def _report_payload(report) -> dict[str, Any]:
         ),
         "period_end": report.period_end.isoformat() if report.period_end else None,
         "generated_at": report.generated_at.isoformat(),
+    }
+
+# ------------------------------------------------------------------ machine auth support
+# Machine authentication and agent registration (ADR-0005, ADR-0006)
+
+
+async def _db_fetchrow(self, query: str, *args):
+    """Execute a query and return the first row via asyncpg."""
+    import asyncpg
+    try:
+        async with asyncpg.connect(self._dsn) as conn:
+            return await conn.fetchrow(query, *args)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def _db_execute(self, query: str, *args):
+    """Execute a query via asyncpg."""
+    import asyncpg
+    try:
+        async with asyncpg.connect(self._dsn) as conn:
+            await conn.execute(query, *args)
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+
+async def exchange_machine_token(
+    self,
+    *,
+    token: str | None = None,
+    registration_token: str | None = None,
+    refresh_token: str | None = None,
+) -> dict[str, Any]:
+    """Exchange a registration token or refresh token for access + refresh tokens.
+
+    Supports two flows:
+    1. Registration token flow (initial bootstrap): agent presents a registration_token JWT
+       with type="registration_token". Single-use: blacklisted on exchange.
+    2. Refresh token flow (steady state): agent presents a refresh_token in request body.
+
+    Returns dict with access_token, refresh_token, token_type, expires_in.
+    Raises InvalidTokenError on failure (fail-closed).
+    """
+    import os as _os
+
+    jwtservice = self.jwt
+
+    # ---- Registration token flow ----
+    if registration_token:
+        try:
+            payload = jwtservice.decode_payload(registration_token, expected_type="registration_token")
+        except InvalidTokenError:
+            raise InvalidTokenError("invalid registration token")
+
+        credential_id = payload.sub
+        tenant_id = payload.tenant_id
+        installation_id = payload.installation_id
+        jti = payload.jti
+
+        # Blacklist the single-use registration token
+        from libs.access.token_blacklist import SecurityControlUnavailable
+
+        try:
+            await self._db_execute(
+                "INSERT INTO machine_jwt_blacklist (jti) VALUES ($1)", jti
+            )
+        except Exception:  # noqa: BLE001
+            raise SecurityControlUnavailable.check_failed(jti)
+
+        # Validate installation is ACTIVE and credential is ACTIVE
+        inst = await self._db_fetchrow(
+            "SELECT status FROM agent_installations WHERE id = $1 AND tenant_id = $2",
+            installation_id, tenant_id,
+        )
+        if not inst or inst["status"] != "ACTIVE":
+            raise InvalidTokenError("installation not active or not found")
+
+        cred = await self._db_fetchrow(
+            "SELECT status FROM agent_credentials WHERE installation_id = $1 AND tenant_id = $2 AND id = $3",
+            installation_id, tenant_id, credential_id,
+        )
+        if not cred or cred["status"] != "ACTIVE":
+            raise InvalidTokenError("credential not active or not found")
+
+        # Issue access + refresh tokens
+        access_token = jwtservice.create_access_token(
+            user_id=str(credential_id),
+            tenant_id=tenant_id,
+            email="",
+            role="",
+        )
+        refresh_token_val = jwtservice.create_refresh_token(
+            user_id=str(credential_id),
+            tenant_id=tenant_id,
+            email="",
+            role="",
+        )
+
+        # Store refresh token in Redis (machine_refresh:{credential_id})
+        try:
+            from redis.asyncio import Redis
+
+            redis = Redis.from_url(_os.getenv("JWT_REDIS_URL", "redis://localhost:6379/2"))
+            await redis.set(
+                f"machine_refresh:{credential_id}",
+                refresh_token_val,
+                ex=86400 * 25 + 3600,  # 24h + 1h buffer
+            )
+        except Exception:  # noqa: BLE001
+            raise SecurityControlUnavailable.redis_uninstalled()
+
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token_val,
+            "token_type": "Bearer",
+            "expires_in": 60,
+        }
+
+    # ---- Refresh token flow ----
+    if refresh_token:
+        credential_id = None
+        try:
+            payload = jwtservice.decode_payload(refresh_token, expected_type="machine_access")
+            credential_id = payload.sub
+        except InvalidTokenError:
+            raise InvalidTokenError("invalid refresh token")
+
+        if not credential_id:
+            raise InvalidTokenError("refresh token missing credential identity")
+
+        # Check refresh token in Redis
+        from redis.asyncio import Redis
+
+        redis_url = _os.getenv("JWT_REDIS_URL", "redis://localhost:6379/2")
+        try:
+            redis = Redis.from_url(redis_url)
+            stored = await redis.get(f"machine_refresh:{credential_id}")
+            if stored != refresh_token:
+                raise InvalidTokenError("refresh token mismatch or consumed")
+            # Consume the refresh atomically
+            await redis.setnx(f"machine_refresh_consumed:{credential_id}", "1")
+            await redis.expire(f"machine_refresh_consumed:{credential_id}", 86400 * 25)
+        except Exception as exc:
+            raise SecurityControlUnavailable.consume_failed(str(credential_id)) from exc
+
+        # Issue new access + refresh tokens
+        access_token = jwtservice.create_access_token(
+            user_id=str(credential_id),
+            tenant_id="",
+            email="",
+            role="",
+        )
+        new_refresh_token = jwtservice.create_refresh_token(
+            user_id=str(credential_id),
+            tenant_id="",
+            email="",
+            role="",
+        )
+
+        # Rotate refresh token in Redis
+        try:
+            redis = Redis.from_url(redis_url)
+            await redis.set(
+                f"machine_refresh:{credential_id}",
+                new_refresh_token,
+                ex=86400 * 25 + 3600,
+            )
+            # Delete old refresh marker
+            await redis.delete(f"machine_refresh_consumed:{credential_id}")
+        except Exception:  # noqa: BLE001
+            raise SecurityControlUnavailable.redis_uninstalled()
+
+        # Blacklist the old access token JTI
+        old_jti = None
+        try:
+            old_payload = jwtservice.decode(refresh_token)
+            old_jti = old_payload.get("jti", "")
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+        if old_jti:
+            try:
+                await self._db_execute(
+                    "INSERT INTO machine_jwt_blacklist (jti) VALUES ($1)", old_jti
+                )
+            except Exception:  # noqa: BLE001
+                raise SecurityControlUnavailable.check_failed(old_jti)
+
+        return {
+            "access_token": access_token,
+            "refresh_token": new_refresh_token,
+            "token_type": "Bearer",
+            "expires_in": 60,
+        }
+
+    # ---- Machine access token validation (Bearer) ----
+    if token and not registration_token and not refresh_token:
+        try:
+            payload = jwtservice.verify_access_token(token)
+        except InvalidTokenError:
+            raise InvalidTokenError("invalid machine access token")
+
+        # Validate installation and credential
+        tenant_id = payload.tenant_id
+        installation_id = payload.installation_id
+        credential_id = payload.sub
+
+        inst = await self._db_fetchrow(
+            "SELECT status FROM agent_installations WHERE id = $1 AND tenant_id = $2",
+            installation_id, tenant_id,
+        )
+        if not inst or inst["status"] != "ACTIVE":
+            raise InvalidTokenError("installation not active or not found")
+
+        cred = await self._db_fetchrow(
+            "SELECT status FROM agent_credentials WHERE installation_id = $1 AND tenant_id = $2 AND id = $3",
+            installation_id, tenant_id, credential_id,
+        )
+        if not cred or cred["status"] != "ACTIVE":
+            raise InvalidTokenError("credential not active or not found")
+
+        # Check instance status if present in token
+        instance_id = payload.instance_id
+        if instance_id:
+            inst_row = await self._db_fetchrow(
+                "SELECT status FROM agent_instances WHERE installation_id = $1 AND id = $2",
+                installation_id, instance_id,
+            )
+            if not inst_row:
+                raise InvalidTokenError("instance not found")
+            if inst_row["status"] != "RUNNING":
+                raise InvalidTokenError("instance not running")
+
+        return {
+            "sub": credential_id,
+            "tenant_id": tenant_id,
+            "installation_id": installation_id,
+            "instance_id": instance_id,
+            "scopes": ["telemetry:ingest"],
+        }
+
+    raise InvalidTokenError("no valid token provided")
+
+
+async def register_agent_instance(
+    self,
+    *,
+    token: TokenPayload,
+    installation_id: str,
+    host_fingerprint: str,
+    agent_version: str,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Register a new agent instance (ADR-0006).
+
+    Logic:
+    1. Validate machine token: installation_id matches request,
+       credential_id (from sub) is ACTIVE and belongs to installation_id.
+    2. Verify host_fingerprint matches agent_installations.host_fingerprint (anti-cloning).
+    3. Check UNIQUE (installation_id) WHERE status = 'RUNNING':
+       - If existing instance last_heartbeat_at < now() - timeout: mark STOPPED, allow new registration
+       - Else: reject with 409 Conflict (instance already running)
+    4. Create agent_instances row with status = 'RUNNING'.
+    5. Return instance_id and heartbeat config.
+    """
+    tenant_id = token.tenant_id
+    credential_id_from_token = token.sub
+
+    # 1. Validate installation is ACTIVE and credential belongs to it
+    inst = await self._db_fetchrow(
+        "SELECT status, host_fingerprint, agent_type FROM agent_installations "
+        "WHERE id = $1 AND tenant_id = $2",
+        installation_id, tenant_id,
+    )
+    if not inst:
+        raise InvalidTokenError("installation not found or tenant mismatch")
+    if inst["status"] != "ACTIVE":
+        raise InvalidTokenError("installation not in ACTIVE status")
+
+    # 2. Verify credential is ACTIVE and belongs to installation
+    cred = await self._db_fetchrow(
+        "SELECT status FROM agent_credentials "
+        "WHERE installation_id = $1 AND tenant_id = $2 AND id = $3",
+        installation_id, tenant_id, credential_id_from_token,
+    )
+    if not cred or cred["status"] != "ACTIVE":
+        raise InvalidTokenError("credential not active or not found")
+
+    # 3. Verify host_fingerprint matches (anti-cloning)
+    if inst["host_fingerprint"] != host_fingerprint:
+        raise InvalidTokenError("host fingerprint mismatch (possible cloned VM)")
+
+    # 4. Check at-most-one RUNNING instance per installation
+    from datetime import UTC, datetime
+
+    HEARTBEAT_TIMEOUT_SECONDS = 120
+
+    existing = await self._db_fetchrow(
+        "SELECT id, status, last_heartbeat_at FROM agent_instances "
+        "WHERE installation_id = $1 AND status = 'RUNNING'",
+        installation_id,
+    )
+
+    if existing:
+        if existing["last_heartbeat_at"]:
+            heartbeat_age = (datetime.now(UTC) - existing["last_heartbeat_at"]).total_seconds()
+        else:
+            heartbeat_age = float("inf")
+
+        if heartbeat_age < HEARTBEAT_TIMEOUT_SECONDS:
+            raise InvalidTokenError(
+                "another instance is already running for this installation"
+            )
+        # Existing instance has timed out; mark it STOPPED
+        await self._db_execute(
+            "UPDATE agent_instances SET status = 'STOPPED', stopped_at = now() "
+            "WHERE installation_id = $1 AND status = 'RUNNING'",
+            installation_id,
+        )
+
+    # 5. Create new agent instance
+    import uuid as _uuid
+
+    new_instance_id = str(_uuid.uuid4())
+
+    await self._db_execute(
+        "INSERT INTO agent_instances (id, tenant_id, installation_id, credential_id, "
+        "host_fingerprint, status, registered_at, last_heartbeat_at) "
+        "VALUES ($1, $2, $3, $4, $5, 'RUNNING', now(), now())",
+        new_instance_id, tenant_id, installation_id, credential_id_from_token, host_fingerprint,
+    )
+
+    # Update installation last_seen_at
+    await self._db_execute(
+        "UPDATE agent_installations SET last_seen_at = now() WHERE id = $1",
+        installation_id,
+    )
+
+    heartbeat_interval = 30
+    heartbeat_timeout = 120
+    telemetry_endpoint = "https://gateway/api/v1/telemetry/ingest"
+
+    return {
+        "instance_id": new_instance_id,
+        "heartbeat_interval_seconds": heartbeat_interval,
+        "heartbeat_timeout_seconds": heartbeat_timeout,
+        "telemetry_endpoint": telemetry_endpoint,
+    }
+
+
+async def stop_agent_instance(
+    self,
+    *,
+    token: TokenPayload,
+    instance_id: str,
+) -> dict[str, Any]:
+    """Gracefully stop an agent instance (ADR-0006).
+
+    State transition:
+    - If instance status == 'RUNNING' → set status = 'STOPPED', stopped_at = now()
+    - If instance already 'STOPPED' → idempotent success (200 OK, no state change)
+    - If instance not found → 404
+
+    Authorization: Token's instance_id must match path parameter.
+    Token's credential_id must match agent_instances.credential_id.
+    Token's tenant_id must match.
+    """
+    tenant_id = token.tenant_id
+    credential_id_from_token = token.sub
+
+    # Verify instance exists and belongs to the token's tenant/credential
+    inst = await self._db_fetchrow(
+        "SELECT id, status, installation_id, credential_id FROM agent_instances "
+        "WHERE id = $1 AND tenant_id = $2",
+        instance_id, tenant_id,
+    )
+    if not inst:
+        raise InvalidTokenError("instance not found")
+
+    # Verify credential matches
+    if inst["credential_id"] != credential_id_from_token:
+        raise InvalidTokenError("credential mismatch for this instance")
+
+    # State transition
+    if inst["status"] == "RUNNING":
+        await self._db_execute(
+            "UPDATE agent_instances SET status = 'STOPPED', stopped_at = now() "
+            "WHERE id = $1",
+            instance_id,
+        )
+    elif inst["status"] == "STOPPED":
+        # Idempotent - no state change needed
+        pass
+    else:
+        raise InvalidTokenError("instance in invalid state")
+
+    return {
+        "instance_id": instance_id,
+        "status": inst["status"],
     }

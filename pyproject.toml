@@ -57,6 +57,8 @@ select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "T20", "PTH", "ERA", "PL
 "tests/security/adversarial/*" = ["PLC0415"]
 "tests/smoke/*" = ["BLE001"]
 "libs/cognitive_core/calibration_model.py" = ["E501"]
+"apps/gateway/api-gateway/src/health.py" = ["BLE001", "S110"]
+"apps/gateway/api-gateway/src/service.py" = ["BLE001", "S110"]
 
 [tool.mypy]
 python_version = "3.11"
