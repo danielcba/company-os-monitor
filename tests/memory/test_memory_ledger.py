@@ -15,7 +15,12 @@ from libs.memory.memory_ledger import (
 )
 
 
-def _record(target_type="pattern", target_id=None, signal=None, execution_id=None) -> LearningMemoryRecord:
+def _record(
+    target_type="pattern",
+    target_id=None,
+    signal=None,
+    execution_id=None,
+) -> LearningMemoryRecord:
     return LearningMemoryRecord(
         id=uuid.uuid4(),
         tenant_id=uuid.UUID(int=1),
@@ -77,7 +82,9 @@ class _FakeMemoryStore:
         self.persisted.append(rec)
         return rec
 
-    async def persist_in_session(self, *, session, record: PersistLearningMemoryInput, execution_id: uuid.UUID | None = None) -> LearningMemoryRecord:
+    async def persist_in_session(self, *, session,
+                record: PersistLearningMemoryInput,
+                execution_id: uuid.UUID | None = None) -> LearningMemoryRecord:
         return await self.persist(record=record)
 
     async def list(self, *, tenant_id, target_type=None, target_id=None):

@@ -7,6 +7,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pydantic import ValidationError
 
 from libs.learning.learning_execution import (
     HEARTBEAT_INTERVAL_SECONDS,
@@ -31,6 +32,9 @@ TENANT = uuid.uuid4()
 DECISION = uuid.uuid4()
 OUTCOME_REV = uuid.uuid4()
 
+RETRY_ATTEMPT_THREE: int = 3
+NUM_REVISIONS_FIVE: int = 5
+
 
 # ── Learning Execution: creation ────────────────────────────────────────────
 
@@ -54,7 +58,7 @@ class TestLearningExecutionCreation:
             decision_id=DECISION,
             outcome_revision_id=OUTCOME_REV,
         )
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ex.status = STATUS_RUNNING  # type: ignore[misc]
 
     def test_execution_has_unique_id(self):
@@ -85,10 +89,10 @@ class TestLearningExecutionCreation:
             tenant_id=TENANT,
             decision_id=DECISION,
             outcome_revision_id=OUTCOME_REV,
-            attempt_number=3,
+            attempt_number=RETRY_ATTEMPT_THREE,
             parent_execution_id=uuid.uuid4(),
         )
-        assert ex.attempt_number == 3
+        assert ex.attempt_number == RETRY_ATTEMPT_THREE
         assert ex.parent_execution_id is not None
 
 
@@ -293,7 +297,7 @@ class TestOutcomeRevision:
             decision_id=DECISION,
             actual_outcomes=[],
         )
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             rev.actual_outcomes = []  # type: ignore[misc]
 
     def test_revision_has_unique_id(self):
@@ -341,4 +345,4 @@ class TestOutcomeRevision:
                 )
             )
         ids = {r.id for r in revisions}
-        assert len(ids) == 5, "Each revision must have a unique ID"
+        assert len(ids) == NUM_REVISIONS_FIVE, "Each revision must have a unique ID"

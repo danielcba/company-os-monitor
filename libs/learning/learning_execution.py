@@ -29,6 +29,8 @@ STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
 STATUS_STALE = "stale"
 
+INVALID_TRANSITION_MSG = "Invalid transition"
+
 VALID_STATUSES: frozenset[str] = frozenset(
     {STATUS_PENDING, STATUS_RUNNING, STATUS_COMPLETED, STATUS_FAILED, STATUS_STALE}
 )
@@ -116,7 +118,7 @@ def transition_status(execution: LearningExecution, new_status: str) -> Learning
     Returns a new LearningExecution with the updated status (frozen model).
     """
     if not is_valid_transition(execution.status, new_status):
-        raise ValueError("Invalid transition")  # noqa: TRY003
+        raise ValueError(INVALID_TRANSITION_MSG)
     now = datetime.now(UTC)
     updates: dict[str, Any] = {"status": new_status}
 

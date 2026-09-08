@@ -14,10 +14,14 @@ Tests for:
 - Orphaned outcome revision detection
 - Orphan recovery/classification
 """
+import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from conftest import DSN, pytestmark_db
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from libs.learning.learning_execution import (
     HEARTBEAT_INTERVAL_SECONDS,
@@ -33,6 +37,10 @@ from libs.learning.learning_execution import (
 )
 from libs.learning.learning_execution_store import _lock_key
 from libs.learning.outcome_revision import build_outcome_revision
+
+EXPECTED_STALE_THRESHOLD: int = 300
+EXPECTED_HEARTBEAT_INTERVAL: int = 30
+RETRY_ATTEMPT_TWO: int = 2
 
 TENANT = uuid.uuid4()
 DECISION = uuid.uuid4()
@@ -166,8 +174,8 @@ class TestStaleDetection:
         assert is_stale(ex) is True
 
     def test_threshold_configurable(self):
-        assert STALE_THRESHOLD_SECONDS == 300
-        assert HEARTBEAT_INTERVAL_SECONDS == 30
+        assert STALE_THRESHOLD_SECONDS == EXPECTED_STALE_THRESHOLD
+        assert HEARTBEAT_INTERVAL_SECONDS == EXPECTED_HEARTBEAT_INTERVAL
 
 
 # ── Reconciliation scenarios ────────────────────────────────────────────────
@@ -230,7 +238,7 @@ class TestReconciliationScenarios:
             attempt_number=ex1.attempt_number + 1,
             parent_execution_id=ex1.id,
         )
-        assert ex2.attempt_number == 2
+        assert ex2.attempt_number == 2  # noqa: PLR2004
         assert ex2.parent_execution_id == ex1.id
 
     def test_reconciliation_preserves_decision_context(self):
@@ -345,17 +353,10 @@ class TestOrphanDetection:
 
 # ── DB-level tests ──────────────────────────────────────────────────────────
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
-
-from conftest import DSN, pytestmark_db
-
-
 @pytest.mark.asyncio
 @pytestmark_db
 async def test_orphaned_revision_detected_by_query():
     """F-1: DB-level test for orphaned outcome_revision detection."""
-    import json as _json
     engine = create_async_engine(DSN)
     async with engine.begin() as conn:
         # Create a revision
@@ -364,7 +365,7 @@ async def test_orphaned_revision_detected_by_query():
                 "INSERT INTO outcome_revisions (tenant_id, decision_id, actual_outcomes) "
                 "VALUES (:t, :d, CAST(:o AS jsonb)) RETURNING id"
             ),
-            {"t": str(TENANT), "d": str(DECISION), "o": _json.dumps([])},
+            {"t": str(TENANT), "d": str(DECISION), "o": json.dumps([])},
         )
         rev_id = result.scalar()
 
@@ -388,7 +389,6 @@ async def test_orphaned_revision_detected_by_query():
 @pytestmark_db
 async def test_non_orphaned_revision_not_detected():
     """A revision with an execution is NOT detected as orphaned."""
-    import json as _json
     engine = create_async_engine(DSN)
     async with engine.begin() as conn:
         # Create a revision
@@ -397,7 +397,7 @@ async def test_non_orphaned_revision_not_detected():
                 "INSERT INTO outcome_revisions (tenant_id, decision_id, actual_outcomes) "
                 "VALUES (:t, :d, CAST(:o AS jsonb)) RETURNING id"
             ),
-            {"t": str(TENANT), "d": str(DECISION), "o": _json.dumps([])},
+            {"t": str(TENANT), "d": str(DECISION), "o": json.dumps([])},
         )
         rev_id = result.scalar()
 
@@ -431,7 +431,6 @@ async def test_non_orphaned_revision_not_detected():
 @pytestmark_db
 async def test_stale_execution_detected():
     """Stale execution is detected when heartbeat is expired."""
-    import json as _json
     engine = create_async_engine(DSN)
     async with engine.begin() as conn:
         # Create revision
@@ -440,7 +439,7 @@ async def test_stale_execution_detected():
                 "INSERT INTO outcome_revisions (tenant_id, decision_id, actual_outcomes) "
                 "VALUES (:t, :d, CAST(:o AS jsonb)) RETURNING id"
             ),
-            {"t": str(TENANT), "d": str(DECISION), "o": _json.dumps([])},
+            {"t": str(TENANT), "d": str(DECISION), "o": json.dumps([])},
         )
         rev_id = result.scalar()
 

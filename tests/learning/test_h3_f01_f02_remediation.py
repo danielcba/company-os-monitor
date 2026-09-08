@@ -10,14 +10,17 @@ Tests for:
 import asyncio
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
+from conftest import DSN, pytestmark_db
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from conftest import DSN, pytestmark_db
+from libs.learning.learning_execution_store import LearningExecutionStore
+from libs.memory.memory_ledger import MemoryStore, PersistLearningMemoryInput, compute_signal_hash
 
+SIGNAL_COUNT: int = 3
 
 TENANT = uuid.uuid4()
 DECISION = uuid.uuid4()
@@ -30,8 +33,6 @@ DECISION = uuid.uuid4()
 @pytestmark_db
 async def test_begin_phase2_acquires_lock_and_returns_session():
     """begin_phase2 returns (execution, session) with lock held in a transaction."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-
     engine = create_async_engine(DSN)
     store = LearningExecutionStore(engine=engine)
 
@@ -70,8 +71,6 @@ async def test_begin_phase2_acquires_lock_and_returns_session():
 @pytestmark_db
 async def test_phase2_rollback_rolls_back_all_writes():
     """Rollback of Phase 2 session removes execution — no partial state."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-
     engine = create_async_engine(DSN)
     store = LearningExecutionStore(engine=engine)
 
@@ -103,8 +102,6 @@ async def test_phase2_rollback_rolls_back_all_writes():
 @pytestmark_db
 async def test_phase2_commit_persists_execution():
     """Commit of Phase 2 session persists the execution."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-
     engine = create_async_engine(DSN)
     store = LearningExecutionStore(engine=engine)
 
@@ -131,11 +128,10 @@ async def test_phase2_commit_persists_execution():
     # Commit
     await session.commit()
 
-    # Verify: execution is completed
     result = await store.get_execution(execution_id=execution.id)
     assert result is not None
     assert result.status == "completed"
-    assert result.signal_count == 3
+    assert result.signal_count == SIGNAL_COUNT
     await engine.dispose()
 
 
@@ -143,8 +139,6 @@ async def test_phase2_commit_persists_execution():
 @pytestmark_db
 async def test_phase2_rollback_on_exception_leaves_no_execution():
     """Exception during Phase 2 → rollback → no execution persisted."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-
     engine = create_async_engine(DSN)
     store = LearningExecutionStore(engine=engine)
 
@@ -177,8 +171,6 @@ async def test_phase2_rollback_on_exception_leaves_no_execution():
 @pytestmark_db
 async def test_concurrent_same_decision_serialized():
     """Two workers targeting the same decision: second blocks until first commits."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-
     engine = create_async_engine(DSN)
     store = LearningExecutionStore(engine=engine)
 
@@ -235,8 +227,6 @@ async def test_concurrent_same_decision_serialized():
 @pytestmark_db
 async def test_concurrent_different_decisions_independent():
     """Two different decisions run concurrently without blocking."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-
     engine = create_async_engine(DSN)
     store = LearningExecutionStore(engine=engine)
 
@@ -284,8 +274,6 @@ async def test_concurrent_different_decisions_independent():
 @pytestmark_db
 async def test_submit_outcomes_with_revision_atomic_success():
     """submit_outcomes_with_revision: both INSERT and UPDATE succeed atomically."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-
     engine = create_async_engine(DSN)
     exec_store = LearningExecutionStore(engine=engine)
 
@@ -296,7 +284,10 @@ async def test_submit_outcomes_with_revision_atomic_success():
     confidence_id = uuid.uuid4()
     async with engine.begin() as conn:
         await conn.execute(
-            text("INSERT INTO tenants (id, name, slug, created_at) VALUES (:id, :n, :s, now()) ON CONFLICT DO NOTHING"),
+            text(
+            "INSERT INTO tenants (id, name, slug, created_at) "
+            "VALUES (:id, :n, :s, now()) ON CONFLICT DO NOTHING"
+        ),
             {"id": TENANT, "n": "test-tenant", "s": f"test-tenant-{TENANT}"},
         )
         await conn.execute(
@@ -313,7 +304,8 @@ async def test_submit_outcomes_with_revision_atomic_success():
             text(
                 "INSERT INTO confidence_scores (id, tenant_id, target_type, target_id, "
                 "evidential_support, explanatory_coherence, historical_calibration, "
-                "confidence_score, alpha, calibration_justification, calibration_error_estimate, computed_at) "
+                "confidence_score, alpha, calibration_justification, "
+                "calibration_error_estimate, computed_at) "
                 "VALUES (:id, :t, :tt, :tid, :es, :ec, :hc, :cs, :al, :cj, :ee, now())"
             ),
             {"id": confidence_id, "t": TENANT, "tt": "hypothesis", "tid": hypothesis_id,
@@ -322,7 +314,8 @@ async def test_submit_outcomes_with_revision_atomic_success():
         await conn.execute(
             text(
                 "INSERT INTO recommendations (id, tenant_id, hypothesis_id, confidence_id, "
-                "action_description, rationale, expected_consequences, confidence_score, proposed_at) "
+                "action_description, rationale, expected_consequences, "
+                "confidence_score, proposed_at) "
                 "VALUES (:id, :t, :h, :c, :ad, :r, CAST(:ec AS jsonb), :cs, now())"
             ),
             {"id": recommendation_id, "t": TENANT, "h": hypothesis_id, "c": confidence_id,
@@ -376,8 +369,6 @@ async def test_submit_outcomes_with_revision_atomic_success():
 @pytestmark_db
 async def test_submit_outcomes_with_revision_nonexistent_decision_rolls_back():
     """Atomic Phase 1 with nonexistent decision → entire transaction rolls back."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-
     engine = create_async_engine(DSN)
     exec_store = LearningExecutionStore(engine=engine)
 
@@ -409,7 +400,6 @@ async def test_submit_outcomes_with_revision_nonexistent_decision_rolls_back():
 @pytestmark_db
 async def test_persist_in_session_uses_external_session():
     """persist_in_session persists signal in the caller's transaction."""
-    from libs.memory.memory_ledger import MemoryStore, PersistLearningMemoryInput, compute_signal_hash
 
     engine = create_async_engine(DSN)
     store = MemoryStore(engine=engine)
@@ -440,7 +430,6 @@ async def test_persist_in_session_uses_external_session():
 @pytestmark_db
 async def test_persist_in_session_idempotent():
     """persist_in_session deduplicates via signal_hash (ON CONFLICT DO NOTHING)."""
-    from libs.memory.memory_ledger import MemoryStore, PersistLearningMemoryInput
 
     engine = create_async_engine(DSN)
     store = MemoryStore(engine=engine)

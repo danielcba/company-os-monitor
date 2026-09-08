@@ -13,6 +13,9 @@ import json
 import uuid
 
 import pytest
+from conftest import DSN, pytestmark_db
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from libs.learning.learning_execution import (
     STATUS_COMPLETED,
@@ -20,8 +23,13 @@ from libs.learning.learning_execution import (
     build_learning_execution,
     transition_status,
 )
+from libs.learning.learning_execution_store import LearningExecutionStore
 from libs.learning.outcome_revision import build_outcome_revision
-from libs.memory.memory_ledger import compute_signal_hash
+from libs.memory.memory_ledger import MemoryStore, PersistLearningMemoryInput, compute_signal_hash
+
+SIGNAL_HASH_LENGTH: int = 64
+EXPECTED_RETRIES: int = 10
+MIN_REVISION_COUNT: int = 3
 
 TENANT = uuid.uuid4()
 DECISION = uuid.uuid4()
@@ -49,7 +57,7 @@ class TestSignalHash:
 
     def test_is_sha256_hex(self):
         h = compute_signal_hash({"test": True})
-        assert len(h) == 64
+        assert len(h) == SIGNAL_HASH_LENGTH
         assert all(c in "0123456789abcdef" for c in h)
 
     def test_nested_structure_sensitive(self):
@@ -100,7 +108,7 @@ class TestExecutionIdentity:
                 outcome_revision_id=rev,
             )
             ids.add(ex.id)
-        assert len(ids) == 10
+        assert len(ids) == EXPECTED_RETRIES
 
     def test_execution_links_to_outcome_revision(self):
         rev_id = uuid.uuid4()
@@ -191,7 +199,7 @@ class TestProvenanceChain:
             revisions.append(rev)
 
         ids = {r.id for r in revisions}
-        assert len(ids) == 3
+        assert len(ids) == MIN_REVISION_COUNT
         # All reference the same decision
         assert all(r.decision_id == DECISION for r in revisions)
 
@@ -218,18 +226,12 @@ class TestProvenanceChain:
 # ── DB-level execution_id provenance tests ──────────────────────────────────
 
 
-from conftest import DSN, pytestmark_db
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 
 @pytest.mark.asyncio
 @pytestmark_db
 async def test_h3_memory_record_contains_execution_id():
     """TEST 1: H3-generated learning_memory row contains execution_id."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-    from libs.memory.memory_ledger import MemoryStore, PersistLearningMemoryInput
-
     engine = create_async_engine(DSN)
     exec_store = LearningExecutionStore(engine=engine)
     mem_store = MemoryStore(engine=engine)
@@ -284,10 +286,7 @@ async def test_h3_memory_record_contains_execution_id():
 @pytest.mark.asyncio
 @pytestmark_db
 async def test_h3_fk_provenance_is_valid():
-    """TEST 2: FK provenance is valid - learning_memory.execution_id references existing learning_executions."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-    from libs.memory.memory_ledger import MemoryStore, PersistLearningMemoryInput
-
+    """TEST 2: FK provenance valid - learning_memory.execution_id refs learning_executions."""
     engine = create_async_engine(DSN)
     exec_store = LearningExecutionStore(engine=engine)
     mem_store = MemoryStore(engine=engine)
@@ -351,9 +350,6 @@ async def test_h3_fk_provenance_is_valid():
 @pytestmark_db
 async def test_h3_multiple_signals_share_execution_id():
     """TEST 3: Multiple signals from same H3 execution share the same execution_id."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-    from libs.memory.memory_ledger import MemoryStore, PersistLearningMemoryInput
-
     engine = create_async_engine(DSN)
     exec_store = LearningExecutionStore(engine=engine)
     mem_store = MemoryStore(engine=engine)
@@ -400,7 +396,7 @@ async def test_h3_multiple_signals_share_execution_id():
             {"ids": signal_ids},
         )
         exec_ids = [row[0] for row in rows]
-        assert len(exec_ids) == 3
+        assert len(exec_ids) == MIN_REVISION_COUNT
         assert all(eid == execution.id for eid in exec_ids)
 
     await engine.dispose()
@@ -410,9 +406,6 @@ async def test_h3_multiple_signals_share_execution_id():
 @pytestmark_db
 async def test_h3_different_executions_different_provenance():
     """TEST 4: Different executions produce different execution_id provenance."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-    from libs.memory.memory_ledger import MemoryStore, PersistLearningMemoryInput
-
     engine = create_async_engine(DSN)
     exec_store = LearningExecutionStore(engine=engine)
     mem_store = MemoryStore(engine=engine)
@@ -500,9 +493,6 @@ async def test_h3_different_executions_different_provenance():
 @pytestmark_db
 async def test_h3_rollback_removes_provenance():
     """TEST 5: Rollback removes both execution and learning_memory (F-01 regression check)."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-    from libs.memory.memory_ledger import MemoryStore, PersistLearningMemoryInput
-
     engine = create_async_engine(DSN)
     exec_store = LearningExecutionStore(engine=engine)
     mem_store = MemoryStore(engine=engine)
@@ -556,9 +546,6 @@ async def test_h3_rollback_removes_provenance():
 @pytestmark_db
 async def test_h3_idempotency_preserves_provenance():
     """TEST 6: Idempotency (ON CONFLICT DO NOTHING) works correctly with execution_id."""
-    from libs.learning.learning_execution_store import LearningExecutionStore
-    from libs.memory.memory_ledger import MemoryStore, PersistLearningMemoryInput, compute_signal_hash
-
     engine = create_async_engine(DSN)
     exec_store = LearningExecutionStore(engine=engine)
     mem_store = MemoryStore(engine=engine)

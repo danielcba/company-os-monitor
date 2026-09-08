@@ -28,9 +28,10 @@ def _check_db_available() -> bool:
 
         asyncio.run(_check())
         asyncio.run(engine.dispose())
-        return True
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
+    else:
+        return True
 
 
 db_available = _check_db_available()

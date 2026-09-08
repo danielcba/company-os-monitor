@@ -22,6 +22,7 @@ execution. 401 = no/invalid token, 403 = authenticated but no authority,
 import logging
 import os
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from aiohttp import web
@@ -140,6 +141,9 @@ class GatewayServer:
             "/api/v1/agents/instance/{instance_id}", self.agent_stop_handler
         )
         self.app.router.add_post("/api/v1/actions/{action}", self.action_handler)
+        self.app.router.add_post(
+            "/api/v1/agents/instance/heartbeat", self.heartbeat_handler
+        )
         self.runner = None
 
     async def machine_token_handler(self, request):
@@ -457,6 +461,83 @@ class GatewayServer:
         return web.json_response({
             "instance_id": instance_id,
             "status": inst["status"],
+        })
+
+
+    async def heartbeat_handler(self, request):
+        """POST /api/v1/agents/instance/heartbeat - heartbeat for agent instance (ADR-0006)."""
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+
+        instance_id = body.get("instance_id")
+        _status = body.get("status", "RUNNING")
+        _metadata = body.get("metadata", {})
+
+        if not instance_id:
+            return web.json_response({"error": "instance_id required"}, status=400)
+
+        # Authenticate using the established H4.1 mechanism
+        auth_header = request.headers.get("Authorization", "")
+        from libs.access.errors import InvalidTokenError
+
+        try:
+            token = await self.service.authenticate(auth_header)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+
+        tenant_id = token.tenant_id
+
+        # Verify instance exists and belongs to the token's tenant/credential
+        inst = await self._db_fetchrow(
+            "SELECT id, status, installation_id, credential_id, tenant_id FROM agent_instances "
+            "WHERE id = $1 AND tenant_id = $2",
+            instance_id, tenant_id,
+        )
+        if not inst:
+            return web.json_response({"error": "instance not found"}, status=404)
+
+        # Verify credential matches
+        if inst["credential_id"] != token.sub:
+            return web.json_response({"error": "credential mismatch for this instance"}, status=401)
+
+        # Verify installation is ACTIVE
+        inst_inst = await self._db_fetchrow(
+            "SELECT status FROM agent_installations WHERE id = $1 AND tenant_id = $2",
+            inst["installation_id"], tenant_id,
+        )
+        if not inst_inst or inst_inst["status"] != "ACTIVE":
+            return web.json_response({"error": "installation not active"}, status=401)
+
+        # Verify credential is ACTIVE
+        cred = await self._db_fetchrow(
+            "SELECT status FROM agent_credentials WHERE installation_id = $1 AND tenant_id = $2 AND id = $3",
+            inst["installation_id"], tenant_id, inst["credential_id"],
+        )
+        if not cred or cred["status"] != "ACTIVE":
+            return web.json_response({"error": "credential not active"}, status=401)
+
+        # Validate status is RUNNING
+        if inst["status"] != "RUNNING":
+            return web.json_response({"error": "instance not running"}, status=401)
+
+        # Update last_heartbeat_at
+        await self._db_execute(
+            "UPDATE agent_instances SET last_heartbeat_at = now() WHERE id = $1",
+            instance_id,
+        )
+
+        # Update last_seen_at on installation
+        await self._db_execute(
+            "UPDATE agent_installations SET last_seen_at = now() WHERE id = $1",
+            inst["installation_id"],
+        )
+
+        return web.json_response({
+            "instance_id": instance_id,
+            "status": inst["status"],
+            "last_heartbeat_at": datetime.now(UTC).isoformat(),
         })
     def _setup_cors(self) -> None:
         allowed_origins = [

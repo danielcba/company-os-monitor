@@ -13,11 +13,16 @@ Covers:
 - Two different decisions should not block each other (isolation)
 """
 import asyncio
+import json
 import uuid
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from conftest import DSN, pytestmark_db
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from libs.learning.learning_execution import (
     STATUS_COMPLETED,
@@ -37,6 +42,8 @@ from libs.learning.outcome_revision import build_outcome_revision
 TENANT = uuid.uuid4()
 DECISION = uuid.uuid4()
 OUTCOME_REV = uuid.uuid4()
+
+SECOND_ATTEMPT: int = 2
 
 
 # ── Unit: lock key derivation ───────────────────────────────────────────────
@@ -121,7 +128,7 @@ class TestExecutionStateMachine:
             attempt_number=2,
             parent_execution_id=ex1.id,
         )
-        assert ex2.attempt_number == 2
+        assert ex2.attempt_number == SECOND_ATTEMPT
         assert ex2.parent_execution_id == ex1.id
         assert ex2.status == STATUS_PENDING
 
@@ -277,15 +284,11 @@ class TestIdempotency:
             attempt_number=2,
             parent_execution_id=ex1.id,
         )
-        assert ex2.attempt_number == 2
+        assert ex2.attempt_number == SECOND_ATTEMPT
         assert ex2.id != ex1.id
 
 
 # ── DB-level: transaction rollback ─────────────────────────────────────────
-
-from conftest import DSN, pytestmark_db
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 
 @pytest.mark.asyncio
@@ -373,8 +376,6 @@ async def test_different_decisions_no_contention():
 @pytestmark_db
 async def test_outcome_revision_immutable():
     """P6: outcome_revisions is append-only (UPDATE blocked by trigger)."""
-    import json as _json
-    from sqlalchemy import JSON
     engine = create_async_engine(DSN)
     async with engine.begin() as conn:
         result = await conn.execute(
@@ -382,7 +383,7 @@ async def test_outcome_revision_immutable():
                 "INSERT INTO outcome_revisions (tenant_id, decision_id, actual_outcomes) "
                 "VALUES (:t, :d, CAST(:o AS jsonb)) RETURNING id"
             ),
-            {"t": str(TENANT), "d": str(DECISION), "o": _json.dumps([])},
+            {"t": str(TENANT), "d": str(DECISION), "o": json.dumps([])},
         )
         rev_id = result.scalar()
         with pytest.raises(Exception, match="append-only"):
@@ -397,7 +398,6 @@ async def test_outcome_revision_immutable():
 @pytestmark_db
 async def test_learning_execution_invalid_status_rejected():
     """P2: CHECK constraint rejects invalid status."""
-    import json as _json
     engine = create_async_engine(DSN)
     async with engine.begin() as conn:
         # Create outcome revision first
@@ -406,7 +406,7 @@ async def test_learning_execution_invalid_status_rejected():
                 "INSERT INTO outcome_revisions (tenant_id, decision_id, actual_outcomes) "
                 "VALUES (:t, :d, CAST(:o AS jsonb)) RETURNING id"
             ),
-            {"t": str(TENANT), "d": str(DECISION), "o": _json.dumps([])},
+            {"t": str(TENANT), "d": str(DECISION), "o": json.dumps([])},
         )
         rev_id = result.scalar()
         with pytest.raises(Exception, match="chk_learning_execution_status"):
@@ -425,7 +425,6 @@ async def test_learning_execution_invalid_status_rejected():
 @pytestmark_db
 async def test_partial_unique_index_prevents_concurrent_active():
     """UNIQUE partial index: at most one active execution per outcome_revision."""
-    import json as _json
     engine = create_async_engine(DSN)
     async with engine.begin() as conn:
         result = await conn.execute(
@@ -433,7 +432,7 @@ async def test_partial_unique_index_prevents_concurrent_active():
                 "INSERT INTO outcome_revisions (tenant_id, decision_id, actual_outcomes) "
                 "VALUES (:t, :d, CAST(:o AS jsonb)) RETURNING id"
             ),
-            {"t": str(TENANT), "d": str(DECISION), "o": _json.dumps([])},
+            {"t": str(TENANT), "d": str(DECISION), "o": json.dumps([])},
         )
         rev_id = result.scalar()
         # First execution: pending
@@ -446,7 +445,7 @@ async def test_partial_unique_index_prevents_concurrent_active():
             {"t": str(TENANT), "d": str(DECISION), "r": rev_id},
         )
         # Second execution: pending → should violate UNIQUE partial index
-        with pytest.raises(Exception):
+        with pytest.raises(IntegrityError):
             await conn.execute(
                 text(
                     "INSERT INTO learning_executions "

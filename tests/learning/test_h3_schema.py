@@ -3,11 +3,12 @@
 These tests verify the migration SQL is well-formed and idempotent.
 DB-level tests skip when PostgreSQL is unavailable.
 """
+import json
+
 import pytest
+from conftest import DSN, pytestmark_db
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-
-from conftest import DSN, pytestmark_db
 
 pytestmark = pytestmark_db
 
@@ -151,7 +152,6 @@ async def test_migration_is_idempotent(engine):
 @pytest.mark.asyncio
 async def test_outcome_revision_rejects_update(engine):
     """P6: immutability trigger blocks UPDATE on outcome_revisions."""
-    import json as _json
     async with engine.begin() as conn:
         # Insert a test revision
         result = await conn.execute(
@@ -162,7 +162,7 @@ async def test_outcome_revision_rejects_update(engine):
             {
                 "t": "00000000-0000-0000-0000-000000000001",
                 "d": "00000000-0000-0000-0000-000000000002",
-                "o": _json.dumps([]),
+                "o": json.dumps([]),
             },
         )
         rev_id = result.scalar()
@@ -180,7 +180,6 @@ async def test_outcome_revision_rejects_update(engine):
 @pytest.mark.asyncio
 async def test_learning_execution_rejects_invalid_status(engine):
     """P2: CHECK constraint rejects invalid status values."""
-    import json as _json
     async with engine.begin() as conn:
         # Insert a valid outcome revision first
         result = await conn.execute(
@@ -191,7 +190,7 @@ async def test_learning_execution_rejects_invalid_status(engine):
             {
                 "t": "00000000-0000-0000-0000-000000000001",
                 "d": "00000000-0000-0000-0000-000000000002",
-                "o": _json.dumps([]),
+                "o": json.dumps([]),
             },
         )
         rev_id = result.scalar()
