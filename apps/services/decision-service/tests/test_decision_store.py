@@ -356,6 +356,7 @@ async def test_decision_insert_read_back_and_fields_persisted(
     evidence_store,
     pattern_store,
 ):
+    await _truncate_cognitive_tables()
     tenant_id = uuid.uuid4()
     await _create_tenant(tenant_id)
     try:

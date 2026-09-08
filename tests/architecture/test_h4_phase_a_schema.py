@@ -411,6 +411,15 @@ async def test_observation_outbox_lifecycle_fields_mutable_only(engine):
     _json_mod = _json
 
     async with engine.connect() as conn:
+        # Create tenant first (FK requirement)
+        await conn.execute(
+            text(
+                "INSERT INTO tenants (id, name, slug, created_at) "
+                "VALUES (:t, :n, :s, now()) ON CONFLICT DO NOTHING"
+            ),
+            {"t": "00000000-0000-0000-0000-000000000001", "n": "test-tenant", "s": "test-slug"},
+        )
+
         result = await conn.execute(
             text(
                 "INSERT INTO servers (tenant_id, hostname, os_type, status) "
