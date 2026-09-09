@@ -44,9 +44,15 @@ class _DecisionView:
     The gateway read stores return dict payloads; ``build_consolidation`` needs
     attribute access to ``expected_outcomes``/``actual_outcomes``. This adapter
     provides exactly that without pulling ``libs.action`` models into the core.
+
+    Handles both formats:
+    - Flat dict (from ``list_decisions``): ``{"id": ..., "expected_outcomes": ...}``
+    - Nested dict (from ``get_decision``): ``{"decision": {...}, ...}``
     """
 
     def __init__(self, decision: dict[str, Any]):
+        if "decision" in decision:
+            decision = decision["decision"]
         self.id = decision.get("id")
         self.tenant_id = decision.get("tenant_id")
         self.expected_outcomes = decision.get("expected_outcomes") or []

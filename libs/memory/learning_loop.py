@@ -126,6 +126,8 @@ async def _trace_decision_to_artifacts_bundle(
     This enables decision-scoped learning: only persist signals for artifacts
     actually affected by this Decision's outcomes.
     """
+    if "decision" in decision:
+        decision = decision["decision"]
     affected_patterns: set[uuid.UUID] = set()
     affected_contexts: set[uuid.UUID] = set()
     affected_insights: set[uuid.UUID] = set()
@@ -321,6 +323,8 @@ async def run_learning_loop_for_decision(  # noqa: PLR0913
     # Build a Decision view for consolidation (needs expected/actual outcomes)
     class _DecisionView:
         def __init__(self, d: dict[str, Any]):
+            if "decision" in d:
+                d = d["decision"]
             self.id = d.get("id")
             self.tenant_id = d.get("tenant_id")
             self.expected_outcomes = d.get("expected_outcomes") or []
@@ -777,6 +781,8 @@ async def run_h3_learning_loop_for_decision(  # noqa: PLR0913
 
         class _DecisionView:
             def __init__(self, d: dict[str, Any]):
+                if "decision" in d:
+                    d = d["decision"]
                 self.id = d.get("id")
                 self.tenant_id = d.get("tenant_id")
                 self.expected_outcomes = d.get("expected_outcomes") or []
