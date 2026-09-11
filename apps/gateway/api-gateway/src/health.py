@@ -144,6 +144,11 @@ class GatewayServer:
         self.app.router.add_post(
             "/api/v1/agents/instance/heartbeat", self.heartbeat_handler
         )
+        from src.ingest import ingest_handler as _ingest_handler
+        self.ingest_handler = _ingest_handler.__get__(self, type(self))
+        self.app.router.add_post(
+            "/api/v1/telemetry/ingest", self.ingest_handler
+        )
         self.runner = None
 
     async def machine_token_handler(self, request):
