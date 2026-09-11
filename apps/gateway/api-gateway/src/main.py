@@ -222,12 +222,23 @@ async def main():
     )
     server = GatewayServer(service, jwt)
 
+    # Observation Publisher (ADR-0004 §4): outbox → Redis Streams
+    from libs.cognitive_core.observation_bus import ObservationBus
+    from libs.telemetry.publisher import ObservationPublisher
+    from redis.asyncio import from_url as redis_from_url
+
+    redis_client = redis_from_url(redis_url)
+    observation_bus = ObservationBus(redis_client)
+    publisher = ObservationPublisher(dsn, observation_bus)
+    await publisher.start()
+
     await server.start(port)
 
     try:
         while True:
             await asyncio.sleep(3600)
     finally:
+        await publisher.stop()
         await server.stop()
         await engine.dispose()
         await decision_store.close()
@@ -237,6 +248,7 @@ async def main():
         await evidence_store.close()
         await anomaly_store.close()
         await learning_loop_store.close()
+        await redis_client.aclose()
 
 
 if __name__ == "__main__":

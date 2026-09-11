@@ -7,12 +7,14 @@ from libs.telemetry.ingest_service import (
     ValidationError,
 )
 from libs.telemetry.observation_id import OBSERVATION_NAMESPACE, observation_id
+from libs.telemetry.publisher import ObservationPublisher
 
 __all__ = [
     "canonical_float",
     "canonical_payload",
     "payload_hash",
     "IngestResult",
+    "ObservationPublisher",
     "OBSERVATION_NAMESPACE",
     "PayloadConflictError",
     "TelemetryIngestService",
