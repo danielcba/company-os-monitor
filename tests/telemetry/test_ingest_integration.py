@@ -47,9 +47,13 @@ async def _create_tenant(conn: asyncpg.Connection, tenant_id: uuid.UUID) -> None
     )
 
 
-async def _create_server(conn: asyncpg.Connection, server_id: uuid.UUID, tenant_id: uuid.UUID) -> None:
+async def _create_server(
+    conn: asyncpg.Connection, server_id: uuid.UUID, tenant_id: uuid.UUID,
+) -> None:
     await conn.execute(
-        "INSERT INTO servers (id, tenant_id, hostname, ip_address, os_type, os_version, agent_version, status) "
+        "INSERT INTO servers "
+        "(id, tenant_id, hostname, ip_address, os_type, "
+        " os_version, agent_version, status) "
         "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) "
         "ON CONFLICT (id) DO NOTHING",
         server_id, tenant_id, f"server-{server_id.hex[:8]}", "127.0.0.1",
@@ -89,7 +93,9 @@ async def _create_credential(
     )
 
 
-async def _cleanup_batch(conn: asyncpg.Connection, tenant_id: uuid.UUID, batch_id: uuid.UUID) -> None:
+async def _cleanup_batch(
+    conn: asyncpg.Connection, tenant_id: uuid.UUID, batch_id: uuid.UUID,
+) -> None:
     await conn.execute("SET session_replication_role = replica")
     try:
         await conn.execute(
@@ -297,7 +303,9 @@ class TestValidation:
             await svc.ingest_batch(tenant_id, installation_id, _uid(), credential_id, body)
 
     @pytest.mark.asyncio
-    async def test_invalid_sequence_zero(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_invalid_sequence_zero(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         body = _valid_body(samples=[
             {"sequence": 0, "fact_type": "x", "fact_value": {}, "unit": "%"},
         ])
@@ -306,7 +314,9 @@ class TestValidation:
             await svc.ingest_batch(tenant_id, installation_id, _uid(), credential_id, body)
 
     @pytest.mark.asyncio
-    async def test_invalid_captured_at(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_invalid_captured_at(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         body = _valid_body(captured_at="not-a-date")
         svc = TelemetryIngestService(DSN)
         with pytest.raises(ValidationError, match="ISO 8601"):
@@ -337,13 +347,17 @@ class TestConflict:
     """Same batch_id + different hash → 409."""
 
     @pytest.mark.asyncio
-    async def test_different_hash_conflict(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_different_hash_conflict(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         batch_id = _uid()
         body1 = _valid_body(batch_id=batch_id, samples=[
-            {"sequence": 1, "fact_type": "cpu", "fact_value": {"value": 1}, "unit": "%", "labels": {}},
+            {"sequence": 1, "fact_type": "cpu",
+             "fact_value": {"value": 1}, "unit": "%", "labels": {}},
         ])
         body2 = _valid_body(batch_id=batch_id, samples=[
-            {"sequence": 1, "fact_type": "cpu", "fact_value": {"value": 999}, "unit": "%", "labels": {}},
+            {"sequence": 1, "fact_type": "cpu",
+             "fact_value": {"value": 999}, "unit": "%", "labels": {}},
         ])
 
         svc = TelemetryIngestService(DSN)
@@ -381,7 +395,9 @@ class TestDeterministicIds:
     """Observation IDs are deterministic across calls."""
 
     @pytest.mark.asyncio
-    async def test_deterministic_across_retries(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_deterministic_across_retries(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         batch_id = _uid()
         body = _valid_body(batch_id=batch_id)
         svc = TelemetryIngestService(DSN)
@@ -433,7 +449,8 @@ class TestMultipleSamples:
                 tenant_id, batch_id,
             )
             assert len(outbox) == 1
-            obs = json.loads(outbox[0]["observation"]) if isinstance(outbox[0]["observation"], str) else outbox[0]["observation"]
+            raw = outbox[0]["observation"]
+            obs = json.loads(raw) if isinstance(raw, str) else raw
             assert len(obs.get("observations", [])) == 3
         finally:
             await _cleanup_batch(conn, tenant_id, batch_id)
@@ -449,7 +466,9 @@ class TestOutboxIdempotency:
     """Retry does not duplicate outbox records."""
 
     @pytest.mark.asyncio
-    async def test_retry_no_duplicate_outbox(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_retry_no_duplicate_outbox(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         batch_id = _uid()
         body = _multi_sample_body(batch_id, n=2)
         svc = TelemetryIngestService(DSN)
@@ -467,7 +486,8 @@ class TestOutboxIdempotency:
                 tenant_id, batch_id,
             )
             assert len(outbox) == 1
-            obs = json.loads(outbox[0]["observation"]) if isinstance(outbox[0]["observation"], str) else outbox[0]["observation"]
+            raw = outbox[0]["observation"]
+            obs = json.loads(raw) if isinstance(raw, str) else raw
             assert len(obs.get("observations", [])) == 2
 
             samples = await conn.fetch(
@@ -480,13 +500,17 @@ class TestOutboxIdempotency:
             await conn.close()
 
     @pytest.mark.asyncio
-    async def test_conflict_no_outbox_created(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_conflict_no_outbox_created(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         batch_id = _uid()
         body1 = _valid_body(batch_id=batch_id, samples=[
-            {"sequence": 1, "fact_type": "cpu", "fact_value": {"value": 1}, "unit": "%", "labels": {}},
+            {"sequence": 1, "fact_type": "cpu",
+             "fact_value": {"value": 1}, "unit": "%", "labels": {}},
         ])
         body2 = _valid_body(batch_id=batch_id, samples=[
-            {"sequence": 1, "fact_type": "cpu", "fact_value": {"value": 2}, "unit": "%", "labels": {}},
+            {"sequence": 1, "fact_type": "cpu",
+             "fact_value": {"value": 2}, "unit": "%", "labels": {}},
         ])
 
         svc = TelemetryIngestService(DSN)
@@ -518,7 +542,9 @@ class TestConcurrency:
     """Concurrent idempotent requests."""
 
     @pytest.mark.asyncio
-    async def test_concurrent_same_hash(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_concurrent_same_hash(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         """Two concurrent requests with same batch+hash → both 202, no duplication."""
         batch_id = _uid()
         body = _valid_body(batch_id=batch_id)
@@ -532,7 +558,11 @@ class TestConcurrency:
 
         results = await asyncio.gather(ingest(), ingest(), return_exceptions=True)
 
-        successes = [r for r in results if isinstance(r, type(results[0])) and not isinstance(r, Exception)]
+        successes = [
+            r for r in results
+            if isinstance(r, type(results[0]))
+            and not isinstance(r, Exception)
+        ]
         errors = [r for r in results if isinstance(r, Exception)]
 
         assert len(successes) == 2
@@ -559,14 +589,18 @@ class TestConcurrency:
             await conn.close()
 
     @pytest.mark.asyncio
-    async def test_concurrent_different_hash(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_concurrent_different_hash(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         """Two concurrent requests with same batch+diff hash → one 202, one 409."""
         batch_id = _uid()
         body1 = _valid_body(batch_id=batch_id, samples=[
-            {"sequence": 1, "fact_type": "cpu", "fact_value": {"value": 1}, "unit": "%", "labels": {}},
+            {"sequence": 1, "fact_type": "cpu",
+             "fact_value": {"value": 1}, "unit": "%", "labels": {}},
         ])
         body2 = _valid_body(batch_id=batch_id, samples=[
-            {"sequence": 1, "fact_type": "cpu", "fact_value": {"value": 999}, "unit": "%", "labels": {}},
+            {"sequence": 1, "fact_type": "cpu",
+             "fact_value": {"value": 999}, "unit": "%", "labels": {}},
         ])
 
         svc = TelemetryIngestService(DSN)
@@ -581,7 +615,11 @@ class TestConcurrency:
 
         successes = [r for r in results if not isinstance(r, Exception)]
         conflicts = [r for r in results if isinstance(r, PayloadConflictError)]
-        other_errors = [r for r in results if isinstance(r, Exception) and not isinstance(r, PayloadConflictError)]
+        other_errors = [
+            r for r in results
+            if isinstance(r, Exception)
+            and not isinstance(r, PayloadConflictError)
+        ]
 
         assert len(successes) == 1
         assert len(conflicts) == 1
@@ -614,7 +652,9 @@ class TestCrossTenant:
     """Tenant isolation: wrong tenant_id → rejected."""
 
     @pytest.mark.asyncio
-    async def test_wrong_tenant_rejected(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_wrong_tenant_rejected(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         wrong_tenant = _uid()
         body = _valid_body()
         svc = TelemetryIngestService(DSN)
@@ -636,7 +676,9 @@ class TestCrossTenant:
             )
 
     @pytest.mark.asyncio
-    async def test_installation_from_different_tenant_rejected(self, tenant_id, installation_id, credential_id):
+    async def test_installation_from_different_tenant_rejected(
+        self, tenant_id, installation_id, credential_id,
+    ):
         """Installation belonging to a different tenant is rejected."""
         other_tenant = _uid()
         other_server = _uid()
@@ -670,12 +712,15 @@ class TestSourceId:
     """source_id resolves from installation → server_id."""
 
     @pytest.mark.asyncio
-    async def test_source_id_matches_server(self, setup_tenant, tenant_id, installation_id, credential_id, server_id):
+    async def test_source_id_matches_server(
+        self, setup_tenant, tenant_id, installation_id,
+        credential_id, server_id,
+    ):
         batch_id = _uid()
         body = _valid_body(batch_id=batch_id)
         svc = TelemetryIngestService(DSN)
 
-        result = await svc.ingest_batch(
+        await svc.ingest_batch(
             tenant_id, installation_id, _uid(), credential_id, body,
         )
 
@@ -700,12 +745,14 @@ class TestQualityClass:
     """quality_class resolves from capabilities_json."""
 
     @pytest.mark.asyncio
-    async def test_default_quality_class(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_default_quality_class(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         batch_id = _uid()
         body = _valid_body(batch_id=batch_id)
         svc = TelemetryIngestService(DSN)
 
-        result = await svc.ingest_batch(
+        await svc.ingest_batch(
             tenant_id, installation_id, _uid(), credential_id, body,
         )
 
@@ -733,7 +780,10 @@ class TestCardinality:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("n", [1, 2, 5])
-    async def test_n_samples_cardinality(self, setup_tenant, tenant_id, installation_id, credential_id, n):
+    async def test_n_samples_cardinality(
+        self, setup_tenant, tenant_id, installation_id,
+        credential_id, n,
+    ):
         batch_id = _uid()
         body = _multi_sample_body(batch_id, n=n)
         svc = TelemetryIngestService(DSN)
@@ -760,7 +810,8 @@ class TestCardinality:
                 tenant_id, batch_id,
             )
             assert len(outbox) == 1
-            obs = json.loads(outbox[0]["observation"]) if isinstance(outbox[0]["observation"], str) else outbox[0]["observation"]
+            raw = outbox[0]["observation"]
+            obs = json.loads(raw) if isinstance(raw, str) else raw
             assert len(obs.get("observations", [])) == n
         finally:
             await _cleanup_batch(conn, tenant_id, batch_id)
@@ -776,14 +827,18 @@ class TestTransactionRollback:
     """Failed inserts leave no orphan rows."""
 
     @pytest.mark.asyncio
-    async def test_rollback_on_conflict(self, setup_tenant, tenant_id, installation_id, credential_id):
+    async def test_rollback_on_conflict(
+        self, setup_tenant, tenant_id, installation_id, credential_id,
+    ):
         """Conflict after batch insert → no orphan samples/outbox."""
         batch_id = _uid()
         body1 = _valid_body(batch_id=batch_id, samples=[
-            {"sequence": 1, "fact_type": "cpu", "fact_value": {"value": 1}, "unit": "%", "labels": {}},
+            {"sequence": 1, "fact_type": "cpu",
+             "fact_value": {"value": 1}, "unit": "%", "labels": {}},
         ])
         body2 = _valid_body(batch_id=batch_id, samples=[
-            {"sequence": 1, "fact_type": "cpu", "fact_value": {"value": 2}, "unit": "%", "labels": {}},
+            {"sequence": 1, "fact_type": "cpu",
+             "fact_value": {"value": 2}, "unit": "%", "labels": {}},
         ])
 
         svc = TelemetryIngestService(DSN)

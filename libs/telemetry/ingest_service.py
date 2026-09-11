@@ -121,7 +121,7 @@ class TelemetryIngestService:
                             ingested_at=existing["received_at"],
                         )
                     existing_hash = existing["payload_hash"] if existing else "unknown"
-                    raise PayloadConflictError(batch_id, existing_hash)
+                    raise PayloadConflictError(batch_id, existing_hash) from None
 
                 observation_ids: list[uuid.UUID] = []
                 outbox_observations: list[dict[str, Any]] = []
