@@ -5,6 +5,7 @@ observation ID), §5 (tenant-aware relationships), §7 (quality class).
 """
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -85,45 +86,45 @@ class TelemetryIngestService:
             raise ValidationError("installation not found or tenant mismatch")
 
         server_id = installation["server_id"]
-        capabilities = installation["capabilities_json"] or {}
+        caps_raw = installation["capabilities_json"]
+        capabilities = json.loads(caps_raw) if isinstance(caps_raw, str) else (caps_raw or {})
         quality_mapping = capabilities.get("quality_mapping", {})
         default_qc = capabilities.get("default_quality_class", "Q3")
 
-        async with asyncpg.connect(self._dsn) as conn:
-            existing = await conn.fetchrow(
-                "SELECT id, payload_hash FROM metric_batches "
-                "WHERE tenant_id = $1 AND installation_id = $2 AND batch_id = $3",
-                tenant_id, installation_id, batch_id,
-            )
-
-            if existing is not None:
-                if existing["payload_hash"] == hash_value:
-                    obs_ids = await self._fetch_existing_observation_ids(
-                        conn, tenant_id, batch_id
-                    )
-                    ingested_at = (
-                        existing["created_at"]
-                        if "created_at" in existing
-                        else datetime.now(UTC)
-                    )
-                    return IngestResult(
-                        batch_id=batch_id,
-                        observation_ids=obs_ids,
-                        ingested_at=ingested_at,
-                    )
-                raise PayloadConflictError(batch_id, existing["payload_hash"])
-
+        conn = await asyncpg.connect(self._dsn)
+        try:
             async with conn.transaction():
-                await conn.execute(
-                    "INSERT INTO metric_batches "
-                    "(tenant_id, installation_id, instance_id, credential_id, "
-                    " batch_id, payload_hash, captured_at, sample_count) "
-                    "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-                    tenant_id, installation_id, instance_id, credential_id,
-                    batch_id, hash_value, captured_at, len(samples),
-                )
+                await conn.execute("SAVEPOINT sp_batch")
+                try:
+                    await conn.execute(
+                        "INSERT INTO metric_batches "
+                        "(id, tenant_id, installation_id, instance_id, credential_id, "
+                        " batch_id, payload_hash, captured_at, sample_count) "
+                        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+                        batch_id, tenant_id, installation_id, instance_id, credential_id,
+                        batch_id, hash_value, captured_at, len(samples),
+                    )
+                except asyncpg.UniqueViolationError:
+                    await conn.execute("ROLLBACK TO SAVEPOINT sp_batch")
+                    existing = await conn.fetchrow(
+                        "SELECT id, payload_hash, received_at FROM metric_batches "
+                        "WHERE tenant_id = $1 AND installation_id = $2 AND batch_id = $3",
+                        tenant_id, installation_id, batch_id,
+                    )
+                    if existing is not None and existing["payload_hash"] == hash_value:
+                        obs_ids = await self._fetch_existing_observation_ids(
+                            conn, tenant_id, batch_id
+                        )
+                        return IngestResult(
+                            batch_id=batch_id,
+                            observation_ids=obs_ids,
+                            ingested_at=existing["received_at"],
+                        )
+                    existing_hash = existing["payload_hash"] if existing else "unknown"
+                    raise PayloadConflictError(batch_id, existing_hash)
 
                 observation_ids: list[uuid.UUID] = []
+                outbox_observations: list[dict[str, Any]] = []
                 for sample in samples:
                     seq = sample["sequence"]
                     fact_type = sample["fact_type"]
@@ -144,7 +145,7 @@ class TelemetryIngestService:
                         __import__("json").dumps(sample.get("labels", {})),
                     )
 
-                    observation_payload = {
+                    outbox_observations.append({
                         "id": str(obs_id),
                         "tenant_id": str(tenant_id),
                         "source_id": str(server_id),
@@ -155,22 +156,29 @@ class TelemetryIngestService:
                         "captured_at": captured_at.isoformat(),
                         "quality_class": quality_class,
                         "raw_payload": sample,
-                    }
+                    })
 
-                    await conn.execute(
-                        "INSERT INTO observation_outbox "
-                        "(tenant_id, installation_id, batch_id, credential_id, "
-                        " payload_hash, observation) "
-                        "VALUES ($1,$2,$3,$4,$5,$6)",
-                        tenant_id, installation_id, batch_id, credential_id,
-                        hash_value, __import__("json").dumps(observation_payload),
-                    )
+                combined_observation = {
+                    "batch_id": str(batch_id),
+                    "observation_ids": [str(oid) for oid in observation_ids],
+                    "observations": outbox_observations,
+                }
+                await conn.execute(
+                    "INSERT INTO observation_outbox "
+                    "(tenant_id, installation_id, batch_id, credential_id, "
+                    " payload_hash, observation) "
+                    "VALUES ($1,$2,$3,$4,$5,$6)",
+                    tenant_id, installation_id, batch_id, credential_id,
+                    hash_value, json.dumps(combined_observation),
+                )
 
             return IngestResult(
                 batch_id=batch_id,
                 observation_ids=observation_ids,
                 ingested_at=datetime.now(UTC),
             )
+        finally:
+            await conn.close()
 
     def _validate_body(self, body: dict[str, Any]) -> uuid.UUID:
         """Validate request body structure per ADR-0007 §1. Returns batch_id."""
@@ -243,23 +251,30 @@ class TelemetryIngestService:
         self, tenant_id: uuid.UUID, installation_id: uuid.UUID
     ) -> dict[str, Any] | None:
         """Resolve installation → server_id, capabilities_json (ADR-0007 §5 L320-325)."""
-        async with asyncpg.connect(self._dsn) as conn:
+        conn = await asyncpg.connect(self._dsn)
+        try:
             return await conn.fetchrow(
                 "SELECT server_id, capabilities_json, agent_type "
                 "FROM agent_installations "
                 "WHERE id = $1 AND tenant_id = $2 AND status = 'ACTIVE'",
                 installation_id, tenant_id,
             )
+        finally:
+            await conn.close()
 
     async def _fetch_existing_observation_ids(
         self, conn: asyncpg.Connection, tenant_id: uuid.UUID, batch_id: uuid.UUID
     ) -> list[uuid.UUID]:
         """Fetch observation IDs from outbox for idempotent return (ADR-0007 §3 L216)."""
-        rows = await conn.fetch(
-            "SELECT (observation->>'id')::uuid AS obs_id "
-            "FROM observation_outbox "
-            "WHERE tenant_id = $1 AND batch_id = $2 "
-            "ORDER BY (observation->>'id')::uuid",
+        row = await conn.fetchrow(
+            "SELECT observation FROM observation_outbox "
+            "WHERE tenant_id = $1 AND batch_id = $2",
             tenant_id, batch_id,
         )
-        return [row["obs_id"] for row in rows]
+        if row is None:
+            return []
+        obs = row["observation"]
+        if isinstance(obs, str):
+            obs = json.loads(obs)
+        ids_raw = obs.get("observation_ids", [])
+        return [uuid.UUID(str(oid)) for oid in ids_raw]
