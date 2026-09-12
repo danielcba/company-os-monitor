@@ -201,12 +201,14 @@ class GatewayServer:
                 tenant_id=tenant_id,
                 email="",
                 role="",
+                extra_claims={"installation_id": installation_id},
             )
             refresh_token_val = self.jwt.create_refresh_token(
                 user_id=str(credential_id),
                 tenant_id=tenant_id,
                 email="",
                 role="",
+                extra_claims={"installation_id": installation_id},
             )
 
             import os
@@ -233,6 +235,7 @@ class GatewayServer:
             try:
                 payload = self.jwt.decode_payload(refresh_token, expected_type="machine_access")
                 credential_id = payload.sub
+                tenant_id = payload.tenant_id
             except InvalidTokenError:
                 return web.json_response({"error": "invalid refresh token"}, status=401)
 
@@ -246,17 +249,29 @@ class GatewayServer:
 
             await redis.setnx(f"machine_refresh_consumed:{credential_id}", "1", ex=86400 * 25)
 
+            # Fetch installation_id from DB to preserve machine auth context
+            installation_id = ""
+            cred_row = await self._db_fetchrow(
+                "SELECT installation_id FROM agent_credentials WHERE id = $1 AND tenant_id = $2",
+                credential_id, tenant_id,
+            )
+            if cred_row:
+                installation_id = str(cred_row["installation_id"])
+
+            extra = {"installation_id": installation_id} if installation_id else None
             access_token = self.jwt.create_access_token(
                 user_id=str(credential_id),
-                tenant_id="",
+                tenant_id=tenant_id,
                 email="",
                 role="",
+                extra_claims=extra,
             )
             new_refresh_token = self.jwt.create_refresh_token(
                 user_id=str(credential_id),
-                tenant_id="",
+                tenant_id=tenant_id,
                 email="",
                 role="",
+                extra_claims=extra,
             )
 
             try:
@@ -298,6 +313,18 @@ class GatewayServer:
                 payload = self.jwt.verify_access_token(token)
             except InvalidTokenError:
                 return web.json_response({"error": "invalid machine access token"}, status=401)
+
+            # B4.2: Blacklist validation (ADR-0005 §8) — fail-closed
+            if payload.jti:
+                try:
+                    bl = await self._db_fetchrow(
+                        "SELECT jti FROM machine_jwt_blacklist WHERE jti = $1",
+                        payload.jti,
+                    )
+                    if bl:
+                        return web.json_response({"error": "token revoked"}, status=401)
+                except Exception:  # noqa: BLE001 — DB unavailable → fail-closed
+                    return web.json_response({"error": "security control unavailable"}, status=503)
 
             tenant_id = payload.tenant_id
             installation_id = payload.installation_id

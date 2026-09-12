@@ -256,3 +256,18 @@ DROP TRIGGER IF EXISTS outbox_content_immutable_trigger ON observation_outbox;
 CREATE TRIGGER outbox_content_immutable_trigger
     BEFORE UPDATE ON observation_outbox
     FOR EACH ROW EXECUTE FUNCTION prevent_outbox_content_update();
+
+-- ============================================
+-- MACHINE JWT BLACKLIST (ADR-0005 §5, §8)
+-- ============================================
+-- Separate from the Redis-backed human JWT blacklist (libs/access/token_blacklist.py).
+-- Machine JWTs use a DB-based blacklist to support atomic single-use registration
+-- tokens (INSERT-then-check) and durable revocation across gateway restarts.
+CREATE TABLE IF NOT EXISTS machine_jwt_blacklist (
+    jti         VARCHAR(64) PRIMARY KEY,
+    blacklisted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Idempotent insert guard: duplicate JTI → constraint violation → fail-closed
+CREATE INDEX IF NOT EXISTS idx_machine_jwt_blacklist_blacklisted_at
+    ON machine_jwt_blacklist (blacklisted_at);

@@ -232,12 +232,19 @@ async def main():
     publisher = ObservationPublisher(dsn, observation_bus)
     await publisher.start()
 
+    # Heartbeat Reconciler (ADR-0006 §9): stale RUNNING → STOPPED
+    from src.reconciler import HeartbeatReconciler
+
+    reconciler = HeartbeatReconciler(dsn)
+    await reconciler.start()
+
     await server.start(port)
 
     try:
         while True:
             await asyncio.sleep(3600)
     finally:
+        await reconciler.stop()
         await publisher.stop()
         await server.stop()
         await engine.dispose()

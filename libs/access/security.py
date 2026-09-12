@@ -80,6 +80,7 @@ class TokenPayload:
     token_type: str
     exp: int
     jti: str = ""
+    installation_id: str = ""
 
     @property
     def is_refresh(self) -> bool:
@@ -141,10 +142,11 @@ class JwtService:
         role: str,
         token_type: str,
         expires_delta: timedelta,
+        extra_claims: dict[str, Any] | None = None,
     ) -> str:
         """Sign a token with the identity + authority + tenant claims."""
         now = datetime.now(UTC)
-        claims = {
+        claims: dict[str, Any] = {
             CLAIM_SUB: str(user_id),
             CLAIM_TENANT: str(tenant_id),
             CLAIM_EMAIL: email,
@@ -154,6 +156,8 @@ class JwtService:
             CLAIM_EXP: int((now + expires_delta).timestamp()),
             CLAIM_JTI: str(_uuid.uuid4()),
         }
+        if extra_claims:
+            claims.update(extra_claims)
         return self._sign(claims)
 
     def create_access_token(
@@ -163,6 +167,7 @@ class JwtService:
         tenant_id: str,
         email: str,
         role: str,
+        extra_claims: dict[str, Any] | None = None,
     ) -> str:
         return self.create_token(
             user_id=user_id,
@@ -171,6 +176,7 @@ class JwtService:
             role=role,
             token_type=TOKEN_TYPE_ACCESS,
             expires_delta=timedelta(minutes=self.access_expire_minutes),
+            extra_claims=extra_claims,
         )
 
     def create_refresh_token(
@@ -180,6 +186,7 @@ class JwtService:
         tenant_id: str,
         email: str,
         role: str,
+        extra_claims: dict[str, Any] | None = None,
     ) -> str:
         return self.create_token(
             user_id=user_id,
@@ -188,6 +195,7 @@ class JwtService:
             role=role,
             token_type=TOKEN_TYPE_REFRESH,
             expires_delta=timedelta(days=self.refresh_expire_days),
+            extra_claims=extra_claims,
         )
 
     def decode(self, token: str) -> dict[str, Any]:
@@ -222,6 +230,7 @@ class JwtService:
                 token_type=str(claims[CLAIM_TYPE]),
                 exp=int(claims[CLAIM_EXP]),
                 jti=str(claims.get(CLAIM_JTI, "")),
+                installation_id=str(claims.get("installation_id", "")),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise InvalidTokenError(  # noqa: TRY003 - declarative, one message

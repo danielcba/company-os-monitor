@@ -965,12 +965,14 @@ async def exchange_machine_token(
             tenant_id=tenant_id,
             email="",
             role="",
+            extra_claims={"installation_id": installation_id},
         )
         refresh_token_val = jwtservice.create_refresh_token(
             user_id=str(credential_id),
             tenant_id=tenant_id,
             email="",
             role="",
+            extra_claims={"installation_id": installation_id},
         )
 
         # Store refresh token in Redis (machine_refresh:{credential_id})
@@ -996,14 +998,25 @@ async def exchange_machine_token(
     # ---- Refresh token flow ----
     if refresh_token:
         credential_id = None
+        tenant_id = ""
         try:
             payload = jwtservice.decode_payload(refresh_token, expected_type="machine_access")
             credential_id = payload.sub
+            tenant_id = payload.tenant_id
         except InvalidTokenError:
             raise InvalidTokenError("invalid refresh token")
 
         if not credential_id:
             raise InvalidTokenError("refresh token missing credential identity")
+
+        # Fetch installation_id from DB (preserves machine auth context, ADR-0005/0006)
+        installation_id = ""
+        cred_row = await self._db_fetchrow(
+            "SELECT installation_id FROM agent_credentials WHERE id = $1 AND tenant_id = $2",
+            credential_id, tenant_id,
+        )
+        if cred_row:
+            installation_id = str(cred_row["installation_id"])
 
         # Check refresh token in Redis
         from redis.asyncio import Redis
@@ -1020,18 +1033,21 @@ async def exchange_machine_token(
         except Exception as exc:
             raise SecurityControlUnavailable.consume_failed(str(credential_id)) from exc
 
-        # Issue new access + refresh tokens
+        # Issue new access + refresh tokens preserving tenant/installation context
+        extra = {"installation_id": installation_id} if installation_id else None
         access_token = jwtservice.create_access_token(
             user_id=str(credential_id),
-            tenant_id="",
+            tenant_id=tenant_id,
             email="",
             role="",
+            extra_claims=extra,
         )
         new_refresh_token = jwtservice.create_refresh_token(
             user_id=str(credential_id),
-            tenant_id="",
+            tenant_id=tenant_id,
             email="",
             role="",
+            extra_claims=extra,
         )
 
         # Rotate refresh token in Redis
