@@ -18,6 +18,7 @@ def _mock_gateway_server() -> MagicMock:
     """Create a mock GatewayServer with required attributes."""
     server = MagicMock()
     server.jwt = MagicMock()
+    server.machine_jwt = MagicMock()
     server.service = MagicMock()
     server.service.blacklist = AsyncMock()
     server.service.blacklist.is_revoked = AsyncMock(return_value=False)
@@ -73,7 +74,7 @@ class TestIngestHandlerAuth:
         from libs.access.errors import InvalidTokenError
 
         server = _mock_gateway_server()
-        server.jwt.decode = MagicMock(side_effect=InvalidTokenError("bad token"))
+        server.machine_jwt.decode = MagicMock(side_effect=InvalidTokenError("bad token"))
         request = _mock_request()
         response = await ingest_handler(server, request)
         assert response.status == 401
@@ -83,7 +84,7 @@ class TestIngestHandlerAuth:
         from src.ingest import ingest_handler
 
         server = _mock_gateway_server()
-        server.jwt.decode = MagicMock(return_value={"token_type": "access"})
+        server.machine_jwt.decode = MagicMock(return_value={"token_type": "access"})
         request = _mock_request()
         response = await ingest_handler(server, request)
         assert response.status == 401
@@ -93,7 +94,7 @@ class TestIngestHandlerAuth:
         from src.ingest import ingest_handler
 
         server = _mock_gateway_server()
-        server.jwt.decode = MagicMock(return_value={
+        server.machine_jwt.decode = MagicMock(return_value={
             "token_type": "machine_access",
             "tenant_id": str(uuid.uuid4()),
         })
@@ -106,7 +107,7 @@ class TestIngestHandlerAuth:
         from src.ingest import ingest_handler
 
         server = _mock_gateway_server()
-        server.jwt.decode = MagicMock(return_value={
+        server.machine_jwt.decode = MagicMock(return_value={
             "token_type": "machine_access",
             "tenant_id": str(uuid.uuid4()),
             "installation_id": str(uuid.uuid4()),
@@ -128,7 +129,7 @@ class TestIngestHandlerMalformedJson:
         from src.ingest import ingest_handler
 
         server = _mock_gateway_server()
-        server.jwt.decode = MagicMock(return_value={
+        server.machine_jwt.decode = MagicMock(return_value={
             "token_type": "machine_access",
             "tenant_id": str(uuid.uuid4()),
             "installation_id": str(uuid.uuid4()),
@@ -148,7 +149,7 @@ class TestIngestHandlerSuccess:
         from src.ingest import ingest_handler
 
         server = _mock_gateway_server()
-        server.jwt.decode = MagicMock(return_value={
+        server.machine_jwt.decode = MagicMock(return_value={
             "token_type": "machine_access",
             "tenant_id": str(uuid.uuid4()),
             "installation_id": str(uuid.uuid4()),
@@ -185,7 +186,7 @@ class TestIngestHandlerConflict:
         from libs.telemetry.ingest_service import PayloadConflictError
 
         server = _mock_gateway_server()
-        server.jwt.decode = MagicMock(return_value={
+        server.machine_jwt.decode = MagicMock(return_value={
             "token_type": "machine_access",
             "tenant_id": str(uuid.uuid4()),
             "installation_id": str(uuid.uuid4()),
@@ -217,7 +218,7 @@ class TestIngestHandlerValidation:
         from libs.telemetry.ingest_service import ValidationError
 
         server = _mock_gateway_server()
-        server.jwt.decode = MagicMock(return_value={
+        server.machine_jwt.decode = MagicMock(return_value={
             "token_type": "machine_access",
             "tenant_id": str(uuid.uuid4()),
             "installation_id": str(uuid.uuid4()),

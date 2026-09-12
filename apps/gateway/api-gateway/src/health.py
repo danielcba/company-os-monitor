@@ -33,7 +33,7 @@ from libs.access.errors import (
     InvalidTokenError,
 )
 from libs.access.rbac import RISK_TOLERANCES
-from libs.access.security import JwtService, TokenPayload
+from libs.access.security import JwtService, MachineJwtService, TokenPayload
 
 from src.boundary import BoundaryViolationError
 from src.constants import VALID_ACTIONS, VALID_COGNITIVE_CONCEPTS, VALID_COGNITIVE_LAYERS
@@ -56,9 +56,10 @@ def _is_validation_error(err_msg: str) -> bool:
 
 
 class GatewayServer:
-    def __init__(self, service: GatewayService, jwt: JwtService):
+    def __init__(self, service: GatewayService, jwt: JwtService, machine_jwt: MachineJwtService | None = None):
         self.service = service
         self.jwt = jwt
+        self.machine_jwt = machine_jwt
         self.app = web.Application()
         self._setup_cors()
         # Add security headers middleware.
@@ -153,6 +154,9 @@ class GatewayServer:
 
     async def machine_token_handler(self, request):
         """POST /api/v1/auth/machine/token - exchange registration or refresh token for access+refresh tokens (ADR-0005)."""
+        if not self.machine_jwt:
+            return web.json_response({"error": "machine auth not configured"}, status=503)
+
         try:
             body = await request.json()
         except Exception:  # noqa: BLE001
@@ -166,7 +170,7 @@ class GatewayServer:
 
         if registration_token:
             try:
-                payload = self.jwt.decode_payload(registration_token, expected_type="registration_token")
+                payload = self.machine_jwt.verify_registration_token(registration_token)
             except InvalidTokenError:
                 return web.json_response({"error": "invalid registration token"}, status=401)
 
@@ -196,18 +200,14 @@ class GatewayServer:
             if not cred or cred["status"] != "ACTIVE":
                 return web.json_response({"error": "credential not active or not found"}, status=401)
 
-            access_token = self.jwt.create_access_token(
-                user_id=str(credential_id),
+            access_token = self.machine_jwt.create_access_token(
+                credential_id=str(credential_id),
                 tenant_id=tenant_id,
-                email="",
-                role="",
                 extra_claims={"installation_id": installation_id},
             )
-            refresh_token_val = self.jwt.create_refresh_token(
-                user_id=str(credential_id),
+            refresh_token_val = self.machine_jwt.create_refresh_token(
+                credential_id=str(credential_id),
                 tenant_id=tenant_id,
-                email="",
-                role="",
                 extra_claims={"installation_id": installation_id},
             )
 
@@ -233,7 +233,7 @@ class GatewayServer:
 
         if refresh_token:
             try:
-                payload = self.jwt.decode_payload(refresh_token, expected_type="machine_access")
+                payload = self.machine_jwt.verify_refresh_token(refresh_token)
                 credential_id = payload.sub
                 tenant_id = payload.tenant_id
             except InvalidTokenError:
@@ -259,18 +259,14 @@ class GatewayServer:
                 installation_id = str(cred_row["installation_id"])
 
             extra = {"installation_id": installation_id} if installation_id else None
-            access_token = self.jwt.create_access_token(
-                user_id=str(credential_id),
+            access_token = self.machine_jwt.create_access_token(
+                credential_id=str(credential_id),
                 tenant_id=tenant_id,
-                email="",
-                role="",
                 extra_claims=extra,
             )
-            new_refresh_token = self.jwt.create_refresh_token(
-                user_id=str(credential_id),
+            new_refresh_token = self.machine_jwt.create_refresh_token(
+                credential_id=str(credential_id),
                 tenant_id=tenant_id,
-                email="",
-                role="",
                 extra_claims=extra,
             )
 
@@ -286,7 +282,7 @@ class GatewayServer:
 
             old_jti = None
             try:
-                old_payload = self.jwt.decode(refresh_token)
+                old_payload = self.machine_jwt.decode(refresh_token)
                 old_jti = old_payload.get("jti", "")
             except Exception:    # noqa: BLE001, S110
                 pass
@@ -310,7 +306,7 @@ class GatewayServer:
         if auth_header.lower().startswith("bearer "):
             token = auth_header.split(" ", 1)[1].strip()
             try:
-                payload = self.jwt.verify_access_token(token)
+                payload = self.machine_jwt.verify_access_token(token)
             except InvalidTokenError:
                 return web.json_response({"error": "invalid machine access token"}, status=401)
 

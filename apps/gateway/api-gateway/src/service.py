@@ -33,7 +33,7 @@ from libs.access.rbac import (
     commit_allowed,
     cross_tenant_allowed,
 )
-from libs.access.security import JwtService, TokenPayload
+from libs.access.security import JwtService, MachineJwtService, TokenPayload
 from libs.access.tenant_scope import AuthorizationContext, TenantScopeError
 from libs.access.token_blacklist import SecurityControlUnavailable, TokenBlacklist
 from libs.learning.learning_execution_store import LearningExecutionStore
@@ -124,8 +124,10 @@ class GatewayService:
         timeline_store: CognitiveTimelineStoreProtocol | None = None,
         learning_loop_store: LearningLoopStoreProtocol | None = None,
         execution_store: LearningExecutionStore | None = None,
+        machine_jwt: MachineJwtService | None = None,
     ):
         self.jwt = jwt
+        self.machine_jwt = machine_jwt
         self.decision_store = decision_store
         self.report_store = report_store
         self._observation_store = observation_store
@@ -920,12 +922,15 @@ async def exchange_machine_token(
     """
     import os as _os
 
-    jwtservice = self.jwt
+    if not self.machine_jwt:
+        raise InvalidTokenError("machine auth not configured")
+
+    jwtservice = self.machine_jwt
 
     # ---- Registration token flow ----
     if registration_token:
         try:
-            payload = jwtservice.decode_payload(registration_token, expected_type="registration_token")
+            payload = jwtservice.verify_registration_token(registration_token)
         except InvalidTokenError:
             raise InvalidTokenError("invalid registration token")
 
@@ -961,17 +966,13 @@ async def exchange_machine_token(
 
         # Issue access + refresh tokens
         access_token = jwtservice.create_access_token(
-            user_id=str(credential_id),
+            credential_id=str(credential_id),
             tenant_id=tenant_id,
-            email="",
-            role="",
             extra_claims={"installation_id": installation_id},
         )
         refresh_token_val = jwtservice.create_refresh_token(
-            user_id=str(credential_id),
+            credential_id=str(credential_id),
             tenant_id=tenant_id,
-            email="",
-            role="",
             extra_claims={"installation_id": installation_id},
         )
 
@@ -1000,7 +1001,7 @@ async def exchange_machine_token(
         credential_id = None
         tenant_id = ""
         try:
-            payload = jwtservice.decode_payload(refresh_token, expected_type="machine_access")
+            payload = jwtservice.verify_refresh_token(refresh_token)
             credential_id = payload.sub
             tenant_id = payload.tenant_id
         except InvalidTokenError:
@@ -1036,17 +1037,13 @@ async def exchange_machine_token(
         # Issue new access + refresh tokens preserving tenant/installation context
         extra = {"installation_id": installation_id} if installation_id else None
         access_token = jwtservice.create_access_token(
-            user_id=str(credential_id),
+            credential_id=str(credential_id),
             tenant_id=tenant_id,
-            email="",
-            role="",
             extra_claims=extra,
         )
         new_refresh_token = jwtservice.create_refresh_token(
-            user_id=str(credential_id),
+            credential_id=str(credential_id),
             tenant_id=tenant_id,
-            email="",
-            role="",
             extra_claims=extra,
         )
 

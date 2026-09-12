@@ -242,3 +242,215 @@ class JwtService:
 
     def verify_refresh_token(self, token: str) -> TokenPayload:
         return self.decode_payload(token, expected_type=TOKEN_TYPE_REFRESH)
+
+
+# ---------------------------------------------------------------------------
+# Machine JWT — RS256 with kid-based key rotation (ADR-0005 §1)
+# ---------------------------------------------------------------------------
+
+MACHINE_TOKEN_TYPE_ACCESS = "machine_access"
+MACHINE_TOKEN_TYPE_REFRESH = "machine_refresh"
+MACHINE_TOKEN_TYPE_REGISTRATION = "registration_token"
+
+MACHINE_ACCESS_EXPIRE_SECONDS = 60
+MACHINE_REFRESH_EXPIRE_HOURS = 24
+MACHINE_OVERLAP_HOURS = 24
+
+
+class MachineJwtService:
+    """RS256 machine JWT service with kid-based key rotation (ADR-0005 §1).
+
+    Completely separate from JwtService (human auth). Uses its own key set,
+    its own signing logic, and its own verification path. No dependency on
+    human JWT keys, configuration, or instances.
+
+    Key rotation model:
+    - ``active_kid`` determines which key signs NEW tokens.
+    - All keys in ``key_set`` can VALIDATE tokens (during overlap window).
+    - Retired keys are removed from ``key_set`` to stop validation.
+    - Unknown ``kid`` → reject (fail-closed).
+    """
+
+    def __init__(
+        self,
+        *,
+        key_set: dict[str, tuple[str, str]],
+        active_kid: str,
+        access_expire_seconds: int = MACHINE_ACCESS_EXPIRE_SECONDS,
+        refresh_expire_hours: int = MACHINE_REFRESH_EXPIRE_HOURS,
+    ):
+        if not key_set:
+            raise ValueError(  # noqa: TRY003 - config error, one message
+                "MachineJwtService requires at least one key in key_set"
+            )
+        if active_kid not in key_set:
+            raise ValueError(  # noqa: TRY003 - config error, one message
+                f"active_kid={active_kid!r} not found in key_set"
+            )
+        self._key_set = dict(key_set)
+        self._active_kid = active_kid
+        self._access_expire_seconds = access_expire_seconds
+        self._refresh_expire_hours = refresh_expire_hours
+
+    @property
+    def active_kid(self) -> str:
+        return self._active_kid
+
+    @property
+    def key_set(self) -> dict[str, tuple[str, str]]:
+        return dict(self._key_set)
+
+    def _sign(self, claims: dict[str, Any]) -> str:
+        """Sign claims with the active key. Always RS256 with kid header."""
+        private_key, _public_key = self._key_set[self._active_kid]
+        header = {"alg": "RS256", "kid": self._active_kid, "typ": "JWT"}
+        return jwt.encode(claims, private_key, algorithm="RS256", headers=header)
+
+    def create_machine_token(
+        self,
+        *,
+        credential_id: str,
+        tenant_id: str,
+        token_type: str,
+        expires_delta: timedelta,
+        extra_claims: dict[str, Any] | None = None,
+    ) -> str:
+        """Issue a machine JWT signed with ACTIVE_KID.
+
+        Args:
+            credential_id: Agent credential UUID (sub claim).
+            tenant_id: Tenant scope.
+            token_type: One of MACHINE_TOKEN_TYPE_*.
+            expires_delta: Token lifetime.
+            extra_claims: Additional claims (installation_id, instance_id, scopes).
+        """
+        now = datetime.now(UTC)
+        claims: dict[str, Any] = {
+            CLAIM_SUB: str(credential_id),
+            CLAIM_TENANT: str(tenant_id),
+            CLAIM_TYPE: token_type,
+            CLAIM_IAT: int(now.timestamp()),
+            CLAIM_EXP: int((now + expires_delta).timestamp()),
+            CLAIM_JTI: str(_uuid.uuid4()),
+        }
+        if extra_claims:
+            claims.update(extra_claims)
+        return self._sign(claims)
+
+    def create_access_token(
+        self,
+        *,
+        credential_id: str,
+        tenant_id: str,
+        extra_claims: dict[str, Any] | None = None,
+    ) -> str:
+        return self.create_machine_token(
+            credential_id=credential_id,
+            tenant_id=tenant_id,
+            token_type=MACHINE_TOKEN_TYPE_ACCESS,
+            expires_delta=timedelta(seconds=self._access_expire_seconds),
+            extra_claims=extra_claims,
+        )
+
+    def create_refresh_token(
+        self,
+        *,
+        credential_id: str,
+        tenant_id: str,
+        extra_claims: dict[str, Any] | None = None,
+    ) -> str:
+        return self.create_machine_token(
+            credential_id=credential_id,
+            tenant_id=tenant_id,
+            token_type=MACHINE_TOKEN_TYPE_REFRESH,
+            expires_delta=timedelta(hours=self._refresh_expire_hours),
+            extra_claims=extra_claims,
+        )
+
+    def create_registration_token(
+        self,
+        *,
+        credential_id: str,
+        tenant_id: str,
+        installation_id: str,
+    ) -> str:
+        """Issue a single-use registration token (10 min TTL)."""
+        return self.create_machine_token(
+            credential_id=credential_id,
+            tenant_id=tenant_id,
+            token_type=MACHINE_TOKEN_TYPE_REGISTRATION,
+            expires_delta=timedelta(minutes=10),
+            extra_claims={"installation_id": installation_id},
+        )
+
+    def decode(self, token: str) -> dict[str, Any]:
+        """Verify machine JWT by kid lookup. Fail-closed.
+
+        Flow:
+        1. Decode header (unverified) to extract kid.
+        2. Look up public key by kid in key_set.
+        3. If kid missing or unknown → reject.
+        4. Verify RS256 signature with that specific public key.
+        5. Return claims.
+
+        Raises InvalidTokenError on any failure.
+        """
+        try:
+            unverified_header = jwt.get_unverified_header(token)
+        except JWTError as exc:
+            raise InvalidTokenError(f"invalid token header: {exc}") from exc  # noqa: TRY003
+
+        kid = unverified_header.get("kid")
+        if not kid:
+            raise InvalidTokenError("machine token missing required kid header")  # noqa: TRY003
+
+        if kid not in self._key_set:
+            raise InvalidTokenError(  # noqa: TRY003
+                f"unknown kid={kid!r}; rejecting (fail-closed)"
+            )
+
+        _private_key, public_key = self._key_set[kid]
+
+        try:
+            return jwt.decode(
+                token,
+                public_key,
+                algorithms=["RS256"],
+                options={"verify_aud": False},
+            )
+        except JWTError as exc:
+            raise InvalidTokenError(str(exc)) from exc
+
+    def decode_payload(self, token: str, *, expected_type: str) -> TokenPayload:
+        """Verified TokenPayload for machine tokens."""
+        claims = self.decode(token)
+        if claims.get(CLAIM_TYPE) != expected_type:
+            raise InvalidTokenError(  # noqa: TRY003
+                f"token is not a {expected_type} token (got {claims.get(CLAIM_TYPE)})"
+            )
+        try:
+            return TokenPayload(
+                user_id=str(claims[CLAIM_SUB]),
+                tenant_id=str(claims[CLAIM_TENANT]),
+                email=str(claims.get(CLAIM_EMAIL, "")),
+                role=str(claims.get(CLAIM_ROLE, "")),
+                token_type=str(claims[CLAIM_TYPE]),
+                exp=int(claims[CLAIM_EXP]),
+                jti=str(claims.get(CLAIM_JTI, "")),
+                installation_id=str(claims.get("installation_id", "")),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InvalidTokenError(  # noqa: TRY003
+                "machine token payload is missing required claims"
+            ) from exc
+
+    def verify_access_token(self, token: str) -> TokenPayload:
+        return self.decode_payload(token, expected_type=MACHINE_TOKEN_TYPE_ACCESS)
+
+    def verify_refresh_token(self, token: str) -> TokenPayload:
+        return self.decode_payload(token, expected_type=MACHINE_TOKEN_TYPE_REFRESH)
+
+    def verify_registration_token(self, token: str) -> TokenPayload:
+        return self.decode_payload(
+            token, expected_type=MACHINE_TOKEN_TYPE_REGISTRATION
+        )

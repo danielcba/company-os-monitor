@@ -36,7 +36,7 @@ async def main():
     port = int(os.getenv("GATEWAY_HEALTH_PORT", "8100"))
     redis_url = os.getenv("JWT_REDIS_URL", "redis://localhost:6379/1")
 
-    from libs.access.security import JwtService
+    from libs.access.security import JwtService, MachineJwtService
     from libs.access.token_blacklist import TokenBlacklist
     from libs.action.decision import DecisionStore
     from libs.action.report import ReportStore
@@ -72,6 +72,48 @@ async def main():
         access_expire_minutes=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "15")),
         refresh_expire_days=int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7")),
     )
+
+    # Machine JWT — RS256 with kid-based key rotation (ADR-0005 §1, H5)
+    def _load_machine_keys() -> dict[str, tuple[str, str]]:
+        """Load MACHINE_JWT_PRIVATE_KEY_<kid> + MACHINE_JWT_PUBLIC_KEY_<kid> from env."""
+        active_kid = os.getenv("MACHINE_JWT_ACTIVE_KID", "")
+        keys: dict[str, tuple[str, str]] = {}
+        prefix = "MACHINE_JWT_PRIVATE_KEY_"
+        for env_key, env_val in os.environ.items():
+            if env_key.startswith(prefix):
+                kid = env_key[len(prefix):]
+                pub_key = os.getenv(f"MACHINE_JWT_PUBLIC_KEY_{kid}", "")
+                if pub_key:
+                    keys[kid] = (env_val, pub_key)
+        return keys, active_kid
+
+    machine_keys, machine_active_kid = _load_machine_keys()
+    if machine_keys and machine_active_kid:
+        machine_jwt = MachineJwtService(
+            key_set=machine_keys,
+            active_kid=machine_active_kid,
+            access_expire_seconds=int(os.getenv("MACHINE_JWT_ACCESS_EXPIRE_SECONDS", "60")),
+            refresh_expire_hours=int(os.getenv("MACHINE_JWT_REFRESH_EXPIRE_HOURS", "24")),
+        )
+    else:
+        # Dev fallback: generate ephemeral RS256 key pair for local testing
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
+        _priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        _priv_pem = _priv.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode()
+        _pub_pem = _priv.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+        machine_jwt = MachineJwtService(
+            key_set={"dev-key": (_priv_pem, _pub_pem)},
+            active_kid="dev-key",
+        )
 
     # Create one shared async engine with production-ready pool settings
     engine = create_shared_engine(dsn)
@@ -219,8 +261,9 @@ async def main():
         dsn=dsn,
         blacklist=blacklist,
         confidence_store=confidence_store,
+        machine_jwt=machine_jwt,
     )
-    server = GatewayServer(service, jwt)
+    server = GatewayServer(service, jwt, machine_jwt=machine_jwt)
 
     # Observation Publisher (ADR-0004 §4): outbox → Redis Streams
     from libs.cognitive_core.observation_bus import ObservationBus

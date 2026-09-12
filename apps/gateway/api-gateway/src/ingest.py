@@ -34,8 +34,11 @@ async def ingest_handler(self: GatewayServer, request: web.Request) -> web.Respo
 
         token_str = auth_header.split(" ", 1)[1].strip()
 
+        if not self.machine_jwt:
+            return web.json_response({"error": "machine auth not configured"}, status=503)
+
         try:
-            claims = self.jwt.decode(token_str)
+            claims = self.machine_jwt.decode(token_str)
         except InvalidTokenError:
             return web.json_response({"error": "invalid machine access token"}, status=401)
 
