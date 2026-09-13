@@ -27,7 +27,6 @@ These tests verify the invariants, not the implementation details.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 
 import pytest
 
@@ -40,9 +39,9 @@ from libs.action.decision import (
     build_decision,
     decision_id,
 )
-from libs.memory.consolidation import build_consolidation, ConsolidationResult
+from libs.action.execution_record import ExecutionRecord
 from libs.learning.learning_loop import compute_outcome_signal
-
+from libs.memory.consolidation import build_consolidation
 
 # ── Decision model tests ──────────────────────────────────────────────────
 
@@ -57,7 +56,7 @@ class TestDecisionOutcomeStatus:
 
     def test_outcome_statuses_bounded(self):
         """Only valid outcome statuses are allowed."""
-        assert OUTCOME_STATUSES == frozenset({"pending", "observed"})
+        assert frozenset({"pending", "observed"}) == OUTCOME_STATUSES
 
     def test_decision_create_defaults_to_pending(self):
         """DecisionCreate defaults outcome_status to 'pending'."""
@@ -210,7 +209,6 @@ class TestH6Compatibility:
 
     def test_execution_record_unchanged(self):
         """ExecutionRecord model is unchanged by H7."""
-        from libs.action.execution_record import ExecutionRecord
         # H7 should not modify ExecutionRecord
         assert "id" in ExecutionRecord.model_fields
         assert "decision_id" in ExecutionRecord.model_fields
@@ -227,7 +225,6 @@ class TestP7Compatibility:
 
     def test_pending_does_not_contradict_p7(self):
         """PENDING is temporal state before outcome production (P7 compatible)."""
-        # P7: "Every decision produces an observable outcome"
         # PENDING = expected but not received yet
         # OBSERVED = outcome submitted and processed
         # PENDING → OBSERVED fulfills P7
@@ -409,10 +406,10 @@ class TestNoScopeExpansion:
 
     def test_no_unknown_state(self):
         """No UNKNOWN state introduced."""
-        assert OUTCOME_STATUSES == frozenset({"pending", "observed"})
+        assert frozenset({"pending", "observed"}) == OUTCOME_STATUSES
         assert "unknown" not in OUTCOME_STATUSES
 
     def test_no_failed_state(self):
         """No FAILED state introduced."""
-        assert OUTCOME_STATUSES == frozenset({"pending", "observed"})
+        assert frozenset({"pending", "observed"}) == OUTCOME_STATUSES
         assert "failed" not in OUTCOME_STATUSES
