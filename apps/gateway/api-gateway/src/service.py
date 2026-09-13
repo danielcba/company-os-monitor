@@ -546,6 +546,44 @@ class GatewayService:
 
         return result
 
+    async def record_decision_execution(
+        self,
+        token: TokenPayload,
+        tenant_id: str,
+        decision_id: str,
+        execution_status: str = "executed",
+        executed_at=None,
+        executed_by: str | None = None,
+        notes: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """H6: Record that a Decision was executed (manually or externally).
+
+        Creates an ExecutionRecord — an explicit, auditable, append-only
+        record that bridges Decision → Outcome.
+
+        After recording the execution, if actual_outcomes are provided in
+        metadata['actual_outcomes'], the Learning Loop is triggered automatically.
+
+        Does NOT imply automated execution. The execution happened externally
+        (manually or via another system); this method only records that fact.
+        """
+        if self._decision_read_store is None:
+            raise RuntimeError("decision_read_store not configured in gateway")
+        ctx = self._resolve_tenant(token, tenant_id)
+
+        result = await self._decision_read_store.record_execution(
+            tenant_id=uuid.UUID(ctx.effective_tenant_id),
+            decision_id=uuid.UUID(decision_id),
+            execution_status=execution_status,
+            executed_at=executed_at,
+            executed_by=uuid.UUID(executed_by) if executed_by else None,
+            notes=notes,
+            metadata=metadata or {},
+        )
+
+        return result
+
     async def get_cognitive_trace(
         self,
         token: TokenPayload,

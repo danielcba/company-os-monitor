@@ -133,6 +133,10 @@ class GatewayServer:
             "/api/v1/tenants/{tenant_id}/decisions/{decision_id}/outcomes", self.decision_outcomes_handler
         )
         self.app.router.add_post(
+            "/api/v1/tenants/{tenant_id}/decisions/{decision_id}/execution",
+            self.decision_execution_handler,
+        )
+        self.app.router.add_post(
             "/api/v1/auth/machine/token", self.machine_token_handler
         )
         self.app.router.add_post(
@@ -1215,6 +1219,66 @@ class GatewayServer:
                 decision_id=decision_id,
                 actual_outcomes=actual_outcomes,
                 executed_at=executed_at,
+            )
+            return web.json_response(result, status=200)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        except AccessError as exc:
+            return web.json_response({"error": str(exc)}, status=403)
+        except InvalidOutcomesError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except DecisionNotFoundError as exc:
+            return web.json_response({"error": str(exc)}, status=404)
+        except Exception:  # noqa: BLE001 - surface as API error
+            self.service.total_errors += 1
+            return web.json_response({"error": "Internal server error"}, status=500)
+
+    async def decision_execution_handler(self, request):
+        """H6: Record that a Decision was executed (manually or externally).
+
+        Creates an ExecutionRecord — an explicit, auditable, append-only
+        record. Does NOT imply automated execution.
+
+        Body:
+            execution_status: "executed" | "failed" | "cancelled" | "unknown"
+            executed_at: ISO timestamp (optional, defaults to now)
+            executed_by: user UUID (optional)
+            notes: human-readable text (optional)
+            metadata: JSON object (optional)
+        """
+        try:
+            token = await self._authenticate(request)
+            self.service.record(action="write:decision_execution")
+            tenant_id = await self._validate_tenant_id(request.match_info["tenant_id"])
+            decision_id = await self._validate_uuid(request.match_info["decision_id"], "decision_id")
+            self.service.require_authorized(
+                token=token, action="commit", requested_tenant_id=tenant_id
+            )
+            body = await request.json()
+            execution_status = body.get("execution_status", "executed")
+            executed_at_str = body.get("executed_at")
+            executed_by_str = body.get("executed_by")
+            notes = body.get("notes")
+            metadata = body.get("metadata", {})
+
+            from datetime import datetime as _dt
+
+            executed_at = _dt.fromisoformat(executed_at_str) if executed_at_str else None
+            executed_by = (
+                await self._validate_uuid(executed_by_str, "executed_by")
+                if executed_by_str
+                else None
+            )
+
+            result = await self.service.record_decision_execution(
+                token=token,
+                tenant_id=tenant_id,
+                decision_id=decision_id,
+                execution_status=execution_status,
+                executed_at=executed_at,
+                executed_by=executed_by,
+                notes=notes,
+                metadata=metadata,
             )
             return web.json_response(result, status=200)
         except InvalidTokenError as exc:

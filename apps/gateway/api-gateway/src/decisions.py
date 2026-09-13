@@ -27,7 +27,7 @@ New POST /api/v1/tenants/{tenant_id}/decisions/{decision_id}/outcomes:
 """
 import json
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from libs.shared.facets_cache import FacetsCache
@@ -295,3 +295,143 @@ class DecisionReadStore:
 
             decision = self._decision_payload(row)
             return {"decision": decision, "status": "outcomes_submitted"}
+
+    async def record_execution(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        decision_id: uuid.UUID,
+        execution_status: str = "executed",
+        executed_at: datetime | None = None,
+        executed_by: uuid.UUID | None = None,
+        notes: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Record that a Decision was executed (manually or externally).
+
+        H6: Creates an ExecutionRecord — an explicit, auditable, append-only
+        record that a committed Decision was executed. Does NOT imply automated
+        execution. The ExecutionRecord is the domain concept that bridges
+        Decision → Outcome.
+
+        The execution_status represents the result of the manual/external execution:
+        - 'executed': execution completed successfully
+        - 'failed': execution attempted but failed
+        - 'cancelled': execution was cancelled before completion
+        - 'unknown': execution result is unknown
+
+        Returns the execution record payload, or raises 404 when the decision
+        does not exist or 400 when the request is invalid.
+        """
+        from libs.action.execution_record import (
+            EXECUTION_STATUSES,
+            ExecutionRecordCreate,
+            build_execution_record,
+        )
+
+        if execution_status not in EXECUTION_STATUSES:
+            raise InvalidOutcomesError(
+                f"execution_status must be one of {EXECUTION_STATUSES}, "
+                f"got {execution_status!r}"
+            )
+
+        effective_executed_at = executed_at or datetime.now(UTC)
+
+        # Verify decision exists (tenant-scoped)
+        async with self._session_factory() as session:
+            row = await session.execute(
+                SELECT_ONE,
+                {"tenant_id": str(tenant_id), "id": str(decision_id)},
+            )
+            decision_row = row.mappings().one_or_none()
+            if decision_row is None:
+                raise DecisionNotFoundError(
+                    f"Decision {decision_id} not found for tenant {tenant_id}"
+                )
+
+        # Build and persist the execution record
+        record_create = ExecutionRecordCreate(
+            tenant_id=tenant_id,
+            decision_id=decision_id,
+            execution_status=execution_status,
+            executed_at=effective_executed_at,
+            executed_by=executed_by,
+            notes=notes,
+            metadata=metadata or {},
+        )
+        record = build_execution_record(record_create)
+
+        async with self._session_factory() as session:
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO execution_records (
+                        id, tenant_id, decision_id, execution_status, executed_at,
+                        executed_by, notes, metadata
+                    )
+                    VALUES (
+                        :id, :tenant_id, :decision_id, :execution_status, :executed_at,
+                        :executed_by, :notes, CAST(:metadata AS jsonb)
+                    )
+                    ON CONFLICT (id) DO NOTHING
+                    RETURNING id, tenant_id, decision_id, execution_status, executed_at,
+                              executed_by, notes, metadata, created_at
+                    """
+                ),
+                {
+                    "id": record.id,
+                    "tenant_id": record.tenant_id,
+                    "decision_id": record.decision_id,
+                    "execution_status": record.execution_status,
+                    "executed_at": record.executed_at,
+                    "executed_by": record.executed_by,
+                    "notes": record.notes,
+                    "metadata": json.dumps(record.metadata, default=str),
+                },
+            )
+            await session.commit()
+
+        # Also update the decision's lifecycle fields (status, executed_at)
+        # Content trigger allows lifecycle field updates.
+        async with self._session_factory() as session:
+            update_params: dict[str, Any] = {
+                "id": decision_id,
+                "tenant_id": tenant_id,
+                "executed_at": effective_executed_at,
+            }
+            # Map execution_status to decision status
+            decision_status_map = {
+                "executed": "executing",
+                "failed": "rolled_back",
+                "cancelled": "rolled_back",
+                "unknown": "executing",
+            }
+            update_params["status"] = decision_status_map.get(
+                execution_status, "executing"
+            )
+            await session.execute(
+                text(
+                    """
+                    UPDATE decisions
+                    SET executed_at = :executed_at, status = :status
+                    WHERE id = :id AND tenant_id = :tenant_id
+                    """
+                ),
+                update_params,
+            )
+            await session.commit()
+
+        return {
+            "execution_record": {
+                "id": str(record.id),
+                "tenant_id": str(record.tenant_id),
+                "decision_id": str(record.decision_id),
+                "execution_status": record.execution_status,
+                "executed_at": record.executed_at.isoformat(),
+                "executed_by": str(record.executed_by) if record.executed_by else None,
+                "notes": record.notes,
+                "metadata": record.metadata,
+                "created_at": record.created_at.isoformat(),
+            },
+            "status": "execution_recorded",
+        }
