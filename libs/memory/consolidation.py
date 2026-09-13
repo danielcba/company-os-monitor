@@ -182,7 +182,35 @@ def _classify_expected_outcome(
 
 
 def build_consolidation(decision: Decision) -> ConsolidationResult:
-    """Consolidate one Decision's expected vs actual outcomes (pure, no IO)."""
+    """Consolidate one Decision's expected vs actual outcomes (pure, no IO).
+
+    H7: Decisions with outcome_status == 'pending' are skipped (no fabrication).
+    """
+    # H7: Skip pending Decisions — outcome not yet observed
+    if getattr(decision, "outcome_status", None) == "pending":
+        return ConsolidationResult(
+            decision_id=decision.id,
+            tenant_id=decision.tenant_id,
+            has_actuals=False,
+            expected_count=len(decision.expected_outcomes or []),
+            actual_count=0,
+            corroborated=0,
+            contradicted=0,
+            inconclusive=len(decision.expected_outcomes or []),
+            calibration_feedback=0.0,
+            brier=None,
+            ece=None,
+            details=[
+                {
+                    "metric": None,
+                    "prediction": None,
+                    "classification": "inconclusive",
+                    "reason": "outcome_status_pending",
+                }
+                for _ in (decision.expected_outcomes or [])
+            ],
+        )
+
     expected: list[dict[str, Any]] = decision.expected_outcomes or []
     actuals = decision.actual_outcomes
     has_actuals = bool(actuals)

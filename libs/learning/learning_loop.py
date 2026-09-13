@@ -29,12 +29,16 @@ def compute_outcome_signal(decision: Any) -> int | None:
     Returns None when the outcome cannot be determined (inconclusive):
     no actual_outcomes, no expected_outcomes, or no matchable metrics.
 
+    H7: Decisions with outcome_status == 'pending' return None (inconclusive).
+
     Follows the no-fabrication principle (P1): missing or unparseable
     actuals never produce a failure signal — they produce None (inconclusive).
     """
+    # H7: Skip pending Decisions — outcome not yet observed
+    # Also skip if no actuals or no expected outcomes (P1: no fabrication)
     expected: list[dict[str, Any]] = decision.expected_outcomes or []
     actuals = decision.actual_outcomes
-    if not actuals or not expected:
+    if getattr(decision, "outcome_status", None) == "pending" or not actuals or not expected:
         return None
 
     actual_by_metric: dict[str, dict[str, Any]] = {}

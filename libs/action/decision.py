@@ -61,6 +61,15 @@ RISK_MEDIUM = "medium"
 RISK_HIGH = "high"
 RISK_TOLERANCES: frozenset[str] = frozenset({RISK_LOW, RISK_MEDIUM, RISK_HIGH})
 
+# Outcome status lifecycle field (H7: Outcome Status Semantics).
+# PENDING = outcome expected but not yet observed.
+# OBSERVED = outcome submitted and processed.
+OUTCOME_STATUS_PENDING = "pending"
+OUTCOME_STATUS_OBSERVED = "observed"
+OUTCOME_STATUSES: frozenset[str] = frozenset(
+    {OUTCOME_STATUS_PENDING, OUTCOME_STATUS_OBSERVED}
+)
+
 # Required keys of every falsifiable expected outcome (docs/04 Decision Schema).
 OUTCOME_PREDICTION = "prediction"
 OUTCOME_VERIFIABLE_BY = "verifiable_by"
@@ -120,6 +129,7 @@ class DecisionCreate(BaseModel):
     committed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     executed_at: datetime | None = None
     actual_outcomes: list[dict[str, Any]] | None = None
+    outcome_status: str = OUTCOME_STATUS_PENDING
 
     model_config = ConfigDict(frozen=True)
 
@@ -127,14 +137,16 @@ class DecisionCreate(BaseModel):
 class Decision(BaseModel):
     """Immutable committed Decision row (Action - Commit).
 
-    Content is immutable (P1); ``status``, ``executed_at`` and
-    ``actual_outcomes`` are lifecycle fields: the Learning loop (future
-    sprints) transitions committed -> executing/completed/rolled_back and
-    records the observed outcomes for the expected vs actual comparison. The
-    row always records the definitive ``commitment``, the falsifiable
-    ``expected_outcomes`` (prediction + verifiable_by + deadline), the
-    ``authority_id`` under which it was taken and the calibrated Confidence
-    that supported it (R4).
+    Content is immutable (P1); ``status``, ``executed_at``,
+    ``actual_outcomes`` and ``outcome_status`` are lifecycle fields: the
+    Learning loop (future sprints) transitions committed ->
+    executing/completed/rolled_back and records the observed outcomes for
+    the expected vs actual comparison. ``outcome_status`` formalizes the
+    outcome lifecycle: PENDING (expected but not received) → OBSERVED
+    (submitted and processed). The row always records the definitive
+    ``commitment``, the falsifiable ``expected_outcomes`` (prediction +
+    verifiable_by + deadline), the ``authority_id`` under which it was
+    taken and the calibrated Confidence that supported it (R4).
     """
 
     id: uuid.UUID
@@ -149,6 +161,7 @@ class Decision(BaseModel):
     committed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     executed_at: datetime | None = None
     actual_outcomes: list[dict[str, Any]] | None = None
+    outcome_status: str = OUTCOME_STATUS_PENDING
 
     model_config = ConfigDict(frozen=True)
 
@@ -172,6 +185,7 @@ def build_decision(create: DecisionCreate) -> Decision:
         committed_at=create.committed_at,
         executed_at=create.executed_at,
         actual_outcomes=create.actual_outcomes,
+        outcome_status=create.outcome_status,
     )
 
 
@@ -180,16 +194,17 @@ INSERT_DECISION = text(
     INSERT INTO decisions (
         id, tenant_id, recommendation_id, confidence_id, authority_id,
         commitment, expected_outcomes, risk_tolerance, status, committed_at,
-        executed_at, actual_outcomes
+        executed_at, actual_outcomes, outcome_status
     )
     VALUES (
         :id, :tenant_id, :recommendation_id, :confidence_id, :authority_id,
         :commitment, CAST(:expected_outcomes AS jsonb), :risk_tolerance,
-        :status, :committed_at, :executed_at, CAST(:actual_outcomes AS jsonb)
+        :status, :committed_at, :executed_at, CAST(:actual_outcomes AS jsonb),
+        :outcome_status
     )
     ON CONFLICT (id) DO NOTHING
     RETURNING id, tenant_id, recommendation_id, confidence_id, authority_id,
-              commitment, risk_tolerance, status, committed_at
+              commitment, risk_tolerance, status, committed_at, outcome_status
     """
 )
 
@@ -199,7 +214,7 @@ SELECT_DECISIONS = text(
     """
     SELECT id, tenant_id, recommendation_id, confidence_id, authority_id,
            commitment, expected_outcomes, risk_tolerance, status, committed_at,
-           executed_at, actual_outcomes
+           executed_at, actual_outcomes, outcome_status
     FROM decisions
     WHERE tenant_id = :tenant_id
     ORDER BY committed_at, id
@@ -210,7 +225,7 @@ SELECT_DECISIONS_BY_STATUS = text(
     """
     SELECT id, tenant_id, recommendation_id, confidence_id, authority_id,
            commitment, expected_outcomes, risk_tolerance, status, committed_at,
-           executed_at, actual_outcomes
+           executed_at, actual_outcomes, outcome_status
     FROM decisions
     WHERE tenant_id = :tenant_id AND status = :status
     ORDER BY committed_at, id
@@ -257,6 +272,7 @@ class DecisionStore:
                         if decision.actual_outcomes is not None
                         else None
                     ),
+                    "outcome_status": decision.outcome_status,
                 },
             )
             await session.commit()

@@ -245,6 +245,7 @@ class LearningExecutionStore:
             params: dict[str, Any] = {"id": decision_id, "tenant_id": tenant_id}
             set_parts.append("actual_outcomes = :actual_outcomes")
             params["actual_outcomes"] = json.dumps(actual_outcomes, default=str)
+            set_parts.append("outcome_status = 'observed'")
             if executed_at is not None:
                 set_parts.append("executed_at = :executed_at")
                 params["executed_at"] = executed_at
