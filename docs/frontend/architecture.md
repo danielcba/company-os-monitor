@@ -39,9 +39,9 @@ not exist yet are rendered as **planned** (disabled nav, honest `EmptyState`).
 - Dashboard (live: cognitive pipeline health via `GET /api/v1/services/health`)
 - Cognition: Observations (live) · Evidence (live) · Contexts (live) · Patterns (live) · Anomalies (live) · Hypotheses (live) ·
   Confidence (planned until READ endpoints land)
-- Action: Decisions · Recommendations (planned)
-- Investigation: Cognitive Trace + Timeline (planned)
-- Reports (planned) · Administration: Users (planned)
+- Action: Decisions · Recommendations
+- Investigation: Cognitive Trace + Timeline
+- Reports
 - Insight / Outcome / Memory: not yet in active nav
 
 ## Routes

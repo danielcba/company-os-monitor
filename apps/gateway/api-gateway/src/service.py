@@ -639,7 +639,7 @@ class GatewayService:
 
         External read/compute capability (ADR-0002): it computes a tenant-scoped
         consolidation of Decisions' expected vs actual outcomes. No new entity is
-        created (Memory persistence remains planned per the framework).
+        created (Memory persistence formalized via ADR-0003 Memory Ledger).
         """
         if self._consolidation_store is None:
             raise RuntimeError("consolidation_store not configured in gateway")
@@ -658,7 +658,7 @@ class GatewayService:
 
         External read/compute capability (ADR-0002): it computes which Patterns
         should be kept/degraded/deactivated based on Decision outcomes. No new
-        entity is created (Memory persistence remains planned per the framework).
+        entity is created (Memory persistence formalized via ADR-0003 Memory Ledger).
         """
         if self._pattern_refinement_store is None:
             raise RuntimeError("pattern_refinement_store not configured in gateway")

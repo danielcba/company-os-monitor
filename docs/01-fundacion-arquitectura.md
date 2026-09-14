@@ -48,7 +48,7 @@ ACTION LAYER
     ├─ Recommendation (Recommendation Service - curso acción + rationale + alternativas + confidence)
     └─ Decision (Decision Service - compromiso + outcomes falsificables + authority)
     ↓
-MEMORY (planned)
+MEMORY (P7 — Learning Through Outcome)
     └─ Consolidation (Decision outcomes → calibración Confidence futura)
 ```
 
@@ -60,7 +60,7 @@ MEMORY (planned)
 | **Reasoning** | Detecta Patterns, identifica Anomalies, genera/evalúa Hypotheses, reestructura en Insights | **Constraint**: Razonamiento actúa sobre conocimiento, nunca directo sobre el mundo |
 | **Confidence/Metacognition** | Computa Confidence calibrada para cada juicio, monitorea calidad razonamiento, detecta impasse | **P5**: Confidence se computa, no se intuye. Cross-cutting, no oracle separado |
 | **Action** | Produce Recommendations (advisory, reversible) con rationale/alternativas/confidence; commite Decisions (accountable) con traceability/expected outcomes | **P6**: Recommendation ≠ Decision. Perception/Reasoning nunca ejecutan acción sin autorización explícita |
-| **Memory (planned)** | Consolida Observations, Decisions, Outcomes; soporta Confidence con calibración histórica | **P7**: Learning through outcome. Comparación expected vs actual → learning |
+| **Memory (P7 — Learning Through Outcome)** | Consolida Observations, Decisions, Outcomes; soporta Confidence con calibración histórica | **P7**: Learning through outcome. Comparación expected vs actual → learning |
 
 ### Stack Tecnológico (Subordinado a Arquitectura Cognitiva)
 
@@ -221,7 +221,7 @@ MEMORY (planned)
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          MEMORY LAYER (planned)                             │
+│                          MEMORY LAYER (P7 — Learning Through Outcome)           │
 │                                                                             │
 │  ┌──────────────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
 │  │ Working Memory (Redis)   │  │ Episodic Memory  │  │ Semantic Memory  │  │

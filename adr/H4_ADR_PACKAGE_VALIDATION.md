@@ -176,7 +176,8 @@ Canonical payload hashing with SHA-256, deterministic UUIDv5 Observation IDs —
 ## Files NOT Modified
 
 - Framework documents (`/home/dcordoba/Documents/Default Project/company/company-os-main/`) — **read-only**
-- Existing ADRs (ADR-0001, ADR-0002, ADR-0003) — **not modified**
+- Existing ADRs (ADR-0001, ADR-0002) — **not modified**
+- ADR-0003 — **created as PROPOSED** (Memory & Learning Layer adoption; pending human acceptance; not part of H4 package)
 - Application code — **no code changes**
 - Database migrations — **not created**
 - Tests — **not implemented**
@@ -233,4 +234,4 @@ No BLOCKING or HIGH architectural ambiguities remain. All 9 mandatory decisions 
 
 ---
 
-*Validation complete. All adversarial findings remediated. Architecture coherent with Company OS Framework (P1-P7, R1-R7, ADR-0001, ADR-0002, ADR-0003).*
+*Validation complete. All adversarial findings remediated. Architecture coherent with Company OS Framework (P1-P7, R1-R7, ADR-0001, ADR-0002). ADR-0003 (Memory & Learning Layer adoption) created as PROPOSED, pending human acceptance.*

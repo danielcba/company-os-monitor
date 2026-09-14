@@ -275,8 +275,8 @@ class PatternRefinementStore:
 
     Wraps the canonical gateway read stores (Decision/Recommendation/Hypothesis/
     Pattern) and applies the pure refinement transform. It performs NO writes
-    and creates NO new entity (Memory persistence remains planned per the
-    framework).
+    and creates NO new entity (Memory persistence formalized via ADR-0003
+    Memory Ledger).
     """
 
     def __init__(

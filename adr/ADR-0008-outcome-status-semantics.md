@@ -137,7 +137,7 @@ Formalize `outcome_status` as a lifecycle field on Decision with two states:
 
 ## Relationship with ADR-0003
 
-ADR-0003 defines the Memory & Learning Layer. This ADR extends the Learning Layer semantics by formally defining the outcome lifecycle. The extension is backward compatible and does not modify ADR-0003.
+ADR-0003 (PROPOSED) defines the Memory & Learning Layer, formalizing the Monitor's Memory/Learning components as the Framework's Memory capability (P7). This ADR extends the Learning Layer semantics by formally defining the outcome lifecycle. The extension is backward compatible and does not modify ADR-0003.
 
 ---
 

@@ -24,8 +24,8 @@ It rigorously follows the framework:
   reimplement cognitive logic.
 - **ADR-0002 (external, non-canonical scope)**: consolidation is an external
   read/compute capability built on top of canonical artifacts; it does NOT
-  create a new persisted entity (Memory persistence remains planned per the
-  framework). No new table, no new id, no mutation.
+  create a new persisted entity (Memory persistence formalized via ADR-0003
+  Memory Ledger). No new table, no new id, no mutation.
 - **Tenant scope**: every consolidation is anchored to one ``tenant_id``; a
   cross-tenant input is rejected (defense in depth on top of the gateway's
   own tenant isolation).
@@ -353,7 +353,7 @@ class ConsolidationStore:
 
     Wraps a DecisionReader (the canonical Decision store in production) and
     applies the pure consolidation transform. It performs NO writes and creates
-    NO new entity (Memory persistence remains planned per the framework).
+    NO new entity (Memory persistence formalized via ADR-0003 Memory Ledger).
     """
 
     def __init__(self, decision_store: DecisionReader):
