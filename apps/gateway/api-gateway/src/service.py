@@ -169,6 +169,8 @@ class GatewayService:
         self.total_errors = 0
         self.by_action: Counter[str] = Counter()
         self.last_request_at: datetime | None = None
+        self.outcome_transitions_total = 0
+        self.outcome_transitions_by_route: Counter[str] = Counter()
 
     # ------------------------------------------------------------------ auth
     async def authenticate(self, authorization_header: str) -> TokenPayload:
@@ -467,6 +469,8 @@ class GatewayService:
                     actual_outcomes=actual_outcomes,
                     executed_at=executed_at,
                 )
+                self.outcome_transitions_total += 1
+                self.outcome_transitions_by_route["LearningExecutionStore.submit_outcomes_with_revision"] += 1
 
                 # Phase 2: H3 learning loop (advisory-locked, single transaction — F-01)
                 h3_result = await self._learning_loop_store.run_for_decision(
@@ -506,6 +510,8 @@ class GatewayService:
                 actual_outcomes=actual_outcomes,
                 executed_at=executed_at,
             )
+            self.outcome_transitions_total += 1
+            self.outcome_transitions_by_route["DecisionReadStore.submit_outcomes"] += 1
             try:
                 loop_result = await self._learning_loop_store.run_for_decision(
                     tenant_id=uuid.UUID(ctx.effective_tenant_id),
@@ -539,6 +545,8 @@ class GatewayService:
                 actual_outcomes=actual_outcomes,
                 executed_at=executed_at,
             )
+            self.outcome_transitions_total += 1
+            self.outcome_transitions_by_route["DecisionReadStore.submit_outcomes"] += 1
             result["learning_loop"] = {
                 "status": "pending",
                 "reason": "learning_loop_store not configured",
@@ -885,6 +893,8 @@ class GatewayService:
             "last_request_at": (
                 self.last_request_at.isoformat() if self.last_request_at else None
             ),
+            "outcome_transitions_total": self.outcome_transitions_total,
+            "outcome_transitions_by_route": dict(self.outcome_transitions_by_route),
         }
 
 

@@ -44,6 +44,7 @@ from libs.action.decision import (
     decision_id,
 )
 from libs.action.execution_record import ExecutionRecord
+from libs.learning.learning_execution_store import LearningExecutionStore
 from libs.learning.learning_loop import compute_outcome_signal
 from libs.memory.consolidation import build_consolidation
 
@@ -498,3 +499,104 @@ class TestOutcomeSubmissionConsistency:
         gateway_source = gateway_path.read_text(encoding="utf-8")
         # The gateway submit_outcomes method must also transition outcome_status
         assert "outcome_status = 'observed'" in gateway_source
+
+
+# ── C4: Observability — structured logging ──────────────────────────────────
+
+
+class TestOutcomeObservability:
+    """C4: Verify structured logging for outcome_status transitions."""
+
+    _EVENT = "outcome_status_transition"
+    _ROUTE_DS = "DecisionStore.update_outcomes"
+    _ROUTE_GW = "DecisionReadStore.submit_outcomes"
+    _ROUTE_LES = "LearningExecutionStore.submit_outcomes_with_revision"
+
+    def test_decision_store_emits_transition_event(self):
+        """DecisionStore.update_outcomes must emit outcome_status_transition log."""
+        source = inspect.getsource(DecisionStore.update_outcomes)
+        assert "outcome_status_transition" in source
+
+    def test_decision_store_uses_structured_logger(self):
+        """DecisionStore.update_outcomes must use get_logger/LogContext."""
+        source = inspect.getsource(DecisionStore.update_outcomes)
+        assert "LogContext" in source
+        assert "outcome_lifecycle" in source
+
+    def test_decision_store_route_name(self):
+        """DecisionStore.update_outcomes must identify its route."""
+        source = inspect.getsource(DecisionStore.update_outcomes)
+        assert "DecisionStore.update_outcomes" in source
+
+    def test_decision_store_previous_and_new_status(self):
+        """DecisionStore.update_outcomes must log pending → observed."""
+        source = inspect.getsource(DecisionStore.update_outcomes)
+        assert '"pending"' in source
+        assert '"observed"' in source
+
+    def test_decision_store_actuals_count_only(self):
+        """DecisionStore.update_outcomes must log actual_outcomes_count, not content."""
+        source = inspect.getsource(DecisionStore.update_outcomes)
+        assert "actual_outcomes_count" in source
+        assert "len(actual_outcomes)" in source
+
+    def test_gateway_submit_outcomes_emits_transition_event(self):
+        """DecisionReadStore.submit_outcomes must emit outcome_status_transition log."""
+        gateway_path = _root / "apps" / "gateway" / "api-gateway" / "src" / "decisions.py"
+        source = gateway_path.read_text(encoding="utf-8")
+        assert "outcome_status_transition" in source
+
+    def test_gateway_submit_outcomes_uses_structured_logger(self):
+        """DecisionReadStore.submit_outcomes must use get_logger/LogContext."""
+        gateway_path = _root / "apps" / "gateway" / "api-gateway" / "src" / "decisions.py"
+        source = gateway_path.read_text(encoding="utf-8")
+        assert "LogContext" in source
+        assert "outcome_lifecycle" in source
+
+    def test_gateway_submit_outcomes_route_name(self):
+        """DecisionReadStore.submit_outcomes must identify its route."""
+        gateway_path = _root / "apps" / "gateway" / "api-gateway" / "src" / "decisions.py"
+        source = gateway_path.read_text(encoding="utf-8")
+        assert "DecisionReadStore.submit_outcomes" in source
+
+    def test_learning_execution_store_emits_transition_event(self):
+        """LearningExecutionStore.submit_outcomes_with_revision must emit event."""
+        source = inspect.getsource(LearningExecutionStore.submit_outcomes_with_revision)
+        assert "outcome_status_transition" in source
+
+    def test_learning_execution_store_uses_structured_logger(self):
+        """LearningExecutionStore must use get_logger/LogContext."""
+        source = inspect.getsource(LearningExecutionStore.submit_outcomes_with_revision)
+        assert "LogContext" in source
+        assert "outcome_lifecycle" in source
+
+    def test_learning_execution_store_route_name(self):
+        """LearningExecutionStore must identify its route."""
+        source = inspect.getsource(LearningExecutionStore.submit_outcomes_with_revision)
+        assert "LearningExecutionStore.submit_outcomes_with_revision" in source
+
+    def test_all_routes_have_actuals_count(self):
+        """All 3 routes must log actual_outcomes_count."""
+        ds_source = inspect.getsource(DecisionStore.update_outcomes)
+        assert "actual_outcomes_count" in ds_source
+
+        gw_path = _root / "apps" / "gateway" / "api-gateway" / "src" / "decisions.py"
+        gw_source = gw_path.read_text(encoding="utf-8")
+        assert "actual_outcomes_count" in gw_source
+
+        les_source = inspect.getsource(LearningExecutionStore.submit_outcomes_with_revision)
+        assert "actual_outcomes_count" in les_source
+
+    def test_no_actual_outcomes_content_in_logs(self):
+        """Logging must not include actual_outcomes content, only count."""
+        ds_source = inspect.getsource(DecisionStore.update_outcomes)
+        # The extra dict should have actual_outcomes_count, not actual_outcomes
+        # Verify the log call uses len(), not the raw list
+        assert '"actual_outcomes_count": len(actual_outcomes)' in ds_source
+
+    def test_metrics_expose_outcome_counters(self):
+        """Gateway /metrics must expose outcome_transitions_total."""
+        service_path = _root / "apps" / "gateway" / "api-gateway" / "src" / "service.py"
+        source = service_path.read_text(encoding="utf-8")
+        assert "outcome_transitions_total" in source
+        assert "outcome_transitions_by_route" in source

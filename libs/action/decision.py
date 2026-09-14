@@ -38,6 +38,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from libs.cognitive_core.calibration_model import CalibrationParams, brier_score, ece_score
+from libs.shared.structured_logging import LogContext, get_logger
+
+_logger = get_logger(__name__)
 
 # Fixed namespace for deterministic decision ids (content-addressed, idempotent).
 DECISION_NAMESPACE = uuid.UUID("00000000-0000-0000-0000-000000000082")
@@ -368,6 +371,22 @@ class DecisionStore:
             result = await session.execute(update_sql, params)
             await session.commit()
             row = result.mappings().one_or_none()
+            if row is not None and actual_outcomes is not None:
+                _logger.info(
+                    "outcome_status_transition",
+                    context=LogContext(
+                        tenant_id=str(tenant_id),
+                        cognitive_capability="outcome_lifecycle",
+                    ),
+                    extra={
+                        "event": "outcome_status_transition",
+                        "decision_id": str(id),
+                        "previous_status": "pending",
+                        "new_status": "observed",
+                        "actual_outcomes_count": len(actual_outcomes),
+                        "route": "DecisionStore.update_outcomes",
+                    },
+                )
             return dict(row) if row is not None else None
 
     async def verify_connection(self) -> None:

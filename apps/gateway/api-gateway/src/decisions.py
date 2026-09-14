@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from libs.shared.facets_cache import FacetsCache
+from libs.shared.structured_logging import LogContext, get_logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -46,6 +47,8 @@ class InvalidOutcomesError(Exception):
 
 DECISION_STATUSES = ("committed", "executing", "completed", "rolled_back")
 OUTCOME_STATUS_PENDING = "pending"
+
+_logger = get_logger(__name__)
 
 SELECT_BASE = """
     SELECT id, tenant_id, recommendation_id, confidence_id, authority_id,
@@ -297,6 +300,21 @@ class DecisionReadStore:
                     f"Decision {decision_id} not found"
                 )
 
+            _logger.info(
+                "outcome_status_transition",
+                context=LogContext(
+                    tenant_id=str(tenant_id),
+                    cognitive_capability="outcome_lifecycle",
+                ),
+                extra={
+                    "event": "outcome_status_transition",
+                    "decision_id": str(decision_id),
+                    "previous_status": "pending",
+                    "new_status": "observed",
+                    "actual_outcomes_count": len(actual_outcomes),
+                    "route": "DecisionReadStore.submit_outcomes",
+                },
+            )
             decision = self._decision_payload(row)
             return {"decision": decision, "status": "outcomes_submitted"}
 

@@ -26,6 +26,9 @@ from libs.learning.learning_execution import (
     is_stale,
 )
 from libs.learning.outcome_revision import OutcomeRevision
+from libs.shared.structured_logging import LogContext, get_logger
+
+_logger = get_logger(__name__)
 
 # ── SQL statements ──────────────────────────────────────────────────────────
 
@@ -264,6 +267,21 @@ class LearningExecutionStore:
                 )
 
             # Transaction commits here (session.begin() context manager exits)
+            _logger.info(
+                "outcome_status_transition",
+                context=LogContext(
+                    tenant_id=str(tenant_id),
+                    cognitive_capability="outcome_lifecycle",
+                ),
+                extra={
+                    "event": "outcome_status_transition",
+                    "decision_id": str(decision_id),
+                    "previous_status": "pending",
+                    "new_status": "observed",
+                    "actual_outcomes_count": len(actual_outcomes),
+                    "route": "LearningExecutionStore.submit_outcomes_with_revision",
+                },
+            )
             return _row_to_revision(revision_row)
 
     # ── Phase 2: Learning Execution (advisory-locked) ───────────────────
