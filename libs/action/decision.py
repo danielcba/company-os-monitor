@@ -326,10 +326,11 @@ class DecisionStore:
         """Update lifecycle fields for a decision (actual outcomes and execution time).
 
         Phase 12: tenant_id is now required for SQL-level isolation.
+        H7: Transitions outcome_status to 'observed' when actual_outcomes are written.
 
-        Only updates lifecycle fields (actual_outcomes, executed_at, status);
-        content columns are immutable (P1, blocked by content trigger).
-        Returns the updated decision row, or None if not found.
+        Only updates lifecycle fields (actual_outcomes, executed_at, status,
+        outcome_status); content columns are immutable (P1, blocked by content
+        trigger). Returns the updated decision row, or None if not found.
         """
         set_parts: list[str] = []
         params: dict[str, Any] = {"id": id, "tenant_id": tenant_id}
@@ -337,6 +338,8 @@ class DecisionStore:
         if actual_outcomes is not None:
             set_parts.append("actual_outcomes = :actual_outcomes")
             params["actual_outcomes"] = json.dumps(actual_outcomes, default=str)
+            # H7: writing actual_outcomes implies outcome has been observed
+            set_parts.append("outcome_status = 'observed'")
 
         if executed_at is not None:
             set_parts.append("executed_at = :executed_at")
@@ -357,7 +360,7 @@ class DecisionStore:
             WHERE id = :id AND tenant_id = :tenant_id
             RETURNING id, tenant_id, recommendation_id, confidence_id, authority_id,
                       commitment, expected_outcomes, risk_tolerance, status, committed_at,
-                      executed_at, actual_outcomes
+                      executed_at, actual_outcomes, outcome_status
             """
         )
 

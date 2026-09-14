@@ -45,11 +45,12 @@ class InvalidOutcomesError(Exception):
 
 
 DECISION_STATUSES = ("committed", "executing", "completed", "rolled_back")
+OUTCOME_STATUS_PENDING = "pending"
 
 SELECT_BASE = """
     SELECT id, tenant_id, recommendation_id, confidence_id, authority_id,
            commitment, expected_outcomes, risk_tolerance, status, committed_at,
-           executed_at, actual_outcomes
+           executed_at, actual_outcomes, outcome_status
     FROM decisions
     WHERE tenant_id = :tenant_id
       AND (CAST(:status AS VARCHAR) IS NULL OR status = :status)
@@ -79,7 +80,7 @@ SELECT_ONE = text(
     """
     SELECT id, tenant_id, recommendation_id, confidence_id, authority_id,
            commitment, expected_outcomes, risk_tolerance, status, committed_at,
-           executed_at, actual_outcomes
+           executed_at, actual_outcomes, outcome_status
     FROM decisions
     WHERE tenant_id = :tenant_id AND id = :id
     """
@@ -129,6 +130,7 @@ class DecisionReadStore:
             "actual_outcomes": (
                 list(actual_outcomes) if actual_outcomes is not None else None
             ),
+            "outcome_status": row.get("outcome_status", OUTCOME_STATUS_PENDING),
         }
         return payload
 
@@ -268,6 +270,8 @@ class DecisionReadStore:
 
             set_parts.append("actual_outcomes = :actual_outcomes")
             params["actual_outcomes"] = json.dumps(actual_outcomes, default=str)
+            # H7: writing actual_outcomes implies outcome has been observed
+            set_parts.append("outcome_status = 'observed'")
 
             if executed_at is not None:
                 set_parts.append("executed_at = :executed_at")
@@ -282,7 +286,7 @@ class DecisionReadStore:
                 WHERE id = :id AND tenant_id = :tenant_id
                 RETURNING id, tenant_id, recommendation_id, confidence_id, authority_id,
                           commitment, expected_outcomes, risk_tolerance, status, committed_at,
-                          executed_at, actual_outcomes
+                          executed_at, actual_outcomes, outcome_status
                 """
             )
             result = await session.execute(sql, params)

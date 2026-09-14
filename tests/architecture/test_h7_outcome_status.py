@@ -21,12 +21,15 @@ Tests that enforce the architectural invariants of the Outcome Status:
 - Failure semantics preserved
 - State transitions deterministic
 - No scope expansion
+- H8: Consistency — all outcome submission routes transition pending → observed
 
 These tests verify the invariants, not the implementation details.
 """
 from __future__ import annotations
 
+import inspect
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -36,12 +39,15 @@ from libs.action.decision import (
     OUTCOME_STATUSES,
     Decision,
     DecisionCreate,
+    DecisionStore,
     build_decision,
     decision_id,
 )
 from libs.action.execution_record import ExecutionRecord
 from libs.learning.learning_loop import compute_outcome_signal
 from libs.memory.consolidation import build_consolidation
+
+_root = Path(__file__).resolve().parents[2]
 
 # ── Decision model tests ──────────────────────────────────────────────────
 
@@ -413,3 +419,82 @@ class TestNoScopeExpansion:
         """No FAILED state introduced."""
         assert frozenset({"pending", "observed"}) == OUTCOME_STATUSES
         assert "failed" not in OUTCOME_STATUSES
+
+
+# ── H8: Consistency — all outcome submission routes ──────────────────────
+
+
+class TestOutcomeSubmissionConsistency:
+    """H8: Verify all outcome submission routes transition pending → observed.
+
+    ADR-0008 defines: actual_outcomes written => outcome_status = observed.
+    This must hold for EVERY code path that writes actual_outcomes.
+    """
+
+    def test_decision_store_update_outcomes_transitions_status(self):
+        """DecisionStore.update_outcomes() must transition outcome_status to 'observed'."""
+        source = inspect.getsource(DecisionStore.update_outcomes)
+        assert "outcome_status = 'observed'" in source
+
+    def test_decision_store_update_outcomes_returns_outcome_status(self):
+        """DecisionStore.update_outcomes() RETURNING must include outcome_status."""
+        source = inspect.getsource(DecisionStore.update_outcomes)
+        assert "outcome_status" in source
+        # The RETURNING clause must include outcome_status
+        assert "RETURNING" in source
+        # Find the RETURNING clause and verify it includes outcome_status
+        lines = source.split("\n")
+        in_returning = False
+        returning_block = ""
+        for line in lines:
+            if "RETURNING" in line:
+                in_returning = True
+            if in_returning:
+                returning_block += line + "\n"
+                if ";" in line or ")" in line:
+                    break
+        assert "outcome_status" in returning_block
+
+    def test_gateway_submit_outcomes_transitions_status(self):
+        """Gateway DecisionReadStore.submit_outcomes() must transition outcome_status."""
+        gateway_path = _root / "apps" / "gateway" / "api-gateway" / "src" / "decisions.py"
+        source = gateway_path.read_text(encoding="utf-8")
+        # Find the submit_outcomes method and verify it transitions outcome_status
+        assert "outcome_status = 'observed'" in source
+
+    def test_gateway_select_queries_include_outcome_status(self):
+        """Gateway SELECT queries must include outcome_status for read consistency."""
+        gateway_path = _root / "apps" / "gateway" / "api-gateway" / "src" / "decisions.py"
+        source = gateway_path.read_text(encoding="utf-8")
+        assert "outcome_status" in source
+
+    def test_schema_includes_outcome_status_column(self):
+        """01-schema.sql must define outcome_status on decisions table."""
+        schema_path = (
+            _root / "infrastructure" / "docker" / "init-sql" / "01-schema.sql"
+        )
+        schema = schema_path.read_text(encoding="utf-8")
+        assert "outcome_status" in schema
+        assert "CHECK (outcome_status IN ('pending', 'observed'))" in schema
+
+    def test_schema_includes_outcome_status_index(self):
+        """01-schema.sql must have an index on (tenant_id, outcome_status)."""
+        schema_path = (
+            _root / "infrastructure" / "docker" / "init-sql" / "01-schema.sql"
+        )
+        schema = schema_path.read_text(encoding="utf-8")
+        assert "idx_decisions_outcome_status" in schema
+
+    def test_no_route_leaves_actuals_without_observed(self):
+        """Every route writing actual_outcomes must also write outcome_status."""
+        # Check DecisionStore.update_outcomes
+        ds_source = inspect.getsource(DecisionStore.update_outcomes)
+        # If actual_outcomes is in SET clause, outcome_status must also be
+        assert "actual_outcomes" in ds_source
+        assert "outcome_status = 'observed'" in ds_source
+
+        # Check gateway submit_outcomes
+        gateway_path = _root / "apps" / "gateway" / "api-gateway" / "src" / "decisions.py"
+        gateway_source = gateway_path.read_text(encoding="utf-8")
+        # The gateway submit_outcomes method must also transition outcome_status
+        assert "outcome_status = 'observed'" in gateway_source

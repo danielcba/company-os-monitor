@@ -412,16 +412,19 @@ CREATE TABLE decisions (
     status VARCHAR(20) DEFAULT 'committed',    -- committed, executing, completed, rolled_back
     committed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     executed_at TIMESTAMPTZ,
-    actual_outcomes JSONB
+    actual_outcomes JSONB,
+    outcome_status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (outcome_status IN ('pending', 'observed'))
 );
 
 CREATE INDEX idx_decisions_tenant_status ON decisions(tenant_id, status, committed_at DESC);
+CREATE INDEX idx_decisions_outcome_status ON decisions(tenant_id, outcome_status);
 
 -- Decision content immutability (P1): CONTENT columns immutable once written;
--- `status`, `executed_at` and `actual_outcomes` are LIFECYCLE fields (the
--- Learning loop / execution phases transition committed -> executing/
--- completed/rolled_back and populate the observed outcomes); DELETE blocked
--- (persistent audit trail).
+-- `status`, `executed_at`, `actual_outcomes` and `outcome_status` are LIFECYCLE
+-- fields (the Learning loop / execution phases transition committed ->
+-- executing/completed/rolled_back, populate the observed outcomes, and transition
+-- outcome_status from pending to observed); DELETE blocked (persistent audit trail).
 CREATE OR REPLACE FUNCTION prevent_decision_content_update()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -434,7 +437,7 @@ BEGIN
        OR NEW.expected_outcomes IS DISTINCT FROM OLD.expected_outcomes
        OR NEW.risk_tolerance IS DISTINCT FROM OLD.risk_tolerance
        OR NEW.committed_at IS DISTINCT FROM OLD.committed_at THEN
-        RAISE EXCEPTION 'Decision content is immutable (P1). Only status, executed_at and actual_outcomes (lifecycle) may change.';
+        RAISE EXCEPTION 'Decision content is immutable (P1). Only status, executed_at, actual_outcomes and outcome_status (lifecycle) may change.';
     END IF;
     RETURN NEW;
 END;
