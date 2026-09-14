@@ -681,7 +681,7 @@ class GatewayService:
         should be reviewed / consider a competing model, based on Decision
         outcomes. It only *suggests* reconsidering a competitor; it never
         activates or generates a Context (P2). No new entity is created (Memory
-        persistence remains planned per the framework).
+        persistence formalized via ADR-0003 Memory Ledger).
         """
         if self._context_revision_store is None:
             raise RuntimeError("context_revision_store not configured in gateway")
@@ -701,8 +701,8 @@ class GatewayService:
         External read/compute capability (ADR-0002): it surfaces each Insight's
         journaled transformation (prior_understanding -> mental_model_update) and,
         when outcome data is available, attributes Decision verdicts back to the
-        Insight. It does NOT mutate canonical entities (Memory persistence remains
-        planned per the framework).
+        Insight. It does NOT mutate canonical entities (Memory persistence
+        formalized via ADR-0003 Memory Ledger).
         """
         if self._insight_transformation_store is None:
             raise RuntimeError(

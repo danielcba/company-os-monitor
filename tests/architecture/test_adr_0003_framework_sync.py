@@ -6,6 +6,7 @@ incorrectly marked as 'planned' and that ADR references are consistent.
 
 Each test maps to a specific acceptance criterion from ADR-0003.
 """
+import re
 from pathlib import Path
 
 import pytest
@@ -140,20 +141,38 @@ def test_h4_validation_reflects_adr_0003():
 # ---------------------------------------------------------------------------
 # AC-07: Code comments updated where "planned" is stale
 # ---------------------------------------------------------------------------
+_STALE_PATTERNS = [
+    re.compile(r"Memory\s+persistence\s+remains\s+planned", re.IGNORECASE),
+]
+
+
+def _has_stale_comment(text: str) -> str | None:
+    """Return the matched stale pattern string, or None if clean."""
+    # Normalize whitespace: collapse newlines/spaces into single spaces
+    normalized = re.sub(r"\s+", " ", text)
+    for pattern in _STALE_PATTERNS:
+        m = pattern.search(normalized)
+        if m:
+            return m.group(0)
+    return None
+
+
 def test_code_comments_no_stale_planned():
     """AC-07: Files should not contain 'Memory persistence remains planned'
-    comments."""
+    comments, even when split across lines."""
     files_to_check = [
         _root / "apps" / "gateway" / "api-gateway" / "src" / "service.py",
         _root / "libs" / "memory" / "consolidation.py",
         _root / "libs" / "memory" / "pattern_refinement.py",
         _root / "libs" / "memory" / "context_revision.py",
     ]
-    stale = "Memory persistence remains planned"
     for fpath in files_to_check:
         if fpath.exists():
             text = fpath.read_text(encoding="utf-8")
-            assert stale not in text, f"Stale comment in {fpath.name}"
+            match = _has_stale_comment(text)
+            assert match is None, (
+                f"Stale comment in {fpath.name}: '{match}'"
+            )
 
 
 # ---------------------------------------------------------------------------
