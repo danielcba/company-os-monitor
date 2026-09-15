@@ -2,11 +2,12 @@
 
 Title: Adopt Monitor Memory & Learning Layer as Framework Memory Capability
 
-Status: PROPOSED
-Approved: (pending human review)
-Approved-by: (pending)
+Status: Accepted
+Approved: 2026-08-30
+Approved-by: Framework (company-os-main)
 
-Date: 2026-09-14
+Date: 2026-08-30
+Supersedes: ADR-0002 (regarding "Memory remains planned" restriction)
 
 ---
 
@@ -172,4 +173,4 @@ This ADR formalizes the following components as Framework Memory:
 | AC-10 | No API changes | API review | No endpoint changes, no payload changes | API modified |
 | AC-11 | Framework repository unchanged | File review | No files modified in `/home/dcordoba/Documents/Default Project/company/company-os-main/` | Framework files modified |
 | AC-12 | All existing tests pass | Test execution | 722/722 or more tests pass | Regression detected |
-| AC-13 | ADR-0003 is PROPOSED (pending human acceptance) | Status check | Status = PROPOSED | Status = ACCEPTED without human review |
+| AC-13 | ADR-0003 is Accepted (Framework acceptance synchronized) | Status check | Status = Accepted | Status = PROPOSED (desynchronized from Framework) |

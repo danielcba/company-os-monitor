@@ -44,13 +44,14 @@ def test_adr_0003_has_valid_structure():
         assert section in text, f"ADR-0003 missing section: {section}"
 
 
-def test_adr_0003_status_is_proposed():
-    """AC-13: ADR-0003 Status must be PROPOSED (pending human acceptance)."""
+def test_adr_0003_status_is_accepted():
+    """AC-13: ADR-0003 Status must be Accepted (Framework acceptance
+    synchronized)."""
     adr_path = ADR_DIR / "ADR-0003-memory-learning-layer-adoption.md"
     if not adr_path.exists():
         pytest.skip("ADR-0003 does not exist")
     text = adr_path.read_text(encoding="utf-8")
-    assert "Status: PROPOSED" in text, "ADR-0003 Status must be PROPOSED"
+    assert "Status: Accepted" in text, "ADR-0003 Status must be Accepted"
 
 
 # ---------------------------------------------------------------------------

@@ -264,7 +264,7 @@ Before considering this decision implemented, the following tests must pass:
 
 - **ADR-0001**: Company OS is the Brain (cognitive architecture authority)
 - **ADR-0002**: COS-Monitor is the Product (external capabilities pattern)
-- **ADR-0003**: Memory & Learning Layer adoption (PROPOSED — formalizes Monitor Memory/Learning as Framework capability; provenance chain)
+- **ADR-0003**: Memory & Learning Layer adoption (Accepted — formalizes Monitor Memory/Learning as Framework capability; provenance chain)
 - **ADR-0005**: Machine Authentication (token format, scopes, validation)
 - **ADR-0006**: Agent Identity & Instance Lifecycle (installation_id, capabilities_json)
 - **ADR-0007**: Telemetry Contract & Integrity (batch schema, payload_hash, idempotency)
