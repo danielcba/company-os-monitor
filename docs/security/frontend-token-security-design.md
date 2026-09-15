@@ -1,4 +1,6 @@
-# Phase 13 — Frontend Token Security Design
+# Frontend Token Security Design — Phase 13 / Phase 20.1
+
+## Status: COMPLETE (All 3 phases implemented)
 
 ## Threat Model
 
@@ -9,28 +11,28 @@
 - JavaScript can access tokens at any time
 
 ### Target State (HttpOnly Cookies)
-- Access token: short-lived (15min), can stay in memory (SPA needs it for Authorization header)
-- Refresh token: HttpOnly, Secure, SameSite=Strict cookie
+- Access token: short-lived (15min), stored in memory (SPA needs it for Authorization header)
+- Refresh token: HttpOnly, Secure, SameSite=Lax cookie
 - JavaScript cannot access refresh token
 - XSS attacks cannot steal refresh token
-- CSRF protection via SameSite attribute
+- CSRF protection via SameSite attribute + Origin/Referer validation
 
 ## Migration Strategy
 
-### Phase 1: Backend Support (Current)
+### Phase 1: Backend Support — COMPLETE
 - Backend sets refresh token as HttpOnly cookie on `/auth/login` and `/auth/refresh`
-- Backend still returns refresh_token in response body for backward compatibility
-- Frontend can still use localStorage as fallback
+- Backend does NOT return refresh_token in response body
+- Frontend uses in-memory storage for access token
 
-### Phase 2: Frontend Migration
-- Frontend reads refresh token from cookie (via `document.cookie`)
-- Frontend stops storing refresh token in localStorage
-- Frontend still uses in-memory storage for access token (needed for Authorization header)
+### Phase 2: Frontend Migration — COMPLETE
+- Frontend sends `credentials: 'include'` on all requests (browser sends cookie automatically)
+- Frontend does NOT store refresh token in any JavaScript-accessible storage
+- Frontend uses in-memory storage for access token (needed for Authorization header)
 
-### Phase 3: Cleanup
-- Backend stops returning refresh_token in response body
-- Frontend removes localStorage refresh token code
-- Remove fallback code
+### Phase 3: Cleanup — COMPLETE
+- Backend does NOT accept `body.refresh_token` on `/auth/refresh` or `/auth/logout`
+- Refresh token is HttpOnly cookie only
+- No backward-compatible body fallback
 
 ## Cookie Configuration
 
@@ -39,10 +41,14 @@
 Set-Cookie: refresh_token=<token>; 
   HttpOnly; 
   Secure; 
-  SameSite=Strict; 
+  SameSite=Lax;
   Path=/api/v1/auth/refresh;
   Max-Age=604800;  // 7 days
 ```
+
+Note: SameSite=Lax (not Strict) is correct. Strict would block same-site navigations
+which breaks the refresh flow when users navigate to the app from external links.
+Lax blocks cross-site CSRF on state-changing requests while allowing same-site flow.
 
 ## Tests Required
 

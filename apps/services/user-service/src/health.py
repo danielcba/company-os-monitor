@@ -162,16 +162,12 @@ class UserServer:
                 status=429,
             )
         try:
-            # Phase 20.1: Primary path is HttpOnly cookie.
-            # Backward-compatible: fall back to body.refresh_token (deprecated).
+            # Phase 3: Refresh token is HttpOnly cookie only (no body fallback).
             from libs.access.cookie_auth import get_refresh_token_from_cookie, set_refresh_cookie
             refresh_token = get_refresh_token_from_cookie(request)
             if not refresh_token:
-                body = await request.json()
-                refresh_token = str(body.get("refresh_token", ""))
-            if not refresh_token:
                 return web.json_response(
-                    {"error": "refresh token required (cookie or body)"},
+                    {"error": "refresh token required (cookie)"},
                     status=400,
                 )
             result = await self.service.refresh(refresh_token=refresh_token)
@@ -195,16 +191,12 @@ class UserServer:
     async def logout_handler(self, request):
         """Blacklist the refresh token to revoke access immediately."""
         try:
-            # Phase 20.1: Primary path is HttpOnly cookie.
-            # Backward-compatible: fall back to body.refresh_token (deprecated).
+            # Phase 3: Refresh token is HttpOnly cookie only (no body fallback).
             from libs.access.cookie_auth import (
                 clear_refresh_cookie,
                 get_refresh_token_from_cookie,
             )
             refresh_token = get_refresh_token_from_cookie(request)
-            if not refresh_token:
-                body = await request.json()
-                refresh_token = str(body.get("refresh_token", ""))
             if refresh_token:
                 await self.service.logout(refresh_token=refresh_token)
             # Always clear the cookie and return success.

@@ -415,7 +415,7 @@ async def test_http_refresh_valid(server, store, service):
     await _seed(store, email="admin@a.test", role=ROLE_ADMIN)
     login = await service.login(email="admin@a.test", password="cosmonitor")
     response = await server.refresh_handler(
-        FakeRequest(body={"refresh_token": login["refresh_token"]})
+        FakeRequest(cookies={"refresh_token": login["refresh_token"]})
     )
     body = await _json(response)
     assert response.status == 200
