@@ -31,6 +31,14 @@ services:
       timeout: 3s
       retries: 5
 
+  frontend:
+    build:
+      context: ../../apps/web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    depends_on: []
+
 volumes:
   postgres_data:
   redis_data:
