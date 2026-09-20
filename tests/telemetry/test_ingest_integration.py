@@ -21,7 +21,9 @@ from libs.telemetry.ingest_service import (
     ValidationError,
 )
 
-DSN = "postgresql://cosmonitor:cosmonitor@localhost:5433/cosmonitor"
+from tests._config import TEST_DATABASE_URL_SYNC
+
+DSN = TEST_DATABASE_URL_SYNC
 
 
 def _db_available() -> bool:

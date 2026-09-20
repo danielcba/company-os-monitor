@@ -40,9 +40,10 @@ from libs.reasoning.pattern import Pattern, PatternStore
 
 from src.health import ReportServer
 from src.service import ReportService
+from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
-DSN_STORE = "postgresql+asyncpg://cosmonitor:cosmonitor@127.0.0.1:5433/cosmonitor"
-DSN_RAW = "postgresql://cosmonitor:cosmonitor@127.0.0.1:5433/cosmonitor"
+DSN_STORE = TEST_DATABASE_URL
+DSN_RAW = TEST_DATABASE_URL_SYNC
 NOW = datetime(2026, 8, 17, 12, 0, tzinfo=UTC)
 
 TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")

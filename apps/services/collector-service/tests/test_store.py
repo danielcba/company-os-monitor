@@ -12,8 +12,10 @@ import pytest
 from libs.cognitive_core.observation_bus import Observation
 from libs.perception.store import ObservationStore
 
-DSN_STORE = "postgresql+asyncpg://cosmonitor:cosmonitor@127.0.0.1:5433/cosmonitor"
-DSN_RAW = "postgresql://cosmonitor:cosmonitor@127.0.0.1:5433/cosmonitor"
+from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
+
+DSN_STORE = TEST_DATABASE_URL
+DSN_RAW = TEST_DATABASE_URL_SYNC
 
 
 async def _create_tenant(tenant_id: uuid.UUID) -> None:

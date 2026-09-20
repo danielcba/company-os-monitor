@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC  # noqa: F401
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # Make the gateway's top-level `src` package importable for the root test run

@@ -9,7 +9,6 @@ Verifies that:
 """
 from __future__ import annotations
 
-import os
 import socket
 import uuid
 from pathlib import Path
@@ -17,11 +16,10 @@ from pathlib import Path
 import asyncpg
 import pytest
 
+from tests._config import TEST_DATABASE_URL
+
 ROOT = Path(__file__).resolve().parents[2]
-DSN = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
-)
+DSN = TEST_DATABASE_URL
 PG_DSN = DSN.replace("postgresql+asyncpg://", "postgresql://")
 
 SCHEMA_PATH = ROOT / "infrastructure/docker/init-sql/01-schema.sql"

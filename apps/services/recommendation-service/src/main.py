@@ -44,10 +44,9 @@ def load_action_space() -> tuple:
 
 async def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    dsn = os.getenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
-    )
+    dsn = os.getenv("DATABASE_URL")
+    if not dsn:
+        raise RuntimeError("DATABASE_URL environment variable is required")
     port = int(os.getenv("RECOMMENDATION_HEALTH_PORT", "8096"))
     cycle_seconds = float(os.getenv("RECOMMENDATION_CYCLE_SECONDS", "60"))
 

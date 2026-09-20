@@ -49,10 +49,13 @@ def create_shared_engine(  # noqa: PLR0913,PLR0917 - configuration bundle
     DB_POOL_TIMEOUT, DB_POOL_RECYCLE, DB_STATEMENT_TIMEOUT.
     """
     if dsn is None:
-        dsn = os.getenv(
-            "DATABASE_URL",
-            "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
-        )
+        dsn = os.getenv("DATABASE_URL")
+        if not dsn:
+            msg = (
+                "DATABASE_URL environment variable is required. "
+                "Set it to your PostgreSQL connection string."
+            )
+            raise RuntimeError(msg)
     if pool_size is None:
         pool_size = int(os.getenv("DB_POOL_SIZE", "20"))
     if max_overflow is None:

@@ -31,11 +31,10 @@ from pathlib import Path
 import asyncpg
 import pytest
 
+from tests._config import TEST_DATABASE_URL
+
 ROOT = Path(__file__).resolve().parents[2]
-DSN = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
-)
+DSN = TEST_DATABASE_URL
 
 # Make `libs` importable, and the context-service `src` package importable
 # (ActivatorEngine uses absolute `from src.activator...` imports).

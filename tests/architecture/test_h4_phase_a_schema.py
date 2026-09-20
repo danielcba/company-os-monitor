@@ -8,16 +8,14 @@ and absence of cross-tenant references.
 Maps to ADR-0004, ADR-0005, ADR-0006, ADR-0007 mandatory decisions.
 """
 import json as _json
-import os
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-DSN = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
-)
+from tests._config import TEST_DATABASE_URL
+
+DSN = TEST_DATABASE_URL
 
 
 @pytest.fixture

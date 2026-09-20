@@ -271,7 +271,7 @@ class MachineJwtService:
     - Unknown ``kid`` → reject (fail-closed).
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - Machine JWT config bundle (keys, expiries)
         self,
         *,
         key_set: dict[str, tuple[str, str]],

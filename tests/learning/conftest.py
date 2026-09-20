@@ -5,16 +5,14 @@ Provides:
 - pytestmark for skipping DB tests when PostgreSQL is unavailable
 """
 import asyncio
-import os
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-DSN = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
-)
+from tests._config import TEST_DATABASE_URL
+
+DSN = TEST_DATABASE_URL
 
 
 def _check_db_available() -> bool:

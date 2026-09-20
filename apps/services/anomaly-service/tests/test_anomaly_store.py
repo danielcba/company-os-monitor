@@ -31,9 +31,10 @@ from libs.reasoning.pattern import (
 
 from src.health import HealthServer
 from src.service import AnomalyService
+from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
-DSN_STORE = "postgresql+asyncpg://cosmonitor:cosmonitor@127.0.0.1:5433/cosmonitor"
-DSN_RAW = "postgresql://cosmonitor:cosmonitor@127.0.0.1:5433/cosmonitor"
+DSN_STORE = TEST_DATABASE_URL
+DSN_RAW = TEST_DATABASE_URL_SYNC
 NOW = datetime(2026, 8, 16, 12, 0, tzinfo=UTC)
 
 

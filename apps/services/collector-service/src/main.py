@@ -19,10 +19,9 @@ logger = logging.getLogger(__name__)
 async def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     redis_url = os.getenv("OBSERVATION_BUS_URL", "redis://localhost:6379")
-    dsn = os.getenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
-    )
+    dsn = os.getenv("DATABASE_URL")
+    if not dsn:
+        raise RuntimeError("DATABASE_URL environment variable is required")
     group = os.getenv("CONSUMER_GROUP", "evidence_organizers")
     consumer_name = os.getenv("CONSUMER_NAME", "collector-1")
     port = int(os.getenv("HEALTH_PORT", "8090"))

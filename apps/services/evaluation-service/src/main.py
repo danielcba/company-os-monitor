@@ -20,11 +20,6 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-DSN = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://cosmonitor:cosmonitor@127.0.0.1:5433/cosmonitor",
-)
-
 # Port must not collide with decision-service (8097). 8102 is free in the
 # service port map (see start.sh SERVICE_SPECS).
 PORT = int(os.getenv("EVALUATION_HEALTH_PORT", "8102"))
@@ -33,10 +28,13 @@ INTERVAL_SECONDS = int(os.getenv("EVALUATION_INTERVAL_SECONDS", "60"))
 
 
 async def run_service() -> None:
-    hypothesis_store = HypothesisStore(DSN)
-    evidence_store = EvidenceStore(DSN)
-    confidence_store = ConfidenceStore(DSN)
-    evaluation_store = EvaluationStore(DSN)
+    dsn = os.getenv("DATABASE_URL")
+    if not dsn:
+        raise RuntimeError("DATABASE_URL environment variable is required")
+    hypothesis_store = HypothesisStore(dsn)
+    evidence_store = EvidenceStore(dsn)
+    confidence_store = ConfidenceStore(dsn)
+    evaluation_store = EvaluationStore(dsn)
 
     await hypothesis_store.verify_connection()
     await evidence_store.verify_connection()

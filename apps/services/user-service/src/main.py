@@ -17,10 +17,9 @@ from src.service import AuthService
 
 
 async def main():
-    dsn = os.getenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://cosmonitor:cosmonitor@localhost:5433/cosmonitor",
-    )
+    dsn = os.getenv("DATABASE_URL")
+    if not dsn:
+        raise RuntimeError("DATABASE_URL environment variable is required")
     port = int(os.getenv("USER_HEALTH_PORT", "8099"))
     redis_url = os.getenv("JWT_REDIS_URL", "redis://localhost:6379/1")
 

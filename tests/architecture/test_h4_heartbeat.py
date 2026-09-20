@@ -9,7 +9,6 @@ Maps to ADR-0006 mandatory decision.
 
 from __future__ import annotations
 
-import os
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -27,7 +26,9 @@ from src.health import GatewayServer
 from src.reconciler import HeartbeatReconciler
 from src.service import GatewayService
 
-DSN = os.getenv("DATABASE_URL", "postgresql://cosmonitor:cosmonitor@localhost:5433/cosmonitor")
+from tests._config import TEST_DATABASE_URL_SYNC
+
+DSN = TEST_DATABASE_URL_SYNC
 
 
 @pytest.fixture

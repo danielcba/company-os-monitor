@@ -575,3 +575,8 @@ class TestKeySetImmutability:
         ks = machine_jwt_a.key_set
         ks["X"] = ("priv", "pub")
         assert "X" not in machine_jwt_a.key_set
+
+
+# ---------------------------------------------------------------------------
+# End of H5 tests
+# ---------------------------------------------------------------------------
