@@ -20,7 +20,6 @@ from libs.reasoning.hypothesis import (
     HypothesisStore,
     build_hypothesis,
 )
-
 from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 DSN_STORE = TEST_DATABASE_URL

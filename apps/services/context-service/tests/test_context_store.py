@@ -21,11 +21,11 @@ from libs.perception.context import (
 )
 from libs.perception.evidence import EvidenceStore, build_evidence
 from libs.perception.observation import EvidenceCreate, QualityClass
+from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 from src.activator import ActivatorEngine
 from src.health import HealthServer
 from src.service import ContextService
-from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 DSN_STORE = TEST_DATABASE_URL
 DSN_RAW = TEST_DATABASE_URL_SYNC

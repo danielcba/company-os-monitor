@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from libs.access.security import hash_password, verify_password
 from libs.access.users import UserStore
-
 from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 DSN_STORE = TEST_DATABASE_URL

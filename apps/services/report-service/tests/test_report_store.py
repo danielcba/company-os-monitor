@@ -37,10 +37,10 @@ from libs.reasoning.hypothesis import (
     HypothesisStore,
 )
 from libs.reasoning.pattern import Pattern, PatternStore
+from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 from src.health import ReportServer
 from src.service import ReportService
-from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 DSN_STORE = TEST_DATABASE_URL
 DSN_RAW = TEST_DATABASE_URL_SYNC

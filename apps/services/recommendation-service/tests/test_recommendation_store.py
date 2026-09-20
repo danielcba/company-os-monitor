@@ -31,10 +31,10 @@ from libs.reasoning.hypothesis import (
     build_hypothesis,
 )
 from libs.reasoning.pattern import Pattern, PatternStore
+from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 from src.health import HealthServer
 from src.service import RecommendationService
-from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 DSN_STORE = TEST_DATABASE_URL
 DSN_RAW = TEST_DATABASE_URL_SYNC

@@ -11,7 +11,6 @@ import asyncpg
 import pytest
 from libs.cognitive_core.observation_bus import Observation
 from libs.perception.store import ObservationStore
-
 from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 DSN_STORE = TEST_DATABASE_URL

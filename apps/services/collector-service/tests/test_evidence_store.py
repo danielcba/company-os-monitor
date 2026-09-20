@@ -10,7 +10,6 @@ import asyncpg
 import pytest
 from libs.perception.evidence import Evidence, EvidenceStore, build_evidence
 from libs.perception.observation import EvidenceCreate, QualityClass
-
 from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 DSN_STORE = TEST_DATABASE_URL
