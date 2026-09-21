@@ -16,6 +16,7 @@ database is unreachable the DB-backed tests skip instead of failing.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import uuid
 from datetime import UTC, datetime
@@ -29,9 +30,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.cognitive_trace import CognitiveTraceStore
-from tests._config import TEST_DATABASE_URL
 
-DSN = TEST_DATABASE_URL
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    pytest.skip("DATABASE_URL not set", allow_module_level=True)
+
+DSN = DATABASE_URL
 PG_DSN = DSN.replace("postgresql+asyncpg://", "postgresql://")
 
 FIXED_NOW = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
