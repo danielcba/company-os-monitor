@@ -8,9 +8,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
-  pull-requests: read
-  id-token: write
 
 jobs:
   lint-and-test:
@@ -183,7 +180,6 @@ jobs:
       startsWith(github.ref, 'refs/heads/feature/')
     permissions:
       contents: read
-      packages: write
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
