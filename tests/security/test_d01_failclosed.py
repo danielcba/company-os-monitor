@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from jose import jwt as jose_jwt
+
 
 class TestDatabaseUrlRequired:
     """DATABASE_URL must be required — no silent fallback to test credentials."""
@@ -118,3 +120,179 @@ class TestJwtSecretKey:
             ), (
                 "JWT_SECRET_KEY should be read from env without hardcoded default"
             )
+
+
+class TestStartEnvFailClosed:
+    """start.sh must fail-closed when .env is missing."""
+
+    def test_start_sh_fails_without_env(self):
+        """start.sh must exit with error when .env is absent."""
+        result = subprocess.run(
+            ["bash", "-n", str(Path(__file__).resolve().parents[2] / "start.sh")],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, "start.sh syntax must be valid"
+
+    def test_start_sh_no_env_copy(self):
+        """start.sh must not contain cp .env.example command."""
+        start_sh = (
+            Path(__file__).resolve().parents[2] / "start.sh"
+        )
+        content = start_sh.read_text()
+        assert (
+            "cp \"$ROOT/.env.example\"" not in content
+            and 'cp "$ROOT/.env.example"' not in content
+        ), (
+            "start.sh must not copy .env.example to .env"
+        )
+        assert ".env" in content, (
+            "start.sh must still reference .env"
+        )
+        assert "die" in content, (
+            "start.sh must use die for missing .env"
+        )
+
+    def test_start_sh_die_on_missing_env(self):
+        """start.sh must die when .env is missing."""
+        start_sh = (
+            Path(__file__).resolve().parents[2] / "start.sh"
+        )
+        content = start_sh.read_text()
+        assert 'die "' in content, (
+            "start.sh must use die for missing .env"
+        )
+        assert ".env" in content and "not found" in content, (
+            "start.sh error message must mention .env not found"
+        )
+
+
+class TestJwtAudienceIssuer:
+    """JWT must include issuer and audience claims and verify them."""
+
+    def test_token_includes_issuer_when_configured(self):
+        """JwtService with issuer must include iss claim."""
+        from libs.access.security import JwtService  # noqa: PLC0415
+
+        svc = JwtService(
+            algorithm="HS256",
+            secret_key="test-secret",
+            issuer="http://localhost",
+            audience="cosmonitor",
+        )
+        token = svc.create_access_token(
+            user_id="u1", tenant_id="t1", email="a@b.com", role="admin"
+        )
+        payload = jose_jwt.decode(
+            token, "test-secret", algorithms=["HS256"], audience="cosmonitor"
+        )
+        assert payload["iss"] == "http://localhost", (
+            "Token must include iss claim"
+        )
+        assert payload["aud"] == "cosmonitor", (
+            "Token must include aud claim"
+        )
+
+    def test_token_missing_issuer_when_not_configured(self):
+        """JwtService without issuer must not include iss claim."""
+        from libs.access.security import JwtService  # noqa: PLC0415
+
+        svc = JwtService(
+            algorithm="HS256",
+            secret_key="test-secret",
+        )
+        token = svc.create_access_token(
+            user_id="u1", tenant_id="t1", email="a@b.com", role="admin"
+        )
+        payload = jose_jwt.decode(token, "test-secret", algorithms=["HS256"])
+        assert "iss" not in payload, (
+            "Token must not include iss when issuer not configured"
+        )
+        assert "aud" not in payload, (
+            "Token must not include aud when audience not configured"
+        )
+
+    def test_wrong_audience_rejected(self):
+        """Token with wrong audience must be rejected."""
+        from libs.access.security import JwtService  # noqa: PLC0415
+
+        svc = JwtService(
+            algorithm="HS256",
+            secret_key="test-secret",
+            issuer="http://localhost",
+            audience="cosmonitor",
+        )
+        token = svc.create_access_token(
+            user_id="u1", tenant_id="t1", email="a@b.com", role="admin"
+        )
+        wrong_svc = JwtService(
+            algorithm="HS256",
+            secret_key="test-secret",
+            issuer="http://localhost",
+            audience="wrong-audience",
+        )
+        try:
+            wrong_svc.verify_access_token(token)
+            raise AssertionError("Wrong audience should be rejected")  # noqa: TRY301,TRY003
+        except Exception:  # noqa: BLE001
+            pass
+
+    def test_wrong_issuer_rejected(self):
+        """Token with wrong issuer must be rejected."""
+        from libs.access.security import JwtService  # noqa: PLC0415
+
+        svc = JwtService(
+            algorithm="HS256",
+            secret_key="test-secret",
+            issuer="http://localhost",
+            audience="cosmonitor",
+        )
+        token = svc.create_access_token(
+            user_id="u1", tenant_id="t1", email="a@b.com", role="admin"
+        )
+        wrong_svc = JwtService(
+            algorithm="HS256",
+            secret_key="test-secret",
+            issuer="http://wrong-issuer",
+            audience="cosmonitor",
+        )
+        try:
+            wrong_svc.verify_access_token(token)
+            raise AssertionError("Wrong issuer should be rejected")  # noqa: TRY301,TRY003
+        except Exception:  # noqa: BLE001
+            pass
+
+    def test_rs256_aud_iss_compatible(self):
+        """RS256 tokens with issuer/audience must verify correctly."""
+        from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: I001, PLC0415
+        from cryptography.hazmat.primitives import serialization  # noqa: PLC0415
+        from libs.access.security import JwtService  # noqa: PLC0415
+
+        private_key_obj = rsa.generate_private_key(
+            public_exponent=65537, key_size=2048
+        )
+        private_pem = private_key_obj.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        ).decode()
+        public_pem = private_key_obj.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        ).decode()
+
+        svc = JwtService(
+            algorithm="RS256",
+            private_key=private_pem,
+            public_key=public_pem,
+            issuer="http://prod",
+            audience="cosmonitor",
+        )
+        token = svc.create_access_token(
+            user_id="u1", tenant_id="t1", email="a@b.com", role="admin"
+        )
+        payload = svc.verify_access_token(token)
+        assert payload.token_type == "access", (
+            "RS256 token must verify with correct issuer/audience"
+        )

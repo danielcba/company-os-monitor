@@ -70,6 +70,8 @@ async def main():
         public_key=os.getenv("JWT_PUBLIC_KEY"),
         access_expire_minutes=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "15")),
         refresh_expire_days=int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7")),
+        issuer=os.getenv("JWT_ISSUER"),
+        audience=os.getenv("JWT_AUDIENCE"),
     )
 
     # Machine JWT — RS256 with kid-based key rotation (ADR-0005 §1, H5)

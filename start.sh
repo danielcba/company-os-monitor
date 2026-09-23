@@ -94,8 +94,7 @@ fi
 log "python: $PYTHON"
 
 if [ ! -f "$ROOT/.env" ]; then
-  log "no .env found - copying .env.example (development defaults)"
-  cp "$ROOT/.env.example" "$ROOT/.env"
+  die "ERROR: .env file not found. Create it explicitly from .env.example and configure real credentials before starting."
 fi
 set -a
 # shellcheck disable=SC1091

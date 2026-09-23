@@ -49,6 +49,8 @@ CLAIM_TYPE = "token_type"
 CLAIM_EXP = "exp"
 CLAIM_IAT = "iat"
 CLAIM_JTI = "jti"  # unique token identifier for revocation
+CLAIM_ISS = "iss"
+CLAIM_AUD = "aud"
 
 
 def hash_password(password: str) -> str:
@@ -107,6 +109,8 @@ class JwtService:
         public_key: str | None = None,
         access_expire_minutes: int = 15,
         refresh_expire_days: int = 7,
+        issuer: str | None = None,
+        audience: str | None = None,
     ):
         self.algorithm = algorithm
         self.secret_key = secret_key
@@ -114,6 +118,8 @@ class JwtService:
         self.public_key = public_key
         self.access_expire_minutes = access_expire_minutes
         self.refresh_expire_days = refresh_expire_days
+        self.issuer = issuer
+        self.audience = audience
         if algorithm == "RS256":
             if not private_key or not public_key:
                 raise ValueError(  # noqa: TRY003 - config error, one message
@@ -156,6 +162,10 @@ class JwtService:
             CLAIM_EXP: int((now + expires_delta).timestamp()),
             CLAIM_JTI: str(_uuid.uuid4()),
         }
+        if self.issuer:
+            claims[CLAIM_ISS] = self.issuer
+        if self.audience:
+            claims[CLAIM_AUD] = self.audience
         if extra_claims:
             claims.update(extra_claims)
         return self._sign(claims)
@@ -204,13 +214,17 @@ class JwtService:
         Raises InvalidTokenError on malformed/expired/tampered tokens (-> 401).
         """
         key = self.public_key if self.algorithm == "RS256" else self.secret_key
+        decode_kwargs: dict[str, Any] = {
+            "token": token,
+            "key": key,
+            "algorithms": [self.algorithm],
+        }
+        if self.audience:
+            decode_kwargs["audience"] = self.audience
+        if self.issuer:
+            decode_kwargs["issuer"] = self.issuer
         try:
-            return jwt.decode(
-                token,
-                key,
-                algorithms=[self.algorithm],
-                options={"verify_aud": False},
-            )
+            return jwt.decode(**decode_kwargs)
         except JWTError as exc:
             raise InvalidTokenError(str(exc)) from exc
 
