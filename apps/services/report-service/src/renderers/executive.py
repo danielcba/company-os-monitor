@@ -7,8 +7,8 @@ calibrated Confidence exceeds a threshold) and the decisions that require
 authority (in this MVP: the high-risk commitments, whose authority binds the
 strongest confidence - docs/03 "> 0.9 for irreversible"; real users arrive in
 the Auth sprint). The renderer ONLY formats what the canonical flow already
-committed (ADR-0002): cost/ROI figures from the template are NOT invented - they
-are omitted because no table carries them.
+committed (ADR-0002): financial figures are NOT invented - they are omitted
+because no table carries them.
 """
 from datetime import UTC, datetime
 

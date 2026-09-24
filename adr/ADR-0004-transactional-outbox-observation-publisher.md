@@ -212,7 +212,7 @@ A background worker (`ObservationPublisher`) runs in the Gateway (or as a separa
 - Cognitive Boundary preserved (ingestion → outbox → publisher → bus → Collector)
 - Quality classification without cognitive layer dependency
 
-### Costs
+### Trade-offs
 - Additional `observation_outbox` table (~same cardinality as observations)
 - Background publisher worker required
 - Slightly higher ingestion latency (async publish)

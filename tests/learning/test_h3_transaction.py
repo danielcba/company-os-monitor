@@ -245,12 +245,12 @@ class TestIdempotency:
         r1 = build_outcome_revision(
             tenant_id=TENANT,
             decision_id=DECISION,
-            actual_outcomes=[{"metric": "revenue", "value": True}],
+            actual_outcomes=[{"metric": "availability", "value": True}],
         )
         r2 = build_outcome_revision(
             tenant_id=TENANT,
             decision_id=DECISION,
-            actual_outcomes=[{"metric": "revenue", "value": True}],
+            actual_outcomes=[{"metric": "availability", "value": True}],
         )
         assert r1.id != r2.id
         assert r1.actual_outcomes == r2.actual_outcomes

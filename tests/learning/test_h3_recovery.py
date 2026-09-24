@@ -289,7 +289,7 @@ class TestOrphanDetection:
         build_outcome_revision(
             tenant_id=TENANT,
             decision_id=DECISION,
-            actual_outcomes=[{"metric": "revenue", "value": True}],
+            actual_outcomes=[{"metric": "availability", "value": True}],
         )
         # No execution created for this revision
         # The find_orphaned_revisions query would find this
@@ -313,7 +313,7 @@ class TestOrphanDetection:
         build_outcome_revision(
             tenant_id=TENANT,
             decision_id=DECISION,
-            actual_outcomes=[{"metric": "cost", "value": 100}],
+            actual_outcomes=[{"metric": "latency", "value": 100}],
         )
         # This is a legitimate orphan: Phase 1 committed, Phase 2 never started
         # The reconciliation should detect and recover it

@@ -80,7 +80,7 @@ export function TenantSwitcher() {
                 >
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate font-medium">{tenant.name}</span>
-                    <span className="truncate text-xs text-muted-foreground">{tenant.slug} · {tenant.plan}</span>
+                    <span className="truncate text-xs text-muted-foreground">{tenant.slug}</span>
                   </div>
                   {tenant.id === tenantId && <Check className="h-4 w-4 shrink-0 text-accent" />}
                 </button>

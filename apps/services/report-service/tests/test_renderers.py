@@ -252,8 +252,8 @@ def test_executive_pending_authority_only_high_risk():
 
 
 def test_executive_is_adr0002_faithful_no_invented_judgments():
-    """The executive report formats EXACTLY the persisted data (no cost/ROI
-    invention, no new judgments)."""
+    """The executive report formats EXACTLY the persisted data (no invented
+    financial figures, no new judgments)."""
     chain = make_chain(confidence_score=0.82)
     doc = render_executive(make_source(chain))
     top = doc["top_decisions"][0]

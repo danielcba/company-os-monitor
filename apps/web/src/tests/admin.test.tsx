@@ -51,7 +51,6 @@ const tenantsResponse = {
       id: tenantId,
       name: 'Sandbox Tenant',
       slug: 'sandbox',
-      plan: 'professional',
       settings: {},
       created_at: '2026-08-01T00:00:00Z',
       updated_at: '2026-08-01T00:00:00Z',
@@ -151,7 +150,6 @@ describe('TenantsPage', () => {
     const table = await screen.findByRole('table')
     expect(within(table).getByText('Sandbox Tenant')).toBeInTheDocument()
     expect(within(table).getByText('sandbox')).toBeInTheDocument()
-    expect(within(table).getByText('professional')).toBeInTheDocument()
   })
 })
 

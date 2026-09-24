@@ -40,12 +40,11 @@ CREATE INDEX IF NOT EXISTS idx_users_tenant_role ON users(tenant_id, role);
 -- Ensure the tenant referenced by the sandbox admin seed exists. The seed user
 -- below has tenant_id = 00000000-0000-0000-0000-000000000001; without this row
 -- the FK (users_tenant_id_fkey) rejects the insert. Idempotent for re-runs.
-INSERT INTO tenants (id, name, slug, plan)
+INSERT INTO tenants (id, name, slug)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     'Sandbox Tenant',
-    'sandbox',
-    'basic'
+    'sandbox'
 )
 ON CONFLICT (id) DO NOTHING;
 

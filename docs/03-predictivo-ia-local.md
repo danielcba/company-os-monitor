@@ -355,15 +355,15 @@ LM Studio es una **capacidad externa no-canónica**. Se usa como herramienta por
 | **Hypothesis Generation** (abductive, diverse) | Qwen 3 14B / DeepSeek V3 | Good divergence, structured output, falsification criteria |
 | **Insight Restructuring** (analogical, frame-switching) | DeepSeek R1 32B | Superior reasoning for restructuring, causal chains |
 | **Coherence Evaluation** (Context competition) | Qwen 3 32B | Better structured comparison, coherence scoring |
-| **MVP / Budget** | Llama 4 8B / Mistral 7B | Minimum viable for structured JSON output |
+| **MVP** | Llama 4 8B / Mistral 7B | Minimum viable for structured JSON output |
 
 ## Hardware Requirements (para Cognitive Throughput)
 
-| Tier | Cognitive Throughput Target | CPU | GPU | RAM | Model |
+| Scale | Cognitive Throughput Target | CPU | GPU | RAM | Model |
 |------|----------------------------|-----|-----|-----|-------|
 | **MVP** (3-5 tenants) | 10 hypotheses/min, 1 insight/hr | 8 cores AVX2 | Optional | 16 GB | Llama 4 8B / Mistral 7B |
 | **Production** (20+ tenants) | 50 hypotheses/min, 5 insights/hr | 16 cores | RTX 3090 24GB | 32 GB | Qwen 3 14B / DeepSeek V3 |
-| **Enterprise** (100+ tenants) | 200 hypotheses/min, 20 insights/hr | Dual EPYC | 2x A4000 48GB | 128 GB | DeepSeek R1 32B / Llama 4 70B |
+| **Large scale** (100+ tenants) | 200 hypotheses/min, 20 insights/hr | Dual EPYC | 2x A4000 48GB | 128 GB | DeepSeek R1 32B / Llama 4 70B |
 
 **Critical**: CPU inference (~3-5 tok/s) sufficient for **batch hypothesis generation** (scheduled, not real-time). Real-time Context activation requires GPU for <500ms latency.
 

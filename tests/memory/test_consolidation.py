@@ -35,7 +35,7 @@ def test_missing_actuals_is_inconclusive_not_fabricated_failure():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"}
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"}
         ],
         actual_outcomes=None,
     )
@@ -53,7 +53,7 @@ def test_empty_actuals_list_is_inconclusive():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"}
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"}
         ],
         actual_outcomes=[],
     )
@@ -66,12 +66,12 @@ def test_corroborated_when_prediction_matches_observed():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"},
-            {"verifiable_by": "churn", "prediction": 0.1, "deadline": "2026-09-01"},
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"},
+            {"verifiable_by": "error_rate", "prediction": 0.1, "deadline": "2026-09-01"},
         ],
         actual_outcomes=[
-            {"verifiable_by": "revenue", "value": True},
-            {"verifiable_by": "churn", "value": False},
+            {"verifiable_by": "availability", "value": True},
+            {"verifiable_by": "error_rate", "value": False},
         ],
     )
     result = build_consolidation(decision)
@@ -88,9 +88,9 @@ def test_contradicted_when_prediction_mismatches_observed():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"}
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"}
         ],
-        actual_outcomes=[{"verifiable_by": "revenue", "value": False}],
+        actual_outcomes=[{"verifiable_by": "availability", "value": False}],
     )
     result = build_consolidation(decision)
     assert result.contradicted == 1
@@ -102,9 +102,9 @@ def test_unparseable_actual_is_inconclusive_not_fabricated():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"}
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"}
         ],
-        actual_outcomes=[{"verifiable_by": "revenue", "value": "maybe-soon"}],
+        actual_outcomes=[{"verifiable_by": "availability", "value": "maybe-soon"}],
     )
     result = build_consolidation(decision)
     assert result.inconclusive == 1
@@ -116,10 +116,10 @@ def test_actual_without_matching_expected_is_ignored():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"}
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"}
         ],
         actual_outcomes=[
-            {"verifiable_by": "revenue", "value": True},
+            {"verifiable_by": "availability", "value": True},
             {"verifiable_by": "unknown_metric", "value": False},
         ],
     )
@@ -150,9 +150,9 @@ def test_deterministic_report_is_frozen_and_stable():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"}
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"}
         ],
-        actual_outcomes=[{"verifiable_by": "revenue", "value": True}],
+        actual_outcomes=[{"verifiable_by": "availability", "value": True}],
     )
     report_a = consolidate_decisions(TENANT, [decision])
     report_b = consolidate_decisions(TENANT, [decision])

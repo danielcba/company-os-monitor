@@ -50,7 +50,7 @@ Regla conceptual que gobierna el sprint (ADR-0002): **"El flujo canónico (Perce
    - `ReportStore`: INSERT, `verify_connection`, `close`, reads `list_reports(tenant_id, report_type)`. NOTA: `reports` es la tabla de salida del servicio (no-canónica) — su trigger de inmutabilidad es decisión de diseño (ver Schema).
 
 2. **Renderers** (`apps/services/report-service/src/renderers/`; funciones PURAS, sin I/O, testables):
-   - `render_executive(decision, context, confidence, tenant) -> dict` — resumen ejecutivo 1 página: Top N decisiones críticas con riesgo/confianza/costo/ROI, futuros riesgos (hypotheses con confidence > umbral), decisiones pendientes de autoridad. Campos según `docs/04` (Executive Summary template).
+   - `render_executive(decision, context, confidence, tenant) -> dict` — resumen ejecutivo 1 página: Top N decisiones críticas con riesgo/confianza/impacto operativo, futuros riesgos (hypotheses con confidence > umbral), decisiones pendientes de autoridad. Campos según `docs/04` (Executive Summary template).
    - `render_technical(decision, ...) -> dict` — traza cognitiva completa: SECTION 1 Cognitive Trace, SECTION 2 Evidence Chain, SECTION 3 Reasoning Chain (pattern/anomaly/hypotheses con status), SECTION 4 Confidence Calibration (S/C/ECE/C_final/α), SECTION 5 Recommendation & Alternatives, SECTION 6 Decision & Expected Outcomes, SECTION 7 Learning Loop (post-execution, puede ir vacío).
    - `render_json(...) -> dict` — los mismos datos en estructura JSON pura (para API/dashboard).
    - Formatters: `to_pdf(html)` (weasyprint), `to_json(obj)`, `to_html(obj)`. El HTML se construye con jinja2 (plantillas locales en `src/templates/`).

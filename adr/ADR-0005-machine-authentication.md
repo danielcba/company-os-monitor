@@ -206,7 +206,7 @@ Gateway machine auth middleware:
 - Rotation and revocation operationalized
 - Registration token bootstrap eliminates shared secrets
 
-### Costs
+### Trade-offs
 - Additional `agent_credentials` table
 - Machine auth endpoint in Gateway (or user-service)
 - Separate Redis DB or key prefix management

@@ -2,7 +2,7 @@
 
 ## 1. ¿Qué es y qué hace?
 
-COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canónico** Company OS: **Perception → Reasoning → Confidence → Action**. Cada componente implementa exactamente una capacidad cognitiva (R1) con un Cognitive Contract definido (R2). El framework guía el código, nunca al revés (R7).
+COS-Monitor es una plataforma que implementa el **pipeline cognitivo canónico** Company OS: **Perception → Reasoning → Confidence → Action**. Cada componente implementa exactamente una capacidad cognitiva (R1) con un Cognitive Contract definido (R2). El framework guía el código, nunca al revés (R7).
 
 **Funciones principales:**
 - **Perception Layer**: Captura observaciones inmutables de servidores Linux/Windows/VMware/red mediante agents especializados
@@ -97,7 +97,7 @@ COS-Monitor es una plataforma SaaS que implementa el **pipeline cognitivo canón
 
 ### Entornos de Despliegue:
 
-- **SaaS Multi-tenant**: Plataforma como servicio con aislamiento por tenant
+- **Multi-tenant**: Aislamiento de datos y pipeline por tenant en una sola instancia
 - **On-premise**: Despliegue local con Docker Compose
 - **Nube híbrida**: Integración con infraestructura existente
 - **Entornos de desarrollo/producción**: Mismo schema, configuraciones por entorno

@@ -72,7 +72,7 @@ CONFIDENCE CALIBRATION (Learning, cross-cutting)
     "No backup failures due to capacity in next 90 days"
   ],
   "alternatives_considered": [
-    {"action": "Compress older backups", "rationale": "Lower immediate cost", "rejected_reason": "Higher risk - compression may not keep pace with growth", "confidence": 0.45},
+    {"action": "Compress older backups", "rationale": "Low immediate operational overhead", "rejected_reason": "Higher risk - compression may not keep pace with growth", "confidence": 0.45},
     {"action": "Reduce retention window", "rationale": "Frees space immediately", "rejected_reason": "Compliance violation risk", "confidence": 0.30}
   ],
   "confidence_score": 0.82,
@@ -167,13 +167,13 @@ El Report Service **NO genera recomendaciones ni decisiones**. Solo **formatea**
 │  TOP 3 CRITICAL DECISIONS THIS WEEK                                │
 │  1. [D-2026-08-11-001] Expand ERP backup volume (Day 8)            │
 │     Risk: ERP backup failure in 14 days → business stoppage        │
-│     Confidence: 82%  |  Cost: $2,400  |  ROI: Prevents $500k/hr downtime │
+│     Confidence: 82%  |  Risk: Medium  |  Impact: Backup failure risk│
 │  2. [D-2026-08-09-003] Reset 23 dormant AD accounts                │
 │     Risk: Orphaned privileged accounts → compliance violation       │
-│     Confidence: 91%  |  Cost: $0 (automated)  |  ROI: Audit pass   │
+│     Confidence: 91%  |  Risk: Low  |  Scope: Automated (policy)     │
 │  3. [D-2026-08-07-002] Migrate VMware workloads off DS-04          │
 │     Risk: Datastore 89% full → VM crashes                          │
-│     Confidence: 78%  |  Cost: $1,200  |  ROI: Prevents 4hr outage  │
+│     Confidence: 78%  |  Risk: High  |  Reversibility: Reversible    │
 ├─────────────────────────────────────────────────────────────────────┤
 │  TOP 3 FUTURE RISKS (Hypotheses with Confidence > 60%)             │
 │  1. Database growth acceleration (H1: new feature logging) — 68%   │
@@ -181,7 +181,7 @@ El Report Service **NO genera recomendaciones ni decisiones**. Solo **formatea**
 │  3. Certificate expiration cluster (12 certs expiring Q4) — 85%    │
 ├─────────────────────────────────────────────────────────────────────┤
 │  DECISIONS REQUIRING YOUR AUTHORITY                                 │
-│  • D-2026-08-11-004: Approve $15k storage expansion (deadline: Day 5)│
+│  • D-2026-08-11-004: Approve storage expansion (deadline: Day 5)    │
 │  • D-2026-08-11-005: Authorize emergency VM migration window        │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -332,7 +332,7 @@ decision_authority:
   automated_policies:
     - Defined by superadmin, versioned in Git
     - Scope: specific anomaly/pattern types, specific action space subset
-    - Limits: max $ cost, max risk_tolerance, requires human approval above threshold
+    - Limits: max risk_tolerance, max action scope, requires human approval above threshold
     - Every automated Decision logged with policy_id as authority
 ```
 

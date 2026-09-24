@@ -359,7 +359,6 @@ def _tenant_payload(tenant) -> dict[str, Any]:
         "id": str(tenant.id),
         "name": tenant.name,
         "slug": tenant.slug,
-        "plan": tenant.plan,
         "settings": tenant.settings,
         "created_at": tenant.created_at.isoformat(),
         "updated_at": tenant.updated_at.isoformat(),

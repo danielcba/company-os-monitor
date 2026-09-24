@@ -76,8 +76,8 @@ def test_evaluation_insufficient_evidence_remains_candidate():
     """A. candidate + insufficient evidence -> candidate."""
     hypothesis = _make_hypothesis(
         HypothesisParams(
-            predicted_consequences=["Revenue increases", "Cost decreases"],
-            falsification_criterion="Revenue decreases",
+            predicted_consequences=["Availability increases", "Latency decreases"],
+            falsification_criterion="Availability decreases",
         )
     )
     # No evidence provided
@@ -92,8 +92,8 @@ def test_evaluation_no_matching_evidence_remains_candidate():
     """A. candidate + irrelevant evidence -> candidate (insufficient)."""
     hypothesis = _make_hypothesis(
         HypothesisParams(
-            predicted_consequences=["Revenue increases", "Cost decreases"],
-            falsification_criterion="Revenue decreases",
+            predicted_consequences=["Availability increases", "Latency decreases"],
+            falsification_criterion="Availability decreases",
         )
     )
     # Evidence that doesn't match predictions or falsification
@@ -110,14 +110,14 @@ def test_evaluation_corroborating_evidence_confirmed():
     """B. candidate + sufficient corroborating evidence -> confirmed."""
     hypothesis = _make_hypothesis(
         HypothesisParams(
-            predicted_consequences=["Revenue increases", "Cost decreases"],
-            falsification_criterion="Revenue decreases",
+            predicted_consequences=["Availability increases", "Latency decreases"],
+            falsification_criterion="Availability decreases",
         )
     )
     # Evidence matching both predictions
     supporting = [
-        {"metric": "revenue", "value": "Revenue increases by 10%"},
-        {"metric": "cost", "value": "Cost decreases by 5%"},
+        {"metric": "availability", "value": "Availability increases by 10%"},
+        {"metric": "latency", "value": "Latency decreases by 5%"},
     ]
     result = evaluate_hypothesis(hypothesis, supporting_evidence=supporting)
     assert result.new_status == STATUS_CONFIRMED
@@ -166,12 +166,12 @@ def test_evaluation_falsification_criterion_met_falsified():
     """C. candidate + falsifying evidence -> falsified."""
     hypothesis = _make_hypothesis(
         HypothesisParams(
-            predicted_consequences=["Revenue increases"],
-            falsification_criterion="Revenue decreases",
+            predicted_consequences=["Availability increases"],
+            falsification_criterion="Availability decreases",
         )
     )
     # Evidence matching falsification criterion
-    contradicting = [{"metric": "revenue", "value": "Revenue decreases by 5%"}]
+    contradicting = [{"metric": "availability", "value": "Availability decreases by 5%"}]
     result = evaluate_hypothesis(hypothesis, contradicting_evidence=contradicting)
     assert result.new_status == STATUS_FALSIFIED
     assert result.falsification_criterion_met

@@ -314,7 +314,7 @@ Derivation runs in background reconciler or on-demand for UI.
 - Clear semantics for restart/upgrade/reinstall
 - Operational visibility (which instances running, when last heartbeat)
 
-### Costs
+### Trade-offs
 - Two new tables: `agent_installations`, `agent_instances`
 - Background reconciler for heartbeat timeout
 - Registration endpoint in Gateway

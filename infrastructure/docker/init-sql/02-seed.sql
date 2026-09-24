@@ -3,12 +3,11 @@
 -- In production, tenants are created via onboarding; agents must never create them.
 
 -- Sandbox tenant used by all development agents (TENANT_ID default).
-INSERT INTO tenants (id, name, slug, plan, settings)
+INSERT INTO tenants (id, name, slug, settings)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     'Sandbox Tenant',
     'sandbox',
-    'professional',
     '{"source": "seed"}'::jsonb
 )
 ON CONFLICT (id) DO NOTHING;

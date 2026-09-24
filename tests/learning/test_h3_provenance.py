@@ -128,7 +128,7 @@ class TestProvenanceChain:
         rev = build_outcome_revision(
             tenant_id=TENANT,
             decision_id=DECISION,
-            actual_outcomes=[{"metric": "revenue", "value": True}],
+            actual_outcomes=[{"metric": "availability", "value": True}],
         )
         assert rev.decision_id == DECISION
         assert rev.tenant_id == TENANT

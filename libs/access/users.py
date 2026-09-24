@@ -74,7 +74,7 @@ SELECT_USERS_BY_TENANT_ROLE = text(
 
 SELECT_ALL_TENANTS = text(
     """
-    SELECT id, name, slug, plan, settings, created_at, updated_at
+    SELECT id, name, slug, settings, created_at, updated_at
     FROM tenants
     ORDER BY created_at, name
     """
@@ -82,7 +82,7 @@ SELECT_ALL_TENANTS = text(
 
 SELECT_TENANT_BY_ID = text(
     """
-    SELECT id, name, slug, plan, settings, created_at, updated_at
+    SELECT id, name, slug, settings, created_at, updated_at
     FROM tenants
     WHERE id = :id
     """
@@ -134,7 +134,6 @@ class Tenant(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
-    plan: str
     settings: dict = {}
     created_at: datetime = datetime.now(UTC)
     updated_at: datetime = datetime.now(UTC)

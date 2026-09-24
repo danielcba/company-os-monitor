@@ -284,7 +284,7 @@ class TestOutcomeRevision:
         rev = build_outcome_revision(
             tenant_id=TENANT,
             decision_id=DECISION,
-            actual_outcomes=[{"verifiable_by": "revenue", "value": True}],
+            actual_outcomes=[{"verifiable_by": "availability", "value": True}],
         )
         assert rev.tenant_id == TENANT
         assert rev.decision_id == DECISION

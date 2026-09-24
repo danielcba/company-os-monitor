@@ -387,7 +387,7 @@ Evidence → Context → Pattern → Anomaly → Hypothesis → ...
 - Audit trail of every ingestion attempt
 - Quality classification without cognitive coupling
 
-### Costs
+### Trade-offs
 - Client must generate and track `batch_id`
 - Canonical JSON serialization must match exactly (agent ↔ gateway)
 - `metric_batches`/`metric_samples` tables add storage

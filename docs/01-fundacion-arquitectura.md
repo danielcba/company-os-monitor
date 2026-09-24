@@ -4,7 +4,7 @@
 
 # COS-Monitor (Company OS Monitor)
 
-Plataforma SaaS para monitoreo, análisis y diagnóstico automático de infraestructura IT para DataCenters usando IA local (LM Studio) y componentes Open Source. **Todas las funcionalidades, datos, pantallas y decisiones deben estar estrictamente condicionadas por el framework de arquitectura cognitiva Company OS** (https://github.com/danielcba/company-os/, path local: `/home/dcordoba/Documents/Default Project/company/company-os-main/`). Este repositorio es de solo lectura; el framework guía el código, nunca lo contrario (R7).
+Plataforma para monitoreo, análisis y diagnóstico automático de infraestructura IT para DataCenters usando IA local (LM Studio) y componentes Open Source. **Todas las funcionalidades, datos, pantallas y decisiones deben estar estrictamente condicionadas por el framework de arquitectura cognitiva Company OS** (https://github.com/danielcba/company-os/, path local: `/home/dcordoba/Documents/Default Project/company/company-os-main/`). Este repositorio es de solo lectura; el framework guía el código, nunca lo contrario (R7).
 
 **Principio rector (ADR-0001)**: Company OS es el centro cognitivo de la organización. COS-Monitor es su primera implementación de producto (ADR-0002). El flujo canónico (Reality → Decision) es el cerebro del producto; toda capacidad externa (agentes, API, dashboard, alertas, reportes, auth, LLM) es no-canónica y debe originar sus juicios desde el flujo cognitivo central.
 
@@ -393,7 +393,7 @@ Todas las tablas almacenan **conceptos cognitivos**, no solo "datos técnicos". 
 - **Constraints**: Commitment with authority, timeline, expected outcomes (P6). Recorded with full trace (R5).
 
 ### Tabla: tenants (sin cambios, soporte multi-tenant)
-- id UUID PK, name, slug, plan, settings, created_at, updated_at
+- id UUID PK, name, slug, settings, created_at, updated_at
 
 ### Tabla: servers (metadata para source_id en observations)
 - id UUID PK, tenant_id, hostname, ip_address, os_type, os_version, agent_version, status, last_seen, metadata, created_at

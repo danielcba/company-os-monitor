@@ -7,7 +7,7 @@ Estado: Oficial
 
 ## ¿Qué es COS-Monitor?
 
-COS-Monitor es una plataforma SaaS para monitoreo, análisis y diagnóstico automático de infraestructura IT, construida sobre el framework de arquitectura cognitiva Company OS.
+COS-Monitor es una plataforma para monitoreo, análisis y diagnóstico automático de infraestructura IT, construida sobre el framework de arquitectura cognitiva Company OS.
 
 Implementa el pipeline cognitivo canónico — **Percepción → Razonamiento → Aprendizaje → Acción** — como un conjunto de servicios independientes, cada uno con exactamente una capacidad cognitiva. Desde las observaciones crudas hasta las decisiones commiteadas, cada artefacto es inmutable y totalmente trazable.
 
@@ -377,7 +377,7 @@ curl -s http://localhost:8097/metrics
 - `libs/action/report.py` — **modelo Report** (familia output-document del Action Layer): `ReportCreate`/`Report` (pydantic `frozen`) espejo de la tabla `reports` (tenant_id, report_type, title, summary, content, ai_generated, model_used, period_start, period_end, generated_at, file_path); `report_id` determinístico (uuid5, namespace propio) SIN `generated_at` ni `content` — mismos inputs → mismo id. `ReportStore` (INSERT idempotente, `report_exists`, `list_reports`, `get_report`, `list_tenant_ids`, `get_tenant`, `verify_connection`, `close`). Explícitamente NO-canónico (ADR-0002): SOLO formatea lo que el flujo cognitivo ya commiteó, escribe en su tabla propia `reports`, nunca genera juicios, nunca toca las tablas cognitivas. `ai_generated=False`/`model_used=None` en este MVP (render local por templates; LM Studio en un sprint futuro)
 - `apps/services/report-service/` — **Report Generator** (formatea, no razona):
   - `src/renderers/common.py` — `ReportSource` (dataclass con los artefactos leídos: decisions, recommendations, contexts, confidences, hypotheses, anomalies, patterns, evidence, observations, tenant, period, generated_at), `as_jsonable`, `build_decision_traces` (correlaciona decision → recommendation → confidence → hypothesis → anomaly → pattern → context → evidence → observations), `latest_confidence_for(hypothesis)`
-  - `src/renderers/executive.py` — `render_executive(source)` PURA: Top Decisions (commitment, risk_tolerance, confidence, expected_outcome_count, acción de la recommendation), `pending_authority` (solo risk_tolerance "high"), `future_risks` (hypotheses con confidence_score > `risk_threshold`, default 0.6). NUNCA inventa costes/ROI: solo lo que el flujo commiteó
+  - `src/renderers/executive.py` — `render_executive(source)` PURA: Top Decisions (commitment, risk_tolerance, confidence, expected_outcome_count, acción de la recommendation), `pending_authority` (solo risk_tolerance "high"), `future_risks` (hypotheses con confidence_score > `risk_threshold`, default 0.6). NUNCA inventa cifras financieras: solo lo que el flujo commiteó
   - `src/renderers/technical.py` — `render_technical(source)` PURA: secciones 1-7 (Cognitive Trace, Anomalies, Patterns, Confidence Calibration, Reasoning Chain, Decision & Expected Outcomes, Evidencia/Context)
   - `src/renderers/json_render.py` — `render_json(source)` PURA: estructura exacta de `build_decision_traces` (formato máquina)
   - `src/renderers/formatters.py` — I/O: `to_html` (jinja2), `to_pdf` (weasyprint), `to_json`. Renderers puros vs formatters con I/O
@@ -470,7 +470,7 @@ Regla: **nada fuera de la policy se escribe.** Toda referencia al marco debe map
 - `docs/02-motor-recoleccion.md` — FASE 3: Perception Layer (agentes, collector)
 - `docs/03-predictivo-ia-local.md` — FASE 4-5: Reasoning + Learning + LM Studio
 - `docs/04-informes-seguridad.md` — FASE 6-7: Action Layer + Security as Procedural Memory
-- `docs/05-negocio-roadmap-backlog.md` — FASE 8-10: Roadmap, backlog, OKRs cognitivos
+- `docs/05-negocio-roadmap-backlog.md` — FASE 9-10: Roadmap, backlog, OKRs cognitivos
 - `AGENTS.md` — Guía de sesiones de agente y enforcement de la política de citación
 
 ---

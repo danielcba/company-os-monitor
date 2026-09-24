@@ -43,9 +43,9 @@ def test_outcome_signal_corroborated():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"}
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"}
         ],
-        actual_outcomes=[{"verifiable_by": "revenue", "value": True}],
+        actual_outcomes=[{"verifiable_by": "availability", "value": True}],
     )
     assert compute_outcome_signal(decision) == 1
 
@@ -54,9 +54,9 @@ def test_outcome_signal_contradicted():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"}
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"}
         ],
-        actual_outcomes=[{"verifiable_by": "revenue", "value": False}],
+        actual_outcomes=[{"verifiable_by": "availability", "value": False}],
     )
     assert compute_outcome_signal(decision) == 0
 
@@ -65,7 +65,7 @@ def test_outcome_signal_no_actuals_returns_none():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"}
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"}
         ],
         actual_outcomes=None,
     )
@@ -76,7 +76,7 @@ def test_outcome_signal_no_expected_returns_none():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[],
-        actual_outcomes=[{"verifiable_by": "revenue", "value": True}],
+        actual_outcomes=[{"verifiable_by": "availability", "value": True}],
     )
     assert compute_outcome_signal(decision) is None
 
@@ -85,9 +85,9 @@ def test_outcome_signal_unparseable_actual_returns_none():
     decision = _decision(
         tenant_id=TENANT,
         expected_outcomes=[
-            {"verifiable_by": "revenue", "prediction": 0.9, "deadline": "2026-09-01"}
+            {"verifiable_by": "availability", "prediction": 0.9, "deadline": "2026-09-01"}
         ],
-        actual_outcomes=[{"verifiable_by": "revenue", "value": "indeterminate"}],
+        actual_outcomes=[{"verifiable_by": "availability", "value": "indeterminate"}],
     )
     assert compute_outcome_signal(decision) is None
 
