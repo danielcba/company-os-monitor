@@ -1,0 +1,14 @@
+# CODEOWNERS - Company OS Monitor
+# Defines code owners for critical files.
+
+* @danielcba
+
+# Architecture-critical files require explicit ownership
+/docs/cognitive-architecture/ @danielcba
+/docs/cognitive-lexicon/ @danielcba
+/adr/ @danielcba
+/decisions/ @danielcba
+/.github/workflows/ @danielcba
+/libs/access/ @danielcba
+/apps/gateway/api-gateway/src/ @danielcba
+/apps/services/user-service/src/ @danielcba

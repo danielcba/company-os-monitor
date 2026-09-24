@@ -95,6 +95,7 @@ async def main():
             active_kid=machine_active_kid,
             access_expire_seconds=int(os.getenv("MACHINE_JWT_ACCESS_EXPIRE_SECONDS", "60")),
             refresh_expire_hours=int(os.getenv("MACHINE_JWT_REFRESH_EXPIRE_HOURS", "24")),
+            audience=os.getenv("JWT_AUDIENCE"),
         )
     else:
         # Dev fallback: generate ephemeral RS256 key pair for local testing

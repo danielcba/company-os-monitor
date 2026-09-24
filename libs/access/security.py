@@ -292,6 +292,7 @@ class MachineJwtService:
         active_kid: str,
         access_expire_seconds: int = MACHINE_ACCESS_EXPIRE_SECONDS,
         refresh_expire_hours: int = MACHINE_REFRESH_EXPIRE_HOURS,
+        audience: str | None = None,
     ):
         if not key_set:
             raise ValueError(  # noqa: TRY003 - config error, one message
@@ -305,6 +306,7 @@ class MachineJwtService:
         self._active_kid = active_kid
         self._access_expire_seconds = access_expire_seconds
         self._refresh_expire_hours = refresh_expire_hours
+        self.audience = audience
 
     @property
     def active_kid(self) -> str:
@@ -426,12 +428,16 @@ class MachineJwtService:
         _private_key, public_key = self._key_set[kid]
 
         try:
-            return jwt.decode(
-                token,
-                public_key,
-                algorithms=["RS256"],
-                options={"verify_aud": False},
-            )
+            decode_kwargs: dict[str, Any] = {
+                "token": token,
+                "key": public_key,
+                "algorithms": ["RS256"],
+            }
+            if self.audience:
+                decode_kwargs["audience"] = self.audience
+            else:
+                decode_kwargs["options"] = {"verify_aud": False}
+            return jwt.decode(**decode_kwargs)
         except JWTError as exc:
             raise InvalidTokenError(str(exc)) from exc
 
