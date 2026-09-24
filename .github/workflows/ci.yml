@@ -194,5 +194,8 @@ jobs:
             .
 
       - name: Build Docker images
+        env:
+          POSTGRES_PASSWORD: ci-build-only
+          REDIS_PASSWORD: ci-build-only
         run: |
           docker compose -f infrastructure/docker/docker-compose.yml build
