@@ -13,6 +13,13 @@ Supersedes: ADR-0002 (regarding "Memory remains planned" restriction)
 
 ## Context
 
+> **Note (2026-09-26):** the two paragraphs below describe the Framework state
+> **as of the approval date (2026-08-30)**, when this ADR was written. The
+> Framework now declares the **Memory Layer as operational**
+> (`docs/cognitive-architecture/cognitive-architecture.md`, section
+> "Memory Layer (operational)"), which is the state this ADR's Decision
+> produced — Memory is not a future capability.
+
 The Company OS Framework (cognitive-architecture.md) defines Memory as "planned" within P7: Learning Through Outcome. The Framework declares Memory as a future capability with no concrete specification for entity, lifecycle, or persistence.
 
 Meanwhile, the Monitor (COS-Monitor) has implemented a complete Memory/Learning layer since PR #14 (learning loop) and PR #10 (learning memory ledger):

@@ -21,6 +21,7 @@ from libs.action.report import (
     REPORT_TYPE_EXECUTIVE,
     REPORT_TYPE_JSON,
     REPORT_TYPE_TECHNICAL,
+    REPORT_TYPES,
     ReportCreate,
     ReportStore,
     build_report,
@@ -40,7 +41,7 @@ from libs.reasoning.pattern import Pattern, PatternStore
 from tests._config import TEST_DATABASE_URL, TEST_DATABASE_URL_SYNC
 
 from src.health import ReportServer
-from src.service import ReportService
+from src.service import RENDERABLE_TYPES, ReportService
 
 DSN_STORE = TEST_DATABASE_URL
 DSN_RAW = TEST_DATABASE_URL_SYNC
@@ -715,6 +716,62 @@ async def test_generate_handler_rejects_unsupported_type():
     assert response.status == 400
     body = json.loads(response.body)
     assert "unsupported report type" in body["error"]
+
+
+def test_report_type_contract_is_consistent():
+    """The declared vocabulary must equal what the handler actually renders.
+
+    Guards F8 (contract drift): `compliance` used to be declared in the
+    vocabulary while the handler rejected it with 400. No declaration without
+    a renderer, and no renderer without a declaration.
+    """
+    assert REPORT_TYPES == frozenset(
+        {REPORT_TYPE_EXECUTIVE, REPORT_TYPE_TECHNICAL, REPORT_TYPE_JSON}
+    )
+    assert set(REPORT_TYPES) == set(RENDERABLE_TYPES)
+    assert "compliance" not in REPORT_TYPES
+    assert "compliance" not in RENDERABLE_TYPES
+
+
+async def test_generate_handler_accepts_every_supported_type():
+    """Every declared type must reach the renderer (200), not just one."""
+    tenant_id = TENANT
+    jwt = _make_jwt()
+    for report_type in RENDERABLE_TYPES:
+        service = ReportService.__new__(ReportService)
+        service.decision_store = SimpleNamespace(
+            list_tenant_ids=async_wrap([tenant_id])
+        )
+        report = SimpleNamespace(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            report_type=report_type,
+            title=f"COS-Monitor {report_type} report",
+            summary="S",
+            content={"report_type": report_type},
+            ai_generated=False,
+            model_used=None,
+            period_start=NOW.date(),
+            period_end=NOW.date(),
+            generated_at=NOW,
+            file_path="/tmp/out.pdf",
+        )
+
+        async def fake_generate(tid, rt, _expected=report_type, _report=report):
+            assert rt == _expected
+            return _report, "created"
+
+        service.generate = fake_generate  # type: ignore[method-assign]
+        health = ReportServer(service, jwt=jwt)
+        response = await health.generate_handler(
+            SimpleNamespace(
+                query={"type": report_type},
+                headers=_auth_header(jwt, tenant_id),
+            )
+        )
+        assert response.status == 200, f"{report_type} must be supported"
+        body = json.loads(response.body)
+        assert body["generated"][0]["report_type"] == report_type
 
 
 async def test_generate_handler_returns_report_payload():

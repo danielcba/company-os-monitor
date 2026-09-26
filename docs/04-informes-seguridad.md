@@ -157,6 +157,14 @@ El Report Service **NO genera recomendaciones ni decisiones**. Solo **formatea**
 | **Compliance Report** | Auditores | Decision trail + audit_log + expected vs actual outcomes + calibration history | PDF, JSON |
 | **Operational Dashboard** | Operadores (real-time) | Active Context + pending Recommendations + recent Decisions + Confidence scores | HTML/HTMX (live) |
 
+**Estado de implementación (2026-09-26):** el servicio renderiza únicamente
+**Executive**, **Technical** y **JSON** (`RENDERABLE_TYPES`); el endpoint de
+generación responde `400 unsupported report type` para cualquier otro valor.
+**Compliance Report** y **Operational Dashboard** son formatos de diseño sin
+renderer: no forman parte del contrato soportado y por eso no aparecen en los
+tipos declarados del producto (`libs.action.report.REPORT_TYPES`,
+`CognitiveReportType` del frontend, `REPORT_TYPES` del gateway).
+
 ### Executive Summary Template (1 página, non-technical)
 
 ```

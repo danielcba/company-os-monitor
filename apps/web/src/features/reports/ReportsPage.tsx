@@ -32,14 +32,12 @@ export function ReportTypeBadge({ reportType }: { reportType: CognitiveReportTyp
       </Badge>
     )
   }
-  if (reportType === 'compliance') {
-    return (
-      <Badge className="border-slate-500/40 bg-slate-100 text-slate-900 dark:bg-slate-900/40 dark:text-slate-200">
-        Compliance
-      </Badge>
-    )
+  if (reportType === 'executive') {
+    return <Badge variant="outline">Executive</Badge>
   }
-  return <Badge variant="outline">Executive</Badge>
+  // Defensive fallback for any value outside the supported contract (e.g. a
+  // legacy row): render the raw stored type instead of mislabelling it.
+  return <Badge variant="outline">{reportType}</Badge>
 }
 
 function periodLabel(report: CognitiveReport) {

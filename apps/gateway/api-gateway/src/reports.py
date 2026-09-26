@@ -27,7 +27,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-REPORT_TYPES = ("executive", "technical", "compliance", "json")
+# Supported vocabulary for READ filtering; mirrors report-service
+# ``RENDERABLE_TYPES``. ``compliance`` is deliberately absent: the generation
+# handler rejects it with 400 "unsupported report type" (no renderer exists),
+# so no row of that type can be produced by the product.
+REPORT_TYPES = ("executive", "technical", "json")
 
 SELECT_BASE = """
     SELECT id, tenant_id, report_type, title, summary, content, ai_generated,

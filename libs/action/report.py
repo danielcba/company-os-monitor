@@ -40,17 +40,19 @@ from sqlalchemy.orm import sessionmaker
 # Fixed namespace for deterministic report ids (content-addressed, idempotent).
 REPORT_NAMESPACE = uuid.UUID("00000000-0000-0000-0000-000000000083")
 
-# Report types of the product (docs/04 FASE 6). The report-service renders
-# executive/technical/json in this sprint; compliance is a future phase.
+# Supported report types = exactly what report-service renders
+# (``service.RENDERABLE_TYPES``). Anything outside this set - ``compliance``,
+# for which no renderer exists - is rejected by the generation handler with
+# 400 "unsupported report type": it is NOT part of the contract, so it is not
+# declared here. Docs/04 lists ``compliance`` as a design format; it is
+# documented there as not implemented.
 REPORT_TYPE_EXECUTIVE = "executive"
 REPORT_TYPE_TECHNICAL = "technical"
-REPORT_TYPE_COMPLIANCE = "compliance"
 REPORT_TYPE_JSON = "json"
 REPORT_TYPES: frozenset[str] = frozenset(
     {
         REPORT_TYPE_EXECUTIVE,
         REPORT_TYPE_TECHNICAL,
-        REPORT_TYPE_COMPLIANCE,
         REPORT_TYPE_JSON,
     }
 )

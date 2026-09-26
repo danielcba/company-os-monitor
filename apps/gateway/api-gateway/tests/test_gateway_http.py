@@ -21,6 +21,7 @@ from libs.access.rbac import (
 from libs.access.security import JwtService
 
 from src.health import GatewayServer
+from src.reports import REPORT_TYPES
 from src.service import GatewayService
 
 SECRET = "dev-secret-key"
@@ -404,6 +405,14 @@ async def test_reports_read_in_own_tenant(server, jwt):
     assert response.status == 200
     body = await _json(response)
     assert len(body["reports"]) == 1
+
+
+def test_report_read_vocabulary_matches_supported_types():
+    """Contract coherence (F8): the READ vocabulary must mirror exactly what
+    report-service renders. `compliance` is rejected by the generation
+    endpoint with 400 (no renderer), so it must not be advertised here."""
+    assert REPORT_TYPES == ("executive", "technical", "json")
+    assert "compliance" not in REPORT_TYPES
 
 
 async def test_observations_read_in_own_tenant(server, jwt):

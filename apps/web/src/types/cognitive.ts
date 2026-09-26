@@ -29,7 +29,10 @@ export interface ServicesHealthResponse {
   services: ServiceHealth[]
 }
 
-export type CognitiveReportType = 'executive' | 'technical' | 'compliance' | 'json'
+// Supported report types = what report-service renders (executive/technical/
+// json). `compliance` is a design format without a renderer and is rejected
+// by the generation endpoint (400), so it is not part of this union.
+export type CognitiveReportType = 'executive' | 'technical' | 'json'
 
 export interface CognitiveReport {
   id: string
