@@ -36,9 +36,19 @@ CREATE TABLE IF NOT EXISTS agent_installations (
 );
 
 -- Enable composite FKs from metric_batches and observation_outbox
-ALTER TABLE agent_installations
-    ADD CONSTRAINT uq_agent_installations_tenant_id
-    UNIQUE (tenant_id, id);
+-- (guarded: ADD CONSTRAINT has no IF NOT EXISTS and must stay idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'uq_agent_installations_tenant_id'
+          AND conrelid = 'agent_installations'::regclass
+    ) THEN
+        ALTER TABLE agent_installations
+            ADD CONSTRAINT uq_agent_installations_tenant_id
+            UNIQUE (tenant_id, id);
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_agent_installations_tenant_server
     ON agent_installations (tenant_id, server_id);
@@ -120,16 +130,34 @@ CREATE TABLE IF NOT EXISTS metric_batches (
 );
 
 -- Composite FK to agent_installations (enabled by UNIQUE(tenant_id, id) on parent)
-ALTER TABLE metric_batches
-    ADD CONSTRAINT fk_metric_batches_installation
-    FOREIGN KEY (tenant_id, installation_id)
-    REFERENCES agent_installations(tenant_id, id)
-    ON DELETE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fk_metric_batches_installation'
+          AND conrelid = 'metric_batches'::regclass
+    ) THEN
+        ALTER TABLE metric_batches
+            ADD CONSTRAINT fk_metric_batches_installation
+            FOREIGN KEY (tenant_id, installation_id)
+            REFERENCES agent_installations(tenant_id, id)
+            ON DELETE CASCADE;
+    END IF;
+END $$;
 
 -- Enable composite FKs from metric_samples
-ALTER TABLE metric_batches
-    ADD CONSTRAINT uq_metric_batches_tenant_id
-    UNIQUE (tenant_id, id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'uq_metric_batches_tenant_id'
+          AND conrelid = 'metric_batches'::regclass
+    ) THEN
+        ALTER TABLE metric_batches
+            ADD CONSTRAINT uq_metric_batches_tenant_id
+            UNIQUE (tenant_id, id);
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_metric_batches_tenant_installation
     ON metric_batches (tenant_id, installation_id);
@@ -173,11 +201,20 @@ CREATE TABLE IF NOT EXISTS metric_samples (
 );
 
 -- Composite FK to metric_batches (enabled by UNIQUE(tenant_id, id) on parent)
-ALTER TABLE metric_samples
-    ADD CONSTRAINT fk_metric_samples_batch
-    FOREIGN KEY (tenant_id, batch_id)
-    REFERENCES metric_batches(tenant_id, id)
-    ON DELETE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fk_metric_samples_batch'
+          AND conrelid = 'metric_samples'::regclass
+    ) THEN
+        ALTER TABLE metric_samples
+            ADD CONSTRAINT fk_metric_samples_batch
+            FOREIGN KEY (tenant_id, batch_id)
+            REFERENCES metric_batches(tenant_id, id)
+            ON DELETE CASCADE;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_metric_samples_tenant_batch
     ON metric_samples (tenant_id, batch_id);
@@ -219,11 +256,20 @@ CREATE TABLE IF NOT EXISTS observation_outbox (
 );
 
 -- Composite FK to agent_installations (enabled by UNIQUE(tenant_id, id) on parent)
-ALTER TABLE observation_outbox
-    ADD CONSTRAINT fk_observation_outbox_installation
-    FOREIGN KEY (tenant_id, installation_id)
-    REFERENCES agent_installations(tenant_id, id)
-    ON DELETE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'fk_observation_outbox_installation'
+          AND conrelid = 'observation_outbox'::regclass
+    ) THEN
+        ALTER TABLE observation_outbox
+            ADD CONSTRAINT fk_observation_outbox_installation
+            FOREIGN KEY (tenant_id, installation_id)
+            REFERENCES agent_installations(tenant_id, id)
+            ON DELETE CASCADE;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_observation_outbox_publish
     ON observation_outbox (status, next_attempt_at)
