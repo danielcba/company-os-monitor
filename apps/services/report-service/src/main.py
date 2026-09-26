@@ -46,6 +46,8 @@ async def main():
     output_dir = os.getenv("REPORT_OUTPUT_DIR", "reports-output")
 
     # JWT service for token verification (shared with gateway/user-service).
+    # issuer/audience MUST mirror the minting side: without them a gateway token
+    # carrying `aud` is rejected ("Invalid audience"), breaking report auth.
     jwt = JwtService(
         algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
         secret_key=os.getenv("JWT_SECRET_KEY"),
@@ -53,6 +55,8 @@ async def main():
         public_key=os.getenv("JWT_PUBLIC_KEY"),
         access_expire_minutes=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "15")),
         refresh_expire_days=int(os.getenv("JWT_REFRESH_TOKEN_EXPIRE_DAYS", "7")),
+        issuer=os.getenv("JWT_ISSUER"),
+        audience=os.getenv("JWT_AUDIENCE"),
     )
 
     # Phase 20.1: Redis-backed JWT blacklist for token revocation
