@@ -13,9 +13,11 @@ makes re-committing idempotent).
 
 "A decision ends deliberation. It does not end learning." and "This rule
 converts every decision from an act of authority into an experiment." The
-Committer RECORDS the Decision; it NEVER executes real-world actions (P6:
-execution, authorization and the expected vs actual Learning loop are future
-phases - Sprints 11/12 and the Learning layer).
+Committer RECORDS the Decision; it NEVER executes real-world actions (P6):
+execution and authorization are separate capabilities outside this component
+(libs/action/executor.py - ActionExecutor Protocol +
+validate_execution_authorization) and the expected vs actual comparison is
+consumed by the operational Learning loop (libs/learning/learning_loop.py).
 
 Anti-indefinition: ``commitment`` is a definitive sentence (the concept: "A
 decision is a commitment with an owner, a timeline, and expected outcomes");
@@ -38,7 +40,8 @@ from libs.procedural_memory.action_space import ACTION_SPACE_LIBRARY
 from libs.procedural_memory.decision_policy import DecisionPolicyEntry
 
 # Fixed namespace for the deterministic policy-derived commitment authority
-# (MVP: no user/auth yet; Sprint 12 replaces this with real user roles).
+# (authority_id is policy-derived; user/RBAC auth gates the capability at the
+# gateway and does not replace this id).
 DECISION_NAMESPACE = uuid.UUID("00000000-0000-0000-0000-000000000082")
 
 # Eligibility outcomes of a Recommendation for commitment (pure classification).
@@ -85,9 +88,10 @@ ACTION_DOMAIN: dict[str, str] = {
 class Authority:
     """The commitment authority under which a Decision is taken (MVP).
 
-    ``authority_id`` is the bound authority (a user_id or a policy_id; in the
-    MVP it is the deterministic policy-derived id - Sprint 12 replaces it with
-    real user roles/RBAC). ``label`` names the authority for the recorded
+    ``authority_id`` is the bound authority (a user_id or a policy_id); today it
+    is always the deterministic policy-derived id - user roles/RBAC gate
+    capability invocation at the gateway, they do not replace this id.
+    ``label`` names the authority for the recorded
     rationale. ``risk_tolerance`` is the declared risk level the authority
     commits under (low/medium/high), validated against the Decision Policy.
     """
@@ -100,9 +104,10 @@ class Authority:
 def policy_authority_id(policy_id: str) -> uuid.UUID:
     """Deterministic commitment authority derived from a Decision Policy.
 
-    MVP: there is no user/auth yet (Sprint 12). The commitment authority is the
-    policy itself - a deterministic UUID derived from the ``policy_id`` - so
-    every Decision carries an ``authority_id`` and the trace is complete.
+    The commitment authority is the policy itself - a deterministic UUID
+    derived from the ``policy_id`` - so every Decision carries an
+    ``authority_id`` and the trace is complete (auth/RBAC at the gateway is a
+    separate gate and does not produce this id).
     """
     return uuid.uuid5(DECISION_NAMESPACE, f"policy:{policy_id}")
 
@@ -235,7 +240,7 @@ def build_expected_outcomes(
     Each recommendation consequence becomes an outcome with its ``prediction``
     (observable statement), ``verifiable_by`` (the observable metric) and
     ``deadline`` (the declared evaluation date). The comparison expected vs
-    actual is the primary learning signal (P7, Learning loop - future phases).
+    actual is the primary learning signal (P7, operational Learning loop).
     """
     consequences = list(recommendation.expected_consequences)
     if not consequences:

@@ -247,7 +247,7 @@ class InsightTransformationStore:
     Wraps the canonical gateway read stores (Insight, and optionally
     Decision/Recommendation for outcome attribution) and applies the pure
     journaling transform. It performs NO writes and creates NO new entity (Memory
-    persistence remains planned per the framework).
+    persistence lives in the Memory Ledger, ADR-0003).
     """
 
     def __init__(

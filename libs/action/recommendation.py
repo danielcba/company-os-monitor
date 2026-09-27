@@ -18,8 +18,10 @@ row is never deleted and its content columns are immutable (blocked by the
 content trigger); only ``status`` is a lifecycle field
 (proposed -> accepted/rejected/superseded, decided by the Decision layer).
 
-MVP: recommendations are formed ONLY over Hypotheses (``insight_id`` stays
-NULL; Insight is a future sprint) and ALWAYS carry a calibrated Confidence
+Recommendations are formed ONLY over Hypotheses (``insight_id`` stays NULL:
+the formulator never links an Insight - the ``insights`` table and the
+Insight service exist, but recommendation formation does not read them) and
+ALWAYS carry a calibrated Confidence
 (R4): no recommendation without ``confidence_id``.
 """
 import json

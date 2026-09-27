@@ -8,7 +8,7 @@ idempotent dedup). It NEVER writes to previous artifacts (P1), never reads the
 observation bus, never calibrates confidence and never forms recommendations
 (R1: exactly one capability) and never executes real-world actions or triggers
 alerts (P6: the Decision is recorded with its falsifiable expected outcomes;
-execution and authorization belong to future phases).
+execution and authorization are separate capabilities - libs/action/executor.py).
 """
 import asyncio
 import logging

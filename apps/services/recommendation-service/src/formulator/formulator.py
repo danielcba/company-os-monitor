@@ -394,7 +394,7 @@ def _alternative_records(
     understanding (the leading Hypothesis) - in the MVP the offer and its
     alternatives arise from the same understanding, so they carry the same
     calibrated score. Per-alternative calibration (each option as its own
-    target) is a future phase documented in the journal.
+    target) is not implemented (documented in the journal).
     """
     records: list[dict[str, object]] = []
     for action in alternatives:

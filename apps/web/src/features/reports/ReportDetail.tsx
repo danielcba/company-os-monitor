@@ -161,9 +161,9 @@ export function ReportDetail({
             ADR-0002): it only FORMATS what the canonical flow already committed
             — it never generates judgments. This document is append-only and
             immutable (its content trigger blocks any modification): a served
-            report stays auditable and is never retroactively changed. In this
-            MVP it was rendered by local templates (ai_generated = false);
-            LM Studio arrives in a future sprint.
+            report stays auditable and is never retroactively changed. It is
+            rendered by local templates (ai_generated = false); report rendering
+            never calls a model.
           </div>
 
           <div className="flex items-center gap-2">

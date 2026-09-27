@@ -24,8 +24,9 @@ be retroactively modified. The deterministic ``report_id`` (tenant + report_type
 + period, uuid5) makes re-generating the SAME report of the SAME period
 idempotent (dedup by primary key); ``generated_at`` is deliberately NOT part of
 the id (idempotence between runs). ``ai_generated`` stays FALSE and
-``model_used`` stays NULL in this MVP: reports are rendered by local templates,
-LM Studio arrives in a future sprint (Sprint 18).
+``model_used`` stays NULL: reports are rendered by local templates - report
+rendering never calls a model (LM Studio is an external capability, ADR-0002,
+and is not wired into report generation).
 """
 import json
 import uuid
@@ -86,8 +87,8 @@ class ReportCreate(BaseModel):
     document (the dict produced by the pure renderers); ``file_path`` is the
     artifact written to ``REPORT_OUTPUT_DIR`` (PDF for executive/technical,
     JSON for the json report). ``ai_generated`` defaults to FALSE and
-    ``model_used`` to NULL: in this MVP reports are rendered by local templates;
-    LM Studio arrives in a future sprint (Sprint 18).
+    ``model_used`` to NULL: reports are rendered by local templates; report
+    rendering never calls a model.
     """
 
     tenant_id: uuid.UUID

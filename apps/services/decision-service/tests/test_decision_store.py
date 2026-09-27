@@ -583,7 +583,7 @@ async def test_decision_content_trigger_blocks_content_change_but_allows_lifecyc
                 decision.id,
             )
             # Lifecycle: executed_at and actual_outcomes are populated ONLY by
-            # the Learning loop (future phase) - allowed by the trigger.
+            # the Learning layer - allowed by the trigger.
             await conn.execute(
                 "UPDATE decisions SET status = $1, executed_at = $2, "
                 "actual_outcomes = $3::jsonb WHERE id = $4",

@@ -170,8 +170,9 @@ class ConfidenceService:
                     hypothesis, anomalies, contexts, evidence_by_id
                 )
                 # Documented MVP: the hypothesis explains the evidence of its
-                # anomaly's contexts; no negative constraints are derived yet, and
-                # hypothesis-to-hypothesis consistency is a future sprint.
+                # anomaly's contexts; no negative constraints are derived, and
+                # hypothesis-to-hypothesis consistency is not implemented
+                # (``coherent_with`` stays empty).
                 coherence_inputs = {
                     "explains": sorted({item.organization_type for item in scope}),
                     "contradicts": [],

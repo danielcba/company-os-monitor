@@ -14,8 +14,9 @@ This component NEVER writes to previous artifacts
 never calibrates confidence and never forms recommendations (R1: exactly one
 capability - Commit) and NEVER executes real-world actions or triggers alerts
 (P6: the Decision is recorded with its falsifiable expected outcomes; execution
-and authorization are future phases). ``executed_at``/``actual_outcomes`` stay
-NULL: the expected vs actual comparison is the Learning loop (P7, future).
+and authorization are separate capabilities - libs/action/executor.py).
+``executed_at``/``actual_outcomes`` are populated only by the Learning layer:
+the expected vs actual comparison is the Learning loop (P7, operational).
 """
 import asyncio
 from collections import Counter

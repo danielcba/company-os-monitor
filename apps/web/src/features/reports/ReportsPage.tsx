@@ -86,9 +86,8 @@ export function ReportsPage() {
             scores and the supporting trace — it never generates judgments. Each
             report is an append-only, immutable output artifact (its content
             trigger blocks any modification): a served report stays auditable.
-            In this MVP reports are rendered by local templates
-            (ai_generated = false, model_used = null); LM Studio arrives in a
-            future sprint.
+            Reports are rendered by local templates (ai_generated = false,
+            model_used = null); report rendering never calls a model.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void refetch()}>

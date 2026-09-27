@@ -15,8 +15,9 @@ one. ``min_confidence_for_commit`` is the Confidence threshold to commit
 higher threshold above which a HIGH risk commitment is permitted (docs/03:
 "> 0.9 for irreversible"); ``allowed_risk_tolerance`` declares which risk levels
 (low/medium/high) the domain permits; ``requires_authority`` declares whether a
-commitment authority is mandatory (true in the MVP: a Decision is a commitment
-under authority; real user/RBAC binding is Sprint 12).
+commitment authority is mandatory (true: a Decision is a commitment under
+authority; user/RBAC auth gates invocation at the gateway and does not replace
+the recorded authority id).
 """
 from dataclasses import dataclass, field
 

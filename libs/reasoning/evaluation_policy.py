@@ -14,8 +14,8 @@ Evidence description (`reliability="heuristic"`). Textual matching is NOT a
 reliable evaluator (it can produce false positives), so when the evidence basis
 is heuristic the policy refuses to auto-promote a candidate Hypothesis into a
 terminal state: it records the counts, but downgrades `confirmed`/`falsified` to
-`insufficient` (the Hypothesis stays candidate). A reliable/structured evidence
-basis (future phase) lifts that gate.
+`insufficient` (the Hypothesis stays candidate). No reliable/structured evidence
+basis is implemented, so this gate always applies.
 
 Formal decision rule (Confidence is gating/calibration, never a substitute for
 Evidence - cognitive-lexicon/confidence.md):

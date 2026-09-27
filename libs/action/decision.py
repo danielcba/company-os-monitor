@@ -13,7 +13,7 @@ verifiable terms before the decision is executed." and "This rule converts every
 decision from an act of authority into an experiment." Every Decision row stores
 ``expected_outcomes`` (a list of ``{"prediction", "verifiable_by", "deadline"}``)
 declared BEFORE execution; the comparison expected vs actual is the primary
-learning signal of the Learning loop (P7, future sprints).
+learning signal of the Learning loop (P7, operational: libs/learning/).
 
 P1 enforcement: a ``decisions`` row is append-only. The deterministic
 ``decision_id`` is content-addressed: it anchors on the tenant, the specific
@@ -23,9 +23,11 @@ SAME inputs produces the same id (idempotent dedup by primary key). The row is
 never deleted and its content columns are immutable (blocked by the content
 trigger); ``status`` is a lifecycle field
 (committed -> executing/completed/rolled_back) and ``executed_at``/
-``actual_outcomes`` are lifecycle fields populated only by the Learning loop
-(future sprints). In this MVP the Decision is RECORDED, never executed (P6): no
-real-world action happens and ``executed_at``/``actual_outcomes`` stay NULL.
+``actual_outcomes`` are lifecycle fields populated only by the Learning layer
+(libs/learning/learning_execution_store.py, never by this capability). The
+Decision row never executes a real-world action (P6): execution belongs to the
+external ActionExecutor (libs/action/executor.py) and
+``executed_at``/``actual_outcomes`` stay NULL until outcomes are submitted.
 """
 import json
 import uuid
@@ -47,7 +49,7 @@ DECISION_NAMESPACE = uuid.UUID("00000000-0000-0000-0000-000000000082")
 
 # Lifecycle of the commitment: status is a lifecycle field (content is
 # immutable, P1). A decision starts ``committed`` and is later executed or
-# rolled back by the Learning loop / execution phases (future sprints).
+# rolled back by the Learning layer / execution (libs/learning/, libs/action/executor.py).
 STATUS_COMMITTED = "committed"
 STATUS_EXECUTING = "executing"
 STATUS_COMPLETED = "completed"
@@ -142,7 +144,7 @@ class Decision(BaseModel):
 
     Content is immutable (P1); ``status``, ``executed_at``,
     ``actual_outcomes`` and ``outcome_status`` are lifecycle fields: the
-    Learning loop (future sprints) transitions committed ->
+    Learning layer (libs/learning/) transitions committed ->
     executing/completed/rolled_back and records the observed outcomes for
     the expected vs actual comparison. ``outcome_status`` formalizes the
     outcome lifecycle: PENDING (expected but not received) → OBSERVED

@@ -86,7 +86,7 @@ def test_build_recommendation_mirrors_create_and_assigns_deterministic_id():
     assert recommendation.tenant_id == TENANT
     assert recommendation.hypothesis_id == HYPOTHESIS
     assert recommendation.confidence_id == CONFIDENCE
-    assert recommendation.insight_id is None  # Insight is a future sprint.
+    assert recommendation.insight_id is None  # formulator never links an Insight
     assert recommendation.action_description == create.action_description
     assert recommendation.rationale == create.rationale
     assert recommendation.expected_consequences == create.expected_consequences

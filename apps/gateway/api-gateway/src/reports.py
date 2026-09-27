@@ -8,8 +8,8 @@ Generator (ADR-0002): it only FORMATS what the canonical flow already committed
 it never generates judgments. Each row records the rendered ``content`` (the
 dict produced by the pure renderers), the ``report_type``, the covered
 ``period_start``/``period_end`` and the written artifact (``file_path``);
-``ai_generated`` stays FALSE and ``model_used`` NULL in this MVP (reports are
-rendered by local templates; LM Studio arrives in a future sprint). Rows are
+``ai_generated`` stays FALSE and ``model_used`` NULL (reports are rendered by
+local templates; report rendering never calls a model). Rows are
 append-only and fully immutable (content trigger): a served report stays
 auditable and is never retroactively modified.
 
