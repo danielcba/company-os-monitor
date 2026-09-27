@@ -8,13 +8,15 @@ whether the token has been revoked before accepting it. If Redis is
 unavailable during the revocation check, the middleware FAIL-CLOSED:
 the request is rejected.
 
-Usage::
+    Usage::
 
-    from libs.access.middleware import jwt_auth_middleware
-    from libs.access.security import JwtService
-    from libs.access.token_blacklist import TokenBlacklist
+        import os
 
-    jwt = JwtService(algorithm="HS256", secret_key="...")
+        from libs.access.middleware import jwt_auth_middleware
+        from libs.access.security import JwtService
+        from libs.access.token_blacklist import TokenBlacklist
+
+        jwt = JwtService(algorithm="HS256", secret_key=os.getenv("JWT_SECRET_KEY"))
     blacklist = TokenBlacklist.from_url("redis://localhost:6379/1")
     app = web.Application(middlewares=[jwt_auth_middleware(jwt, blacklist=blacklist)])
 """

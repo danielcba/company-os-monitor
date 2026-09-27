@@ -101,14 +101,30 @@ set -a
 source "$ROOT/.env" || die "failed to parse $ROOT/.env (check for invalid syntax)"
 set +a
 
+# Fail closed on .env.example placeholders: a template value is public and
+# forgeable, so the stack must not start with it (JwtService rejects it too,
+# this stops everything before containers are created).
+case "${JWT_SECRET_KEY:-}${JWT_PRIVATE_KEY:-}${JWT_PUBLIC_KEY:-}" in
+  *REPLACE-WITH*|*replace-with*|*CHANGE-ME*|*change-me*|*"..."*)
+    die "ERROR: JWT_SECRET_KEY/JWT_PRIVATE_KEY/JWT_PUBLIC_KEY in .env is still a .env.example placeholder. Generate a real secret (openssl rand -hex 32) and retry." ;;
+esac
+
 # Host-side processes reach the containers through the published ports. If the
 # env points at container-internal hostnames (redis://redis:6379 or
 # ...@postgres:5432), normalize them to the host view (localhost:6379/5433).
+# Redis URLs carry the requirepass credential (redis://<pw>@host), so only the
+# host part is rewritten - the credential and any db suffix are preserved.
 case "$OBSERVATION_BUS_URL" in
-  redis://redis:*) export OBSERVATION_BUS_URL="redis://localhost:6379" ;;
+  redis://redis:*|redis://*@redis:*)
+    export OBSERVATION_BUS_URL="$(printf '%s' "$OBSERVATION_BUS_URL" |
+      sed -E 's#^(redis://)([^@]*@)?redis:#\1\2localhost:#')"
+    ;;
 esac
 case "$REDIS_URL" in
-  redis://redis:*) export REDIS_URL="redis://localhost:6379" ;;
+  redis://redis:*|redis://*@redis:*)
+    export REDIS_URL="$(printf '%s' "$REDIS_URL" |
+      sed -E 's#^(redis://)([^@]*@)?redis:#\1\2localhost:#')"
+    ;;
 esac
 case "$DATABASE_URL" in
   *@postgres:*)

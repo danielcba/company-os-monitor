@@ -52,6 +52,42 @@ CLAIM_JTI = "jti"  # unique token identifier for revocation
 CLAIM_ISS = "iss"
 CLAIM_AUD = "aud"
 
+# Placeholders shipped in .env.example. A value that announces itself as a
+# template is public and predictable: anyone could forge HS256 signatures with
+# it, so it must never be accepted as a signing/verification credential
+# (fail-closed at construction time, before any request is served).
+_PLACEHOLDER_MARKERS: tuple[str, ...] = (
+    "REPLACE-WITH",
+    "CHANGE-ME",
+    "YOUR-SECRET-KEY-CHANGE-IN-PRODUCTION",
+    "...",
+)
+_PLACEHOLDER_EXACT: frozenset[str] = frozenset(
+    {"changeme", "change-me", "your-secret-key-change-in-production"}
+)
+
+
+def _reject_placeholder(env_name: str, value: str | None) -> None:
+    """Raise when ``value`` is still a ``.env.example`` placeholder.
+
+    The error names the env var and the remediation command but never echoes
+    the value itself (in another deployment that value is a real secret).
+    """
+    if value is None:
+        return
+    candidate = value.strip()
+    upper = candidate.upper()
+    is_placeholder = (
+        any(marker in upper for marker in _PLACEHOLDER_MARKERS)
+        or candidate.lower() in _PLACEHOLDER_EXACT
+        or (candidate.startswith("<") and candidate.endswith(">"))
+    )
+    if is_placeholder:
+        raise ValueError(  # noqa: TRY003 - config error, one message
+            f"{env_name} is still a placeholder from .env.example; generate a "
+            "unique value before starting (e.g. `openssl rand -hex 32`)"
+        )
+
 
 def hash_password(password: str) -> str:
     """Bcrypt hash of a plaintext password (never stored as plaintext)."""
@@ -126,6 +162,8 @@ class JwtService:
                     "JWT_ALGORITHM=RS256 requires JWT_PRIVATE_KEY and "
                     "JWT_PUBLIC_KEY (production signing/verification keys)"
                 )
+            _reject_placeholder("JWT_PRIVATE_KEY", private_key)
+            _reject_placeholder("JWT_PUBLIC_KEY", public_key)
         elif algorithm != "HS256":
             raise ValueError(  # noqa: TRY003 - config error, one message
                 f"unsupported JWT algorithm: {algorithm} (use HS256 or RS256)"
@@ -134,6 +172,8 @@ class JwtService:
             raise ValueError(  # noqa: TRY003 - config error, one message
                 "JWT_ALGORITHM=HS256 requires JWT_SECRET_KEY (dev key)"
             )
+        if algorithm == "HS256":
+            _reject_placeholder("JWT_SECRET_KEY", secret_key)
 
     def _sign(self, claims: dict[str, Any]) -> str:
         key = self.private_key if self.algorithm == "RS256" else self.secret_key

@@ -10,7 +10,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from jose import jwt as jose_jwt
+
+from libs.access.errors import InvalidTokenError
 
 
 class TestDatabaseUrlRequired:
@@ -120,6 +123,94 @@ class TestJwtSecretKey:
             ), (
                 "JWT_SECRET_KEY should be read from env without hardcoded default"
             )
+
+    @staticmethod
+    def _env_example_value(var: str) -> str:
+        """Value of ``var`` as shipped in .env.example (the template itself)."""
+        content = (Path(__file__).resolve().parents[2] / ".env.example").read_text()
+        for line in content.splitlines():
+            if line.startswith(f"{var}="):
+                return line.split("=", 1)[1].strip()
+        pytest.fail(f"{var} missing from .env.example")
+
+    def test_env_example_secret_is_not_a_usable_credential(self):
+        """.env.example JWT_SECRET_KEY must be rejected by JwtService (fail-closed)."""
+        from libs.access.security import JwtService  # noqa: PLC0415
+
+        placeholder = self._env_example_value("JWT_SECRET_KEY")
+        with pytest.raises(ValueError, match="JWT_SECRET_KEY"):
+            JwtService(algorithm="HS256", secret_key=placeholder)
+
+    def test_env_example_rs256_key_placeholders_are_rejected(self):
+        """.env.example RS256 keypair placeholders must be rejected too."""
+        from libs.access.security import JwtService  # noqa: PLC0415
+
+        with pytest.raises(ValueError, match="JWT_PRIVATE_KEY"):
+            JwtService(
+                algorithm="RS256",
+                private_key=self._env_example_value("JWT_PRIVATE_KEY"),
+                public_key=self._env_example_value("JWT_PUBLIC_KEY"),
+            )
+
+    def test_placeholder_error_does_not_echo_the_value(self):
+        """The rejection message must not print the credential it rejects."""
+        from libs.access.security import JwtService  # noqa: PLC0415
+
+        placeholder = self._env_example_value("JWT_SECRET_KEY")
+        with pytest.raises(ValueError) as excinfo:
+            JwtService(algorithm="HS256", secret_key=placeholder)
+        assert placeholder not in str(excinfo.value), (
+            "config error must not echo the rejected secret"
+        )
+
+    def test_real_dev_secret_still_accepted(self):
+        """A normal dev secret keeps working: no unnecessary DX regression."""
+        from libs.access.security import JwtService  # noqa: PLC0415
+
+        svc = JwtService(
+            algorithm="HS256",
+            secret_key="test-secret",
+            issuer="http://localhost",
+            audience="cosmonitor",
+        )
+        token = svc.create_access_token(
+            user_id="u1", tenant_id="t1", email="a@b.com", role="admin"
+        )
+        assert svc.verify_access_token(token).token_type == "access"
+
+    def test_missing_secret_still_fails_closed(self):
+        """Absence of JWT_SECRET_KEY remains a hard failure (unchanged)."""
+        from libs.access.security import JwtService  # noqa: PLC0415
+
+        with pytest.raises(ValueError, match="JWT_SECRET_KEY"):
+            JwtService(algorithm="HS256", secret_key=None)
+
+    def test_app_mains_read_jwt_secret_only_from_env(self):
+        """Gateway/report/user-service must not hardcode a signing default."""
+        readers = [
+            "apps/gateway/api-gateway/src/main.py",
+            "apps/services/report-service/src/main.py",
+            "apps/services/user-service/src/auth/security.py",
+        ]
+        for rel in readers:
+            content = (Path(__file__).resolve().parents[2] / rel).read_text()
+            assert 'os.getenv("JWT_SECRET_KEY")' in content, (
+                f"{rel} must read JWT_SECRET_KEY from the environment"
+            )
+            assert 'secret_key="' not in content, (
+                f"{rel} must not hardcode a JWT secret"
+            )
+
+    def test_start_sh_rejects_placeholder_credentials(self):
+        """start.sh must refuse to boot the stack with a placeholder JWT key."""
+        start_sh = Path(__file__).resolve().parents[2] / "start.sh"
+        content = start_sh.read_text()
+        assert "placeholder" in content, (
+            "start.sh must check for .env.example placeholders"
+        )
+        assert "openssl rand -hex 32" in content, (
+            "start.sh must tell the operator how to generate a real secret"
+        )
 
 
 class TestStartEnvFailClosed:
@@ -232,11 +323,8 @@ class TestJwtAudienceIssuer:
             issuer="http://localhost",
             audience="wrong-audience",
         )
-        try:
+        with pytest.raises(InvalidTokenError, match="audience"):
             wrong_svc.verify_access_token(token)
-            raise AssertionError("Wrong audience should be rejected")  # noqa: TRY301,TRY003
-        except Exception:  # noqa: BLE001
-            pass
 
     def test_wrong_issuer_rejected(self):
         """Token with wrong issuer must be rejected."""
@@ -257,11 +345,8 @@ class TestJwtAudienceIssuer:
             issuer="http://wrong-issuer",
             audience="cosmonitor",
         )
-        try:
+        with pytest.raises(InvalidTokenError, match="issuer"):
             wrong_svc.verify_access_token(token)
-            raise AssertionError("Wrong issuer should be rejected")  # noqa: TRY301,TRY003
-        except Exception:  # noqa: BLE001
-            pass
 
     def test_rs256_aud_iss_compatible(self):
         """RS256 tokens with issuer/audience must verify correctly."""
@@ -296,3 +381,57 @@ class TestJwtAudienceIssuer:
         assert payload.token_type == "access", (
             "RS256 token must verify with correct issuer/audience"
         )
+
+
+class TestRedisUrlNormalizationPreservesCredential:
+    """start.sh host normalization must keep the requirepass credential.
+
+    Redis runs with ``--requirepass`` (docker-compose), so every Redis URL
+    carries ``redis://<password>@host``. Rewriting the container hostname
+    (``redis`` -> ``localhost``) must only touch the host part, otherwise the
+    host-side processes drop the credential and fail AUTH at runtime.
+    """
+
+    @staticmethod
+    def _normalize(url: str) -> str:
+        start_sh = Path(__file__).resolve().parents[2] / "start.sh"
+        lines = start_sh.read_text().splitlines()
+        try:
+            start = next(
+                i
+                for i, line in enumerate(lines)
+                if line.startswith("# Host-side processes reach")
+            )
+            end = next(
+                i
+                for i, line in enumerate(lines)
+                if line.startswith('case "$DATABASE_URL"')
+            )
+        except StopIteration:  # pragma: no cover - marker text changed
+            pytest.fail("start.sh URL normalization block not found")
+        block = "\n".join(lines[start:end])
+        script = block + '\nprintf "%s" "$REDIS_URL"'
+        env = os.environ.copy()
+        env["REDIS_URL"] = url
+        env["OBSERVATION_BUS_URL"] = url
+        result = subprocess.run(
+            ["bash", "-c", script],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr
+        return result.stdout
+
+    def test_credential_preserved(self):
+        assert self._normalize("redis://pw@redis:6379") == "redis://pw@localhost:6379"
+
+    def test_credentialless_still_normalizes(self):
+        assert self._normalize("redis://redis:6379") == "redis://localhost:6379"
+
+    def test_db_suffix_preserved(self):
+        assert self._normalize("redis://pw@redis:6379/2") == "redis://pw@localhost:6379/2"
+
+    def test_foreign_host_untouched(self):
+        assert self._normalize("redis://pw@otherhost:6379") == "redis://pw@otherhost:6379"
