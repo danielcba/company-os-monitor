@@ -1,9 +1,9 @@
 # Dependabot configuration for COS-Monitor
-# Enables security scanning and automated dependency updates.
+# Enables dependency update PRs for every real manifest in the repository.
 
 version: 2
 updates:
-  # Python dependencies
+  # --- Python (one entry per real pyproject.toml: root + 16 nested projects) ---
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -15,7 +15,123 @@ updates:
       - "security"
       - "dependencies"
 
-  # Node.js dependencies
+  - package-ecosystem: "pip"
+    directory: "/apps/gateway/api-gateway"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels:
+      - "security"
+      - "dependencies"
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/anomaly-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/collector-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/confidence-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/context-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/decision-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/evaluation-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/hypothesis-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/insight-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/pattern-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/recommendation-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/report-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/services/user-service"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/agents/linux-agent"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/agents/vmware-agent"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/agents/windows-agent"
+    schedule: { interval: "weekly", day: "monday" }
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    labels: ["security", "dependencies"]
+
+  # --- Node.js ---
   - package-ecosystem: "npm"
     directory: "/apps/web"
     schedule:
@@ -27,7 +143,7 @@ updates:
       - "security"
       - "dependencies"
 
-  # GitHub Actions dependencies
+  # --- GitHub Actions ---
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -39,9 +155,7 @@ updates:
       - "security"
       - "dependencies"
 
-secret-scanning:
-  - branch: "main"
-    patterns:
-      - "github_token"
-      - "private_key"
-      - "jwt_secret"
+# Secret scanning exclusions live in .github/secret_scanning.yml (paths-ignore).
+# That file is the GitHub-supported mechanism for excluding paths from secret
+# scanning alerts; it is NOT a dependabot key ("secret-scanning" is not part of
+# the dependabot schema: version, updates, registries).

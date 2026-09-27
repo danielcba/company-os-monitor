@@ -1,13 +1,13 @@
 # CODEOWNERS - Company OS Monitor
 # Defines code owners for critical files.
+# Every path below is verified to exist in this repository (paths that only
+# exist in the Framework repo - /docs/cognitive-architecture/,
+# /docs/cognitive-lexicon/, /decisions/ - were removed: they were orphans here).
 
 * @danielcba
 
 # Architecture-critical files require explicit ownership
-/docs/cognitive-architecture/ @danielcba
-/docs/cognitive-lexicon/ @danielcba
 /adr/ @danielcba
-/decisions/ @danielcba
 /.github/workflows/ @danielcba
 /libs/access/ @danielcba
 /apps/gateway/api-gateway/src/ @danielcba

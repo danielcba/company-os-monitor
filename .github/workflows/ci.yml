@@ -56,7 +56,11 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "ruff==0.16.3" "mypy==2.3.0" "pytest==9.1.1" "pytest-asyncio==1.4.0" "pytest-cov==7.1.0" "bandit==1.9.4" safety "psycopg2-binary==2.9.12" "redis==8.1.0"
+          # NOTE: no `safety` here - it was installed but never executed, and its
+          # `check` command has been deprecated since 01 Jun 2024 while `scan`
+          # requires an authenticated Safety account. A tool that never runs is
+          # dead configuration; bandit below is the executed security gate.
+          pip install "ruff==0.16.3" "mypy==2.3.0" "pytest==9.1.1" "pytest-asyncio==1.4.0" "pytest-cov==7.1.0" "bandit==1.9.4" "psycopg2-binary==2.9.12" "redis==8.1.0"
           pip install -e .
 
       - name: Install PostgreSQL client
@@ -166,6 +170,10 @@ jobs:
         run: bandit -r apps/ libs/ -ll -c bandit.yaml
 
       - name: Upload coverage
+        # Informational only: coverage upload is NOT a release gate.
+        # fail_ci_if_error: false is deliberate - a Codecov outage must not turn
+        # a green test run red. The required status check ("CI") is enforced by
+        # the tests/lint/mypy/bandit steps above, not by this upload.
         uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457 # v3.1.1
         with:
           files: ./coverage.xml
