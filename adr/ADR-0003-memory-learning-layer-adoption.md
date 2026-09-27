@@ -30,7 +30,7 @@ Meanwhile, the Monitor (COS-Monitor) has implemented a complete Memory/Learning 
 - **Insight Transformation** (`libs/memory/insight_transformation.py`): Transformation journaling; revised/stable/unchanged classification
 - **Learning Loop** (`libs/memory/learning_loop.py`): Orchestration of Decision → Outcome → Consolidation → Learning Signal → Memory
 - **Memory Ledger** (`libs/memory/memory_ledger.py`): Append-only persistence by signal hash; tenant-scoped; idempotent (UNIQUE index)
-- **Hypothesis Evaluation** (`libs/learning/evaluation.py`): Formal policy + append-only hypothesis_evaluations + deterministic evaluation_id
+- **Hypothesis Evaluation** (`libs/reasoning/evaluation.py`): Formal policy + append-only hypothesis_evaluations + deterministic evaluation_id
 
 The Framework-Monitor Sync Audit (`docs/framework-monitor-sync-audit.md`) identified this gap as HIGH RISK: "Framework Memory labeled 'planned' while Monitor has shipped it: risk of divergence if Framework later defines Memory without reference to Monitor implementation."
 
@@ -77,7 +77,7 @@ This ADR formalizes the following components as Framework Memory:
 | Insight Transformation | `libs/memory/insight_transformation.py` | Learning sub-capability |
 | Learning Loop | `libs/memory/learning_loop.py` | P7: Orchestration |
 | Memory Ledger | `libs/memory/memory_ledger.py` | P7: Persistence |
-| Hypothesis Evaluation | `libs/learning/evaluation.py` | Reasoning → Learning bridge |
+| Hypothesis Evaluation | `libs/reasoning/evaluation.py` | Reasoning → Learning bridge |
 
 ## Consequences
 

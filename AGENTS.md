@@ -18,7 +18,7 @@ Toda referencia al marco usa exclusivamente el set canónico:
 - **Principios**: P1–P7 — `docs/cognitive-lexicon/cognitive-principles.md`
 - **Design rules**: R1–R7 — `docs/cognitive-architecture/cognitive-architecture.md`
 - **Conceptos**: nombres de `docs/cognitive-lexicon/core-concepts/*.md`
-- **ADR**: ADR-0001 (Company OS es el cerebro), ADR-0002 (COS-Monitor es el producto)
+- **ADR**: ADR-0001 (Company OS es el cerebro), ADR-0002 (COS-Monitor es el producto), ADR-0003 (Memory & Learning Layer — operacional)
 
 Reglas:
 
@@ -48,7 +48,8 @@ Reglas:
 - Patterns describen regularidad con apoyo suficiente; las explicaciones de
   causa son de Hypothesis (P4).
 - Ninguna conclusión influye acción sin Confidence calibrada (R4) — la
-  calibración y el Action Layer (Recommendation → Decision) son fases futuras.
+  calibración y el Action Layer (Recommendation → Decision) son capacidades
+  operativas del producto y parte del pipeline canónico.
 - Confianza/calibración y LM Studio: herramientas/capacidades externas
   no-canónicas (ADR-0002), nunca bypassan el flujo cognitivo canónico.
 

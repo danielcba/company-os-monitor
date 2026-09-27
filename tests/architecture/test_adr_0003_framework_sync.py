@@ -166,6 +166,7 @@ def test_code_comments_no_stale_planned():
         _root / "libs" / "memory" / "consolidation.py",
         _root / "libs" / "memory" / "pattern_refinement.py",
         _root / "libs" / "memory" / "context_revision.py",
+        _root / "libs" / "memory" / "insight_transformation.py",
     ]
     for fpath in files_to_check:
         if fpath.exists():

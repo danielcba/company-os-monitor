@@ -132,7 +132,8 @@ Response contract (stable, serializable):
 
 Frontend contract: `CognitiveTraceResponse` / `fetchCognitiveTrace(tenantId, reportId)`
 in `apps/web/src/api/gateway.ts` and `apps/web/src/types/cognitive.ts`
-(types only — the full Trace UI is a future phase).
+(UI implemented: `apps/web/src/features/cognitive-trace/` — page, graph and
+hook, routed and tested).
 
 ---
 
@@ -183,10 +184,10 @@ a new row, preserving the full history.
 ## Framework / Monitor Relationship
 
 Company OS (Framework) is the cognitive authority (read-only for this product).
-COS-Monitor is the product (ADR-0002). Where the Framework lists a capability as
-*planned* (e.g. Memory), the Monitor's **Learning Memory ledger** and **Learning
-Loop** are implemented as **authorized product capabilities** of the Monitor — not
-a silent modification of the Framework. The framework is never edited by this
+COS-Monitor is the product (ADR-0002). Memory is an **operational** Framework
+capability (ADR-0003): the Monitor's **Learning Memory ledger** and **Learning
+Loop** are its reference implementation — a product capability, never a silent
+modification of the Framework. The framework is never edited by this
 repository.
 
 ---

@@ -26,23 +26,32 @@ COS-Monitor es una plataforma que implementa el **pipeline cognitivo canónico**
 | Reasoning | Anomaly Detection | Context + Pattern + Tolerance → Measure deviation → Anomaly + score |
 | Reasoning | Hypothesis Generation | Context + Patterns + Anomalies → Testable explanations → Hypothesis + predictions + falsification |
 | Reasoning | Hypothesis Evaluation | Candidate Hypothesis + New Evidence + Confidence → Evaluation Policy → Evaluation + status change |
+| Reasoning | Insight Restructuring | Active Context + Hypotheses → Restructure existing knowledge → Insight (append-only journal) |
 | Learning | Confidence Calibration | Judgment + Evidence + Coherence + History → Calibration Model → Confidence + justification + ECE |
 | Action | Recommendation | Context + Hypothesis/Insight + Confidence + Action Space → Propose action → Recommendation + rationale + alternatives |
 | Action | Decision | Recommendation + Confidence + Authority → Commit → Decision + rationale + expected outcomes (falsifiable) |
+| Learning | Memory Consolidation | Committed Decisions (expected vs actual outcomes) → Compare outcomes → Consolidation signal (calibration feedback, Brier, ECE) |
+| Learning | Memory Ledger | Learning signals → Append-only, idempotent persist → `learning_memory` record |
 | Learning | Pattern Refinement | Decisions (outcomes) → Attribute to Patterns via traceability chain → Pattern refinement signal (keep/degrade/deactivate) |
 | Learning | Context Revision | Decisions (outcomes) → Attribute to Contexts via traceability chain → Context revision signal (keep/review/consider_competitor) |
 | Learning | Insight Transformation | Insights (prior_understanding → mental_model_update) → Journaled transformation + outcome attribution |
 
 ### Principios Clave (P1-P7, R1-R7)
 
-- **P1 (Primacy of Observation)**: Observations are immutable, never interpreted. Agents capture facts without meaning extraction.
-- **P2 (Context Competition)**: Context activated by explanatory coherence competition, never generated directly.
-- **P5 (Computed Confidence)**: Confidence computed, not intuited. Uses S + C · (1 - ECE) formula.
-- **P6 (Recommendation ≠ Decision)**: Recommendations are advisory and reversible. Decisions require explicit authority.
+- **P1 (The Primacy of Observation)**: Observations are immutable, never interpreted. Agents capture facts without meaning extraction.
+- **P2 (Explanatory Coherence)**: Context is never generated directly: compatible mental models compete by explanatory coherence (with the strongest alternative) and the winner becomes the Active Context.
+- **P3 (Stable Concepts, Transformative Intelligence)**: Concepts are stable; intelligence lives in the transformations between them (procedural memory: `pattern_library`, `hypothesis_templates`, `insight_rules`, `action_space`, `tolerance_library`, `decision_policy`).
+- **P4 (Regularity and Law)**: Patterns describe regularity; Hypotheses explain it. Correlation is never presented as causation: Pattern Refinement only adjusts support (keep/degrade/deactivate) and never invents patterns; Insight Transformation journals what changed, not what should change.
+- **P5 (Calibrated Confidence)**: Confidence computed, not intuited. Uses S + C · (1 - ECE) formula.
+- **P6 (Deliberate Action)**: Recommendation (advisory, reversible) ≠ Decision (committed, accountable) with explicit authority; Perception and Reasoning inform action but never execute it.
+- **P7 (Learning Through Outcome)**: Comparing expected vs actual outcomes is the primary learning mechanism; the signals persist append-only and tenant-scoped in the Memory Ledger (Memory Layer operational, ADR-0003).
 - **R1 (Exactly One Capability)**: Cada servicio implementa exactamente una capacidad cognitiva.
 - **R2 (Cognitive Contract)**: Cada componente expone Input → Transform → Output testeado.
 - **R3 (Cognitive Boundary)**: Pipeline solo se invoca según flujo canónico; capacidades externas nunca bypassan.
-- **R4 (No Action Without Confidence)**: Action layer gateado por confidence calibrada.
+- **R4 (No Action Without Confidence)**: Action layer gateado por confidence calibrada (el score del cliente se ignora; la store aporta el valor autoritativo).
+- **R5 (Decision Record)**: Toda Decision registra rationale y expected outcomes falsificables declarados antes de la ejecución (Popper).
+- **R6 (Explanations First-Class)**: Las explicaciones son salidas de primera en cada capa (Insight journal, Recommendation rationale/alternatives, Evaluation con provenance).
+- **R7 (Architecture Guides Code)**: El Framework guía el código, nunca al revés; este repositorio nunca edita el Framework.
 
 ### Almacenamiento y Trazabilidad
 
@@ -312,7 +321,8 @@ necesario-pero-no-suficiente (calibra la fuerza de la conclusión, no la crea).
 ### 9.6 Framework vs Monitor (drift controlado)
 
 Company OS (Framework) es la autoridad cognitiva (read-only para este producto).
-COS-Monitor es el producto (ADR-0002). Donde el Framework lista una capacidad como
-*planned* (p.ej. Memory), el **Learning Memory ledger** y el **Learning Loop** del
-Monitor son **capacidades de producto autorizadas**, no una modificación silenciosa
-del Framework. Este repositorio nunca edita el Framework.
+COS-Monitor es el producto (ADR-0002). Memory es una capacidad **operacional**
+del Framework (ADR-0003): el **Learning Memory ledger** y el **Learning Loop** del
+Monitor son su implementación de referencia, una capacidad de producto — nunca
+una modificación silenciosa del Framework. Este repositorio nunca edita el
+Framework.
