@@ -172,8 +172,8 @@ jobs:
       - name: Upload coverage
         # Informational only: coverage upload is NOT a release gate.
         # fail_ci_if_error: false is deliberate - a Codecov outage must not turn
-        # a green test run red. The required status check ("CI") is enforced by
-        # the tests/lint/mypy/bandit steps above, not by this upload.
+        # a green test run red. The required status checks ("lint-and-test (3.12,
+        # 24)", "docker-build") are enforced by the steps above, not by this upload.
         uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457 # v3.1.1
         with:
           files: ./coverage.xml
