@@ -18,7 +18,7 @@ class HealthServer:
         self.app.router.add_get("/metrics", self.metrics_handler)
         self.runner = None
     
-    async def start(self, port: int = 8080):
+    async def start(self, port: int):
         self.runner = web.AppRunner(self.app)
         await self.runner.setup()
         site = web.TCPSite(self.runner, "0.0.0.0", port)

@@ -515,6 +515,6 @@ no token 401, invalid is_active 400, unknown context 404, CORS preflight
   filter `status=proposed` → 0, sort `proposed_at_asc` 200, invalid status 400,
   no token 401, unknown recommendation 404, CORS preflight 204. Full platform
   re-booted with `./start.sh --force` after a dev-process kill; all 12
-  services healthy (8080–8100) and regression check on
+  services healthy (8090–8100) and regression check on
   observations/evidence/contexts/patterns/anomalies/hypotheses/confidence/
   summary all 200.

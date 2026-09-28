@@ -21,9 +21,11 @@ async def main():
     
     collector = LinuxCollector(tenant_id, source_id)
     health = HealthServer(collector)
-    
-    # Start health endpoint
-    await health.start()
+
+    # Start health endpoint (F3: AGENT_HEALTH_PORT resolves fail-closed on
+    # invalid values; the agent never binds the frontend's published port).
+    port = int(os.getenv("AGENT_HEALTH_PORT", "8103"))
+    await health.start(port)
     
     # Collection loop
     while True:

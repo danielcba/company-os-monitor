@@ -10,7 +10,7 @@
 #   5. Pipeline services (collector -> context -> pattern -> anomaly ->
 #      hypothesis -> confidence -> recommendation -> decision -> report)
 #      plus the external user-service (:8099) and api-gateway (:8100)
-#   6. linux-agent observation capturer (:8080)
+#   6. linux-agent observation capturer (:8103)
 #
 # Usage:
 #   ./start.sh            boot the platform
@@ -47,7 +47,7 @@ SERVICE_SPECS=(
   "gateway|apps/gateway/api-gateway|GATEWAY_HEALTH_PORT|8100"
 )
 AGENT_SPECS=(
-  "linux-agent|apps/agents/linux-agent|AGENT_HEALTH_PORT|8080"
+  "linux-agent|apps/agents/linux-agent|AGENT_HEALTH_PORT|8103"
 )
 
 log() { printf '\033[1;34m[cos-monitor]\033[0m %s\n' "$*"; }

@@ -121,7 +121,7 @@ COS-Monitor es una plataforma que implementa el **pipeline cognitivo canónico**
 
 ### Puertos del Sistema:
  
-- 8080: Linux Agent
+- 8080: Frontend (nginx)
 - 8090: Collector Service
 - 8091: Context Service
 - 8092: Pattern Service
@@ -135,6 +135,7 @@ COS-Monitor es una plataforma que implementa el **pipeline cognitivo canónico**
 - 8100: API Gateway
 - 8101: Insight Service
 - 8102: Evaluation Service
+- 8103: Linux Agent
 
 ## 6. Secuencia de Funcionamiento
 
