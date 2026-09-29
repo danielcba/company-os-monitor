@@ -3,9 +3,16 @@
 # Accepted (false-positive) findings in this codebase:
 #
 #   B104 hardcoded_bind_all_interfaces
-#     Services and agents intentionally bind 0.0.0.0 inside their containers.
-#     Network exposure is governed by the container / compose network, not by
-#     the in-container bind address, so this is not a public data surface.
+#     The 14 host-native production services (start.sh SERVICE_SPECS +
+#     linux-agent, ports 8090-8103) bind 127.0.0.1 only: they run as plain
+#     host processes - not inside containers - and every verified consumer
+#     (gateway, browser, start.sh probes) is host-local (D1 architectural
+#     decision, journal/2026/2026-09-29-d1-host-bind-resolution.md).
+#     The skip stays because two agent implementations
+#     (apps/agents/windows-agent, apps/agents/vmware-agent) still declare
+#     0.0.0.0: neither is launched by start.sh, so neither opens a listening
+#     socket on this host today; they are outside D1's enumerated scope and
+#     belong to the future remote-agent architectural decision.
 #
 #   B108 hardcoded_tmp_directory
 #     Only appears in test fixtures that write sample report files under /tmp.

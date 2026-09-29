@@ -55,7 +55,7 @@ async def run_service() -> None:
 
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    site = web.TCPSite(runner, "127.0.0.1", PORT)
     await site.start()
     log.info("Evaluation Service HTTP started on port %s", PORT)
 

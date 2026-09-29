@@ -37,7 +37,7 @@ class ReportServer:
     async def start(self, port: int = 8098):
         self.runner = web.AppRunner(self.app)
         await self.runner.setup()
-        site = web.TCPSite(self.runner, "0.0.0.0", port)
+        site = web.TCPSite(self.runner, "127.0.0.1", port)
         await site.start()
 
     async def stop(self) -> None:
