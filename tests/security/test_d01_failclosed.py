@@ -387,7 +387,9 @@ class TestRedisUrlNormalizationPreservesCredential:
     """start.sh host normalization must keep the requirepass credential.
 
     Redis runs with ``--requirepass`` (docker-compose), so every Redis URL
-    carries ``redis://<password>@host``. Rewriting the container hostname
+    carries the requirepass credential (``redis://:<password>@host`` since
+    correccion_41; legacy local copies using ``redis://<password>@host`` must
+    keep normalizing too). Rewriting the container hostname
     (``redis`` -> ``localhost``) must only touch the host part, otherwise the
     host-side processes drop the credential and fail AUTH at runtime.
     """
@@ -426,6 +428,12 @@ class TestRedisUrlNormalizationPreservesCredential:
 
     def test_credential_preserved(self):
         assert self._normalize("redis://pw@redis:6379") == "redis://pw@localhost:6379"
+
+    def test_password_position_credential_preserved(self):
+        # Template form since correccion_41: password after the colon.
+        assert self._normalize("redis://:pw@redis:6379") == (
+            "redis://:pw@localhost:6379"
+        )
 
     def test_credentialless_still_normalizes(self):
         assert self._normalize("redis://redis:6379") == "redis://localhost:6379"
