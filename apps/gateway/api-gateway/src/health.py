@@ -61,7 +61,6 @@ class GatewayServer:
         self.jwt = jwt
         self.machine_jwt = machine_jwt
         self.app = web.Application()
-        self._setup_cors()
         # Add security headers middleware.
         from libs.shared.security_headers import security_headers_middleware
         self.app.middlewares.append(security_headers_middleware())
@@ -154,6 +153,7 @@ class GatewayServer:
         self.app.router.add_post(
             "/api/v1/telemetry/ingest", self.ingest_handler
         )
+        self._setup_cors()
         self.runner = None
 
     async def machine_token_handler(self, request):

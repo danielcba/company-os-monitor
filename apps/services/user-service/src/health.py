@@ -42,7 +42,6 @@ class UserServer:
             os.getenv("JWT_REDIS_URL", "redis://localhost:6379/1")
         )
         self.app = web.Application()
-        self._setup_cors()
         # Add security headers middleware.
         from libs.shared.security_headers import security_headers_middleware
         self.app.middlewares.append(security_headers_middleware())
@@ -61,6 +60,7 @@ class UserServer:
         self.app.router.add_get("/api/v1/tenants/{tenant_id}", self.get_tenant_handler)
         self.app.router.add_put("/api/v1/users/{user_id}", self.update_user_handler)
         self.app.router.add_delete("/api/v1/users/{user_id}", self.deactivate_user_handler)
+        self._setup_cors()
         self.runner = None
 
     def _setup_cors(self) -> None:
