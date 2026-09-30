@@ -124,13 +124,16 @@ def test_gateway_consumers_stay_host_local():
 
 
 def test_browser_consumers_stay_host_local():
-    """4. The browser entry points keep targeting localhost."""
+    """4. The tracked browser API client keeps its loopback fallback URLs.
+
+    Only versioned artefacts are inspected: ``apps/web/src/api/client.ts``
+    declares the canonical localhost fallbacks for both APIs. Untracked
+    local overrides (gitignored ``.env*`` files) are out of scope by design -
+    the contract lives in versioned code so it holds in a clean checkout.
+    """
     client = _read("apps/web/src/api/client.ts")
     assert "http://localhost:8100/api/v1" in client
     assert "http://localhost:8099/api/v1" in client
-    env_dev = _read("apps/web/.env.development")
-    assert "VITE_API_URL=http://localhost:8100/api/v1" in env_dev
-    assert "VITE_USER_SERVICE_URL=http://localhost:8099/api/v1" in env_dev
 
 
 def test_compose_publications_remain_loopback():
