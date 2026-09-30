@@ -194,4 +194,6 @@ repository.
 
 ## License
 
-Refer to the repository files. See `LICENSE` when present.
+No `LICENSE` file is present in this repository. Selecting a license is an
+owner decision (`LICENSE STATUS = OWNER DECISION REQUIRED`) — see
+`docs/release-policy.md`. Do not assume a license exists.
