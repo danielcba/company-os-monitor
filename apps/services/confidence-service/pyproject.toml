@@ -1,6 +1,6 @@
 [project]
 name = "confidence-service"
-version = "0.1.0"
+version = "0.1.1"
 description = "Confidence Calibrator - computes calibrated confidence for judgments (Calibrate)"
 requires-python = ">=3.11"
 dependencies = [

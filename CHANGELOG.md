@@ -9,6 +9,35 @@ This file is the release-facing changelog. It is separate from the internal
 append-only journals (`journal/`) and from historical remediation reports
 (`docs/remediation/`), which do not replace it.
 
+## [0.1.1] - 2026-10-01
+
+Security/dependency patch after `v0.1.0`. Every entry below is traceable to
+repository history (merge commit `d6f4f8d`), live Dependabot state, or
+`journal/`.
+
+### Security
+
+- **Dependency remediation completed** — Dependabot PR #53 merged
+  (`d6f4f8d800d50774a6c328112d88f9e2bc75ff98`): development/transitive
+  dependency `undici` `8.10.0` -> `8.11.2`
+  (`apps/web` dev -> `jsdom@30.0.1` -> `undici`, manifest
+  `apps/web/package-lock.json`).
+- The **7 previously open Dependabot security alerts** for `undici` are now
+  `fixed`: 0 open and 0 dismissed repository-wide; `npm audit` reports
+  0 vulnerabilities.
+
+### Notes
+
+- Scope is **development/transitive only** — no application code, backend,
+  infrastructure or Docker runtime change; `undici`/`jsdom` are absent from
+  the production runtime image (no runtime exposure).
+- **Validation at this baseline:** `pytest tests/` 799 passed,
+  `pytest tests/security tests/architecture` 354 passed, frontend suite
+  29 files / 182 tests, `ruff`/`mypy`/`bandit`/`compileall` clean,
+  `docker compose config -q` PASS, CI green on merge commit `d6f4f8d`.
+- **LICENSE:** still absent — license selection remains an owner decision
+  (see `docs/release-policy.md`). No security tooling change.
+
 ## [0.1.0] - 2026-09-30
 
 First tagged baseline of the complete product (release unit = the whole
@@ -79,4 +108,5 @@ history (commit SHA), documentation, or `journal/`.
 - **LICENSE:** not present — license selection is an owner decision
   (see `docs/release-policy.md`).
 
+[0.1.1]: https://github.com/danielcba/company-os-monitor/releases/tag/v0.1.1
 [0.1.0]: https://github.com/danielcba/company-os-monitor/releases/tag/v0.1.0

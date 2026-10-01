@@ -1,6 +1,6 @@
 [project]
 name = "collector-service"
-version = "0.1.0"
+version = "0.1.1"
 description = "Evidence Organizer - consumes observations and persists them (append-only)"
 requires-python = ">=3.11"
 dependencies = [

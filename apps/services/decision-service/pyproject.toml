@@ -1,6 +1,6 @@
 [project]
 name = "decision-service"
-version = "0.1.0"
+version = "0.1.1"
 description = "Decision Committer - commits actions with falsifiable expected outcomes (Commit)"
 requires-python = ">=3.11"
 dependencies = [

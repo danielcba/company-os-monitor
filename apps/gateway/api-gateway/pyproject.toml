@@ -1,6 +1,6 @@
 [project]
 name = "api-gateway"
-version = "0.1.0"
+version = "0.1.1"
 description = "Cognitive Boundary enforcement (R3) - validates JWT authority and routes pipeline access (external non-canonical, ADR-0002)"
 requires-python = ">=3.11"
 dependencies = [

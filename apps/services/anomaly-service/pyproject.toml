@@ -1,6 +1,6 @@
 [project]
 name = "anomaly-service"
-version = "0.1.0"
+version = "0.1.1"
 description = "Anomaly Detector - detects deviations from expected patterns over the Context stream (Detect Deviation)"
 requires-python = ">=3.11"
 dependencies = [

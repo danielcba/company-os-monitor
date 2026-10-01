@@ -1,6 +1,6 @@
 [project]
 name = "insight-service"
-version = "0.1.0"
+version = "0.1.1"
 description = "Insight Generator - restructures competing hypotheses over active contexts (Restructure)"
 requires-python = ">=3.11"
 dependencies = [

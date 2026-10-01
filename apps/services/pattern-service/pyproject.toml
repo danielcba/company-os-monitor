@@ -1,6 +1,6 @@
 [project]
 name = "pattern-service"
-version = "0.1.0"
+version = "0.1.1"
 description = "Pattern Detector - detects recurrent regularities over the Context stream (Generalize)"
 requires-python = ">=3.11"
 dependencies = [

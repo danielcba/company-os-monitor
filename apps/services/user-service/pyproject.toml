@@ -1,6 +1,6 @@
 [project]
 name = "user-service"
-version = "0.1.0"
+version = "0.1.1"
 description = "Multi-tenant auth + RBAC (external non-canonical capability, ADR-0002) - JWT identity + Decision Authority roles"
 requires-python = ">=3.11"
 dependencies = [

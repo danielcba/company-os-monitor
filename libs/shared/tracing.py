@@ -52,7 +52,7 @@ def setup_tracing(service_name: str) -> None:
         resource = Resource.create(
             {
                 "service.name": os.getenv("OTEL_SERVICE_NAME", service_name),
-                "service.version": os.getenv("APP_VERSION", "0.1.0"),
+                "service.version": os.getenv("APP_VERSION", "0.1.1"),
             }
         )
 
