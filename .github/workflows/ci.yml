@@ -166,8 +166,24 @@ jobs:
         working-directory: apps/web
         run: npm run test
 
+      - name: Frontend dependency audit (SCA)
+        # Policy: fail the job on any known vulnerability in the locked tree.
+        # Complements Dependabot (alerts + update PRs) with an execution gate.
+        working-directory: apps/web
+        run: npm audit
+
       - name: Security scan
         run: bandit -r apps/ libs/ -ll -c bandit.yaml
+
+      - name: Dependency audit (SCA)
+        # Policy: fail the job on any known vulnerability in the installed
+        # environment. Sole documented exception: PYSEC-2026-1325 (ecdsa
+        # 0.19.2, transitive via python-jose) has no fixed release as of
+        # 2026-10-02; remove the exception when a fix ships. Complements
+        # Dependabot (alerts + update PRs) with an execution gate.
+        run: |
+          pip install "pip-audit==2.10.1"
+          pip-audit --ignore-vuln PYSEC-2026-1325
 
       - name: Upload coverage
         # Informational only: coverage upload is NOT a release gate.
