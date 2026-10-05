@@ -190,7 +190,18 @@ jobs:
         # fail_ci_if_error: false is deliberate - a Codecov outage must not turn
         # a green test run red. The required status checks ("lint-and-test (3.12,
         # 24)", "docker-build") are enforced by the steps above, not by this upload.
-        uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457 # v3.1.1
+        # Pinned by full commit SHA to the maintained v7.0.0 line (composite
+        # action; no legacy Node action runtime). Compatibility hardening: the
+        # previous pin was v3.1.1 (runs.using: node16). The exact origin of the
+        # EPROTO/TLS handshake failure observed in run 37252838032 was NOT
+        # determined and is not attributed here to any component.
+        # continue-on-error: true is propagation isolation at the GitHub Actions
+        # level: run 37252838032 proved fail_ci_if_error: false alone did not
+        # keep the job green when this step failed, so a future Codecov failure
+        # cannot redden the job. It limits blast radius; it does not explain
+        # the transport error.
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        continue-on-error: true
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
