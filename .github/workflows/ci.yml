@@ -177,13 +177,17 @@ jobs:
 
       - name: Dependency audit (SCA)
         # Policy: fail the job on any known vulnerability in the installed
-        # environment. Sole documented exception: PYSEC-2026-1325 (ecdsa
-        # 0.19.2, transitive via python-jose) has no fixed release as of
-        # 2026-10-02; remove the exception when a fix ships. Complements
-        # Dependabot (alerts + update PRs) with an execution gate.
+        # environment. Documented exceptions, both with no fixed release on
+        # PyPI (latest is the installed version); remove each exception when a
+        # fix ships:
+        #   - PYSEC-2026-1325 (ecdsa 0.19.2, transitive via python-jose),
+        #     no fixed release as of 2026-10-02.
+        #   - CVE-2026-85394 (python-jose 3.5.0, direct dependency), reported
+        #     by run 37390180781 on 2026-10-05; no fix version published.
+        # Complements Dependabot (alerts + update PRs) with an execution gate.
         run: |
           pip install "pip-audit==2.10.1"
-          pip-audit --ignore-vuln PYSEC-2026-1325
+          pip-audit --ignore-vuln PYSEC-2026-1325 --ignore-vuln CVE-2026-85394
 
       - name: Upload coverage
         # Informational only: coverage upload is NOT a release gate.
