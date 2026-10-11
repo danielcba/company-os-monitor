@@ -45,6 +45,17 @@ STOP_SPECS=(
 log() { printf '\033[1;34m[cos-monitor]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[cos-monitor]\033[0m %s\n' "$*" >&2; }
 
+# Load .env so compose interpolation succeeds (the compose file fail-closes on
+# POSTGRES_PASSWORD/REDIS_PASSWORD with :?, same vars start.sh exports).
+if [ -f "$ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/.env" || warn ".env failed to parse - container shutdown may error"
+  set +a
+else
+  warn ".env not found - container shutdown may error (fail-closed compose vars)"
+fi
+
 command -v docker >/dev/null 2>&1 || warn "docker not found - skipping container shutdown"
 
 stopped=0

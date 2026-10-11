@@ -211,7 +211,7 @@ infra_up() {
 
   log "waiting for redis"
   for i in $(seq 1 30); do
-    if docker compose -f "$COMPOSE_FILE" exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
+    if docker compose -f "$COMPOSE_FILE" exec -T redis redis-cli -a "${REDIS_PASSWORD:?REDIS_PASSWORD is required}" --no-auth-warning ping 2>/dev/null | grep -q PONG; then
       echo "  [ok] redis ready"
       break
     fi
