@@ -75,7 +75,7 @@ jobs:
           PGPASSWORD: cosmonitor
         run: |
           for i in {1..30}; do
-            python -c "import psycopg2; psycopg2.connect(host='localhost', port=5433, user='cosmonitor', password='cosmonitor', database='cosmonitor').close()" && echo "PostgreSQL ready" && exit 0
+            uv run python -c "import psycopg2; psycopg2.connect(host='localhost', port=5433, user='cosmonitor', password='cosmonitor', database='cosmonitor').close()" && echo "PostgreSQL ready" && exit 0
             echo "Waiting for PostgreSQL... ($i/30)"
             sleep 1
           done
@@ -87,7 +87,7 @@ jobs:
           REDIS_PASSWORD: cosmonitor
         run: |
           for i in {1..30}; do
-            python -c "import redis; r=redis.Redis(host='localhost', port=6379, password='cosmonitor', socket_connect_timeout=2); r.ping()" && echo "Redis ready" && exit 0
+            uv run python -c "import redis; r=redis.Redis(host='localhost', port=6379, password='cosmonitor', socket_connect_timeout=2); r.ping()" && echo "Redis ready" && exit 0
             echo "Waiting for Redis... ($i/30)"
             sleep 1
           done
