@@ -53,15 +53,19 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      - name: Install Python dependencies
+      - name: Install uv
         run: |
-          python -m pip install --upgrade pip
-          # NOTE: no `safety` here - it was installed but never executed, and its
-          # `check` command has been deprecated since 01 Jun 2024 while `scan`
-          # requires an authenticated Safety account. A tool that never runs is
-          # dead configuration; bandit below is the executed security gate.
-          pip install "ruff==0.16.3" "mypy==2.3.0" "pytest==9.1.1" "pytest-asyncio==1.4.0" "pytest-cov==7.1.0" "bandit==1.9.4" "psycopg2-binary==2.9.12" "redis==8.1.0"
-          pip install -e .
+          pip install "uv==0.12.5"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install Python dependencies (uv, locked)
+        run: |
+          uv sync --locked --all-groups
+          uv sync --locked --all-groups --project apps/gateway/api-gateway
+          uv sync --locked --all-groups --project apps/services/user-service
+
+      - name: Install extra security tools
+        run: uv pip install bandit==1.9.4 pip-audit==2.10.1
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -107,14 +111,14 @@ jobs:
           done
 
       - name: Ruff lint
-        run: ruff check . --output-format=github
+        run: uv run ruff check . --output-format=github
 
       - name: MyPy typecheck (libs)
-        run: mypy --config-file mypy.ini libs/
+        run: uv run mypy --config-file mypy.ini libs/
 
       - name: MyPy typecheck (gateway)
         working-directory: apps/gateway/api-gateway
-        run: mypy --config-file ../../../mypy.ini src/
+        run: uv run mypy --config-file ../../../mypy.ini src/
 
       - name: MyPy typecheck (services)
         run: |
@@ -122,13 +126,13 @@ jobs:
           for svc in apps/services/*/; do
             if [ -d "$svc/src" ]; then
               echo "=== Typechecking $svc ==="
-              (cd "$svc" && mypy --config-file ../../../mypy.ini src/) || failed=1
+              (cd "$svc" && uv run mypy --config-file ../../../mypy.ini src/) || failed=1
             fi
           done
           exit $failed
 
       - name: Root tests
-        run: pytest tests/ --cov=libs --cov-report=xml -v
+        run: uv run pytest tests/ --cov=libs --cov-report=xml -v
 
       - name: Service tests (each from its own directory)
         env:
@@ -141,7 +145,7 @@ jobs:
           for svc in apps/services/*/; do
             if [ -d "$svc/tests" ] && ls "$svc/tests"/test_*.py 1>/dev/null 2>&1; then
               echo "=== Testing $svc ==="
-              (cd "$svc" && PYTHONPATH="${{ github.workspace }}" python -m pytest tests/ -v --tb=short) || exit 1
+              (cd "$svc" && PYTHONPATH="${{ github.workspace }}" uv run pytest tests/ -v --tb=short) || exit 1
             fi
           done
 
@@ -153,7 +157,7 @@ jobs:
           POSTGRES_USER: cosmonitor
           POSTGRES_PASSWORD: cosmonitor
           PGDATABASE: cosmonitor
-        run: PYTHONPATH="${{ github.workspace }}" python -m pytest tests/ -v --tb=short
+        run: PYTHONPATH="${{ github.workspace }}" uv run pytest tests/ -v --tb=short
 
       - name: Frontend setup
         working-directory: apps/web
@@ -173,7 +177,7 @@ jobs:
         run: npm audit
 
       - name: Security scan
-        run: bandit -r apps/ libs/ -ll -c bandit.yaml
+        run: uv run bandit -r apps/ libs/ -ll -c bandit.yaml
 
       - name: Dependency audit (SCA)
         # Policy: fail the job on any known vulnerability in the installed
@@ -181,9 +185,7 @@ jobs:
         # 0.19.2, transitive via python-jose) has no fixed release as of
         # 2026-10-02; remove the exception when a fix ships. Complements
         # Dependabot (alerts + update PRs) with an execution gate.
-        run: |
-          pip install "pip-audit==2.10.1"
-          pip-audit --ignore-vuln PYSEC-2026-1325
+        run: uv run pip-audit --ignore-vuln PYSEC-2026-1325
 
       - name: Upload coverage
         # Informational only: coverage upload is NOT a release gate.
