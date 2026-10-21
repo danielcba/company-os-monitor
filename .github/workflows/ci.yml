@@ -63,6 +63,20 @@ jobs:
           pip install "ruff==0.16.3" "mypy==2.3.0" "pytest==9.1.1" "pytest-asyncio==1.4.0" "pytest-cov==7.1.0" "bandit==1.9.4" "psycopg2-binary==2.9.12" "redis==8.1.0"
           pip install -e .
 
+      - name: Install uv
+        run: |
+          pip install "uv==0.12.5"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Verify lockfiles are in sync with manifests
+        run: |
+          uv lock --check
+          uv lock --check --project apps/gateway/api-gateway
+          uv lock --check --project apps/services/user-service
+
+      - name: Install extra security tools
+        run: pip install "pip-audit==2.10.1"
+
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 

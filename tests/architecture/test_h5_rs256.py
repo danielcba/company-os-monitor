@@ -13,7 +13,8 @@ import time
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from jose import jwt
+from jwt import encode as jwt_encode
+from jwt import get_unverified_header
 
 from libs.access.errors import InvalidTokenError
 from libs.access.security import (
@@ -111,7 +112,7 @@ class TestKidInHeader:
             credential_id="cred-001",
             tenant_id="tenant-001",
         )
-        header = jwt.get_unverified_header(token)
+        header = get_unverified_header(token)
         assert header.get("kid") == "A"
 
     def test_alg_rs256_in_header(self, machine_jwt_a: MachineJwtService):
@@ -119,7 +120,7 @@ class TestKidInHeader:
             credential_id="cred-001",
             tenant_id="tenant-001",
         )
-        header = jwt.get_unverified_header(token)
+        header = get_unverified_header(token)
         assert header.get("alg") == "RS256"
 
 
@@ -133,13 +134,13 @@ class TestRs256Algorithm:
             credential_id="cred-001",
             tenant_id="tenant-001",
         )
-        header = jwt.get_unverified_header(token)
+        header = get_unverified_header(token)
         assert header["alg"] == "RS256"
 
     def test_hs256_token_rejected_by_machine_service(self, machine_jwt_a: MachineJwtService):
         """A token signed with HS256 (human) must not be accepted by MachineJwtService."""
         # Create an HS256 token using a human JwtService-like approach
-        hs256_token = jwt.encode(
+        hs256_token = jwt_encode(
             {"sub": "test", "token_type": "machine_access", "exp": 9999999999},
             "secret",
             algorithm="HS256",
@@ -195,7 +196,7 @@ class TestActiveKidControlsIssuance:
             credential_id="cred-001",
             tenant_id="tenant-001",
         )
-        header = jwt.get_unverified_header(token)
+        header = get_unverified_header(token)
         assert header.get("kid") == "B"
 
     def test_active_kid_property(self, machine_jwt_a: MachineJwtService):
@@ -228,7 +229,7 @@ class TestValidationUsesKid:
             tenant_id="tenant-001",
         )
         # Decode raw claims (without signature verification for header inspection)
-        raw_header = jwt.get_unverified_header(token)
+        raw_header = get_unverified_header(token)
         assert raw_header["kid"] == "A"
 
 
@@ -289,7 +290,7 @@ class TestKidMismatch:
             "jti": "test-jti",
         }
         # Sign with key B
-        token_with_b = jwt.encode(
+        token_with_b = jwt_encode(
             claims, KEY_B_PRIV, algorithm="RS256", headers={"kid": "A"}
         )
         # Service has kid=A mapped to key A — verification should fail
@@ -312,7 +313,7 @@ class TestUnknownKid:
             "exp": int(time.time()) + 3600,
             "jti": "test-jti",
         }
-        token_c = jwt.encode(
+        token_c = jwt_encode(
             claims, KEY_C_PRIV, algorithm="RS256", headers={"kid": "C"}
         )
         with pytest.raises(InvalidTokenError, match="unknown kid"):
@@ -334,7 +335,7 @@ class TestMissingKid:
             "exp": int(time.time()) + 3600,
             "jti": "test-jti",
         }
-        token_no_kid = jwt.encode(
+        token_no_kid = jwt_encode(
             claims, KEY_A_PRIV, algorithm="RS256", headers={"typ": "JWT"}
         )
         with pytest.raises(InvalidTokenError, match="missing required kid"):
@@ -356,7 +357,7 @@ class TestRotationOverlap:
             active_kid="B",
         )
         # Sign with key A (old key, still in key_set)
-        token_a = jwt.encode(
+        token_a = jwt_encode(
             {
                 "sub": "cred-001",
                 "tenant_id": "tenant-001",
@@ -386,7 +387,7 @@ class TestRotationOverlap:
             credential_id="cred-001",
             tenant_id="tenant-001",
         )
-        header = jwt.get_unverified_header(token)
+        header = get_unverified_header(token)
         assert header["kid"] == "B"
 
 
@@ -401,7 +402,7 @@ class TestRetiredKeyRejection:
             key_set={"B": (KEY_B_PRIV, KEY_B_PUB)},
             active_kid="B",
         )
-        token_a = jwt.encode(
+        token_a = jwt_encode(
             {
                 "sub": "cred-001",
                 "tenant_id": "tenant-001",
@@ -498,7 +499,7 @@ class TestConfigurationFailures:
 class TestNonRs256Rejection:
     def test_hs256_token_rejected(self, machine_jwt_a: MachineJwtService):
         """HS256 token must be rejected by RS256-only MachineJwtService."""
-        hs256_token = jwt.encode(
+        hs256_token = jwt_encode(
             {"sub": "test", "token_type": "machine_access", "exp": 9999999999},
             "secret",
             algorithm="HS256",
@@ -509,7 +510,7 @@ class TestNonRs256Rejection:
     def test_es256_token_rejected(self, machine_jwt_a: MachineJwtService):
         """ES256 token must be rejected by RS256-only MachineJwtService."""
         ec_priv = ec.generate_private_key(ec.SECP256R1())
-        ec_token = jwt.encode(
+        ec_token = jwt_encode(
             {"sub": "test", "token_type": "machine_access", "exp": 9999999999},
             ec_priv,
             algorithm="ES256",
@@ -525,7 +526,7 @@ class TestNonRs256Rejection:
 class TestExpiredToken:
     def test_expired_token_rejected(self, machine_jwt_a: MachineJwtService):
         """Expired token must be rejected."""
-        token = jwt.encode(
+        token = jwt_encode(
             {
                 "sub": "cred-001",
                 "tenant_id": "tenant-001",

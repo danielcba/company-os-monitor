@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from jose import jwt as jose_jwt
+from jwt import decode as jwt_decode
 
 from libs.access.errors import InvalidTokenError
 
@@ -275,7 +275,7 @@ class TestJwtAudienceIssuer:
         token = svc.create_access_token(
             user_id="u1", tenant_id="t1", email="a@b.com", role="admin"
         )
-        payload = jose_jwt.decode(
+        payload = jwt_decode(
             token, "test-secret", algorithms=["HS256"], audience="cosmonitor"
         )
         assert payload["iss"] == "http://localhost", (
@@ -296,7 +296,7 @@ class TestJwtAudienceIssuer:
         token = svc.create_access_token(
             user_id="u1", tenant_id="t1", email="a@b.com", role="admin"
         )
-        payload = jose_jwt.decode(token, "test-secret", algorithms=["HS256"])
+        payload = jwt_decode(token, "test-secret", algorithms=["HS256"])
         assert "iss" not in payload, (
             "Token must not include iss when issuer not configured"
         )

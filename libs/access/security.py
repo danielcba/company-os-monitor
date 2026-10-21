@@ -12,7 +12,7 @@ is incompatible with bcrypt >= 4.1 (it reads the removed
 ``bcrypt`` is already installed via ``passlib[bcrypt]``). Documented in the
 Sprint 12 journal.
 
-JWT: python-jose. Development uses HS256 with ``JWT_SECRET_KEY``; production
+JWT: PyJWT. Development uses HS256 with ``JWT_SECRET_KEY``; production
 uses RS256 with ``JWT_PRIVATE_KEY`` (signing) and ``JWT_PUBLIC_KEY`` (verify).
 Access tokens expire in minutes, refresh tokens in days; both carry the
 Decision Authority claim (role) and the tenant scope so every authorized action
@@ -29,7 +29,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt as bcrypt_lib
-from jose import JWTError, jwt
+from jwt import PyJWTError, get_unverified_header
+from jwt import decode as jwt_decode
+from jwt import encode as jwt_encode
 
 from libs.access.errors import InvalidTokenError
 
@@ -51,6 +53,43 @@ CLAIM_IAT = "iat"
 CLAIM_JTI = "jti"  # unique token identifier for revocation
 CLAIM_ISS = "iss"
 CLAIM_AUD = "aud"
+
+
+def _validate_aud_claims(
+    claims: dict[str, Any],
+    audience: str | None,
+    *,
+    skip_when_no_audience_configured: bool,
+) -> None:
+    """Valida ``aud`` reproduciendo el contrato de python-jose con PyJWT.
+
+    - Token sin ``aud``: aceptado en todos los casos (python-jose retorna
+      antes de validar cuando falta el claim; flujo de máquina ADR-0005).
+    - Token con ``aud`` y verificador sin audiencia configurada:
+      * flujo humano: rechaza (fail-closed, igual que pasar audience=None).
+      * flujo de máquina sin audiencia: se salta la comprobación
+        (rama verify_aud=False histórica).
+    - Token con ``aud`` y audiencia configurada: el valor del claim debe
+      contener la audiencia configurada; cualquier otro valor se rechaza.
+    """
+    aud_claim = claims.get(CLAIM_AUD)
+    if aud_claim is None:
+        return
+    if isinstance(aud_claim, str):
+        aud_claim = [aud_claim]
+    if (
+        not isinstance(aud_claim, list)
+        or not aud_claim
+        or any(not isinstance(c, str) for c in aud_claim)
+    ):
+        raise InvalidTokenError("Invalid claim format in token")  # noqa: TRY003 - declarative, one message
+    if audience is None:
+        if skip_when_no_audience_configured:
+            return  # máquina sin audiencia: rama verify_aud=False histórica
+        raise InvalidTokenError("Invalid audience")  # noqa: TRY003 - humano: fail-closed
+    if audience not in aud_claim:
+        raise InvalidTokenError("Invalid audience")  # noqa: TRY003 - declarative, one message
+
 
 # Placeholders shipped in .env.example. A value that announces itself as a
 # template is public and predictable: anyone could forge HS256 signatures with
@@ -177,7 +216,7 @@ class JwtService:
 
     def _sign(self, claims: dict[str, Any]) -> str:
         key = self.private_key if self.algorithm == "RS256" else self.secret_key
-        return jwt.encode(claims, key, algorithm=self.algorithm)
+        return jwt_encode(claims, key, algorithm=self.algorithm)
 
     def create_token(  # noqa: PLR0913 - token claims bundle
         self,
@@ -255,18 +294,21 @@ class JwtService:
         """
         key = self.public_key if self.algorithm == "RS256" else self.secret_key
         decode_kwargs: dict[str, Any] = {
-            "token": token,
-            "key": key,
-            "algorithms": [self.algorithm],
+            "options": {"verify_aud": False},
         }
-        if self.audience:
-            decode_kwargs["audience"] = self.audience
         if self.issuer:
             decode_kwargs["issuer"] = self.issuer
         try:
-            return jwt.decode(**decode_kwargs)
-        except JWTError as exc:
+            claims = jwt_decode(token, key, algorithms=[self.algorithm], **decode_kwargs)
+            _validate_aud_claims(
+                claims,
+                self.audience,
+                skip_when_no_audience_configured=False,
+            )
+        except PyJWTError as exc:
             raise InvalidTokenError(str(exc)) from exc
+        else:
+            return claims
 
     def decode_payload(self, token: str, *, expected_type: str) -> TokenPayload:
         """Verified TokenPayload restricted to the expected token kind."""
@@ -360,7 +402,7 @@ class MachineJwtService:
         """Sign claims with the active key. Always RS256 with kid header."""
         private_key, _public_key = self._key_set[self._active_kid]
         header = {"alg": "RS256", "kid": self._active_kid, "typ": "JWT"}
-        return jwt.encode(claims, private_key, algorithm="RS256", headers=header)
+        return jwt_encode(claims, private_key, algorithm="RS256", headers=header)
 
     def create_machine_token(
         self,
@@ -452,8 +494,8 @@ class MachineJwtService:
         Raises InvalidTokenError on any failure.
         """
         try:
-            unverified_header = jwt.get_unverified_header(token)
-        except JWTError as exc:
+            unverified_header = get_unverified_header(token)
+        except PyJWTError as exc:
             raise InvalidTokenError(f"invalid token header: {exc}") from exc  # noqa: TRY003
 
         kid = unverified_header.get("kid")
@@ -467,19 +509,22 @@ class MachineJwtService:
 
         _private_key, public_key = self._key_set[kid]
 
+        decode_kwargs: dict[str, Any] = {
+            "options": {"verify_aud": False},
+        }
         try:
-            decode_kwargs: dict[str, Any] = {
-                "token": token,
-                "key": public_key,
-                "algorithms": ["RS256"],
-            }
-            if self.audience:
-                decode_kwargs["audience"] = self.audience
-            else:
-                decode_kwargs["options"] = {"verify_aud": False}
-            return jwt.decode(**decode_kwargs)
-        except JWTError as exc:
+            claims = jwt_decode(
+                token, public_key, algorithms=["RS256"], **decode_kwargs
+            )
+            _validate_aud_claims(
+                claims,
+                self.audience,
+                skip_when_no_audience_configured=(self.audience is None),
+            )
+        except PyJWTError as exc:
             raise InvalidTokenError(str(exc)) from exc
+        else:
+            return claims
 
     def decode_payload(self, token: str, *, expected_type: str) -> TokenPayload:
         """Verified TokenPayload for machine tokens."""
