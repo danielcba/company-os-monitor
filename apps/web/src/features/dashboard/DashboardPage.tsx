@@ -3,6 +3,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { fetchCognitiveSummary } from '@/api/gateway'
 import type { CognitiveTotals } from '@/types/cognitive'
 import { ServiceHealthPanel } from '@/components/infrastructure/ServiceHealthPanel'
+import { TrustValuePanel } from '@/components/trust/TrustValuePanel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LoadingState, ErrorState, NotAvailable } from '@/components/ui/state'
@@ -80,6 +81,8 @@ export function DashboardPage() {
           Welcome back{user?.name ? `, ${user.name}` : ''}. Pipeline state for your tenant.
         </p>
       </div>
+
+      <TrustValuePanel />
 
       <Card>
         <CardHeader>
