@@ -141,7 +141,7 @@ async def _wait_for(
         if predicate(counts):
             return counts
         await asyncio.sleep(POLL_SECONDS)
-    raise TimeoutError.seed_timeout(label, json.dumps(counts))
+    raise SeedTimeoutError.seed_timeout(label, json.dumps(counts))
 
 
 class SeedTimeoutError(TimeoutError):
