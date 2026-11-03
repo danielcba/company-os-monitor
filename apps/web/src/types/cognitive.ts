@@ -351,7 +351,14 @@ export interface CognitiveDecision {
   committed_at: string
   executed_at: string | null
   actual_outcomes: unknown[] | null
+  outcome_status: CognitiveOutcomeStatus
 }
+
+export type CognitiveOutcomeStatus =
+  | 'pending'
+  | 'corroborated'
+  | 'contradicted'
+  | 'inconclusive'
 
 export type CognitiveDecisionStatus =
   | 'committed'

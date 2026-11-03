@@ -6,6 +6,7 @@ import type {
   CognitiveConfidenceDetail,
   CognitiveDecision,
   CognitiveDecisionStatus,
+  CognitiveOutcomeStatus,
   CognitiveRecommendationDetail,
 } from '@/types/cognitive'
 import { ApiError } from '@/types/cognitive'
@@ -14,6 +15,31 @@ import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { LoadingState, ErrorState, ForbiddenState, EmptyState } from '@/components/ui/state'
 import { StatusBadge, RiskBadge } from '@/features/decisions/DecisionsPage'
+
+function OutcomeBadge({ status }: { status: CognitiveOutcomeStatus }) {
+  if (status === 'corroborated') {
+    return (
+      <Badge className="border-emerald-500/40 bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200">
+        Corroborated
+      </Badge>
+    )
+  }
+  if (status === 'contradicted') {
+    return (
+      <Badge className="border-red-500/40 bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-200">
+        Contradicted
+      </Badge>
+    )
+  }
+  if (status === 'inconclusive') {
+    return (
+      <Badge className="border-amber-500/40 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+        Inconclusive
+      </Badge>
+    )
+  }
+  return <Badge variant="outline">Pending</Badge>
+}
 
 function ConfidenceBlock({ confidence }: { confidence: CognitiveConfidenceDetail | null }) {
   if (!confidence) {
@@ -234,6 +260,31 @@ export function DecisionDetail({
               confidence={confidence}
             />
           )}
+
+          <div>
+            <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Learning outcome
+            </h3>
+            <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+              <div className="flex items-center gap-2">
+                <OutcomeBadge status={decision.outcome_status} />
+                <span className="text-xs text-muted-foreground">
+                  {decision.outcome_status === 'pending'
+                    ? 'No outcomes compared yet — the Learning loop evaluates expected vs actual after execution.'
+                    : 'Expected vs actual outcomes compared by the Learning loop (P7).'}
+                </span>
+              </div>
+              {decision.outcome_status !== 'pending' && decision.actual_outcomes && decision.actual_outcomes.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {decision.actual_outcomes.map((outcome, index) => (
+                    <li key={index} className="rounded-md border border-border bg-background/60 p-2 text-xs text-muted-foreground">
+                      {typeof outcome === 'string' ? outcome : JSON.stringify(outcome)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
 
           <div>
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
