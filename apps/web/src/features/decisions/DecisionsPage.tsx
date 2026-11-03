@@ -7,6 +7,7 @@ import type {
   CognitiveDecision,
   CognitiveDecisionSort,
   CognitiveDecisionStatus,
+  CognitiveOutcomeStatus,
 } from '@/types/cognitive'
 import { ApiError } from '@/types/cognitive'
 import { Card } from '@/components/ui/card'
@@ -62,6 +63,31 @@ export function RiskBadge({ risk }: { risk: string }) {
     )
   }
   return <Badge variant="outline">Low</Badge>
+}
+
+export function OutcomeBadge({ status }: { status: CognitiveOutcomeStatus }) {
+  if (status === 'corroborated') {
+    return (
+      <Badge className="border-emerald-500/40 bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200">
+        Corroborated
+      </Badge>
+    )
+  }
+  if (status === 'contradicted') {
+    return (
+      <Badge className="border-red-500/40 bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-200">
+        Contradicted
+      </Badge>
+    )
+  }
+  if (status === 'inconclusive') {
+    return (
+      <Badge className="border-amber-500/40 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+        Inconclusive
+      </Badge>
+    )
+  }
+  return <Badge variant="outline">Pending</Badge>
 }
 
 export function DecisionsPage() {
@@ -178,7 +204,7 @@ export function DecisionsPage() {
                   <th className="px-3 py-2 font-medium">Status</th>
                   <th className="px-3 py-2 font-medium">Commitment</th>
                   <th className="px-3 py-2 font-medium">Risk</th>
-                  <th className="px-3 py-2 font-medium">Outcomes</th>
+                  <th className="px-3 py-2 font-medium">Learning</th>
                   <th className="px-3 py-2 font-medium">Recommendation</th>
                   <th className="px-3 py-2" />
                 </tr>
@@ -200,8 +226,8 @@ export function DecisionsPage() {
                     <td className="px-3 py-2">
                       <RiskBadge risk={decision.risk_tolerance} />
                     </td>
-                    <td className="px-3 py-2 tabular-nums text-muted-foreground">
-                      {decision.expected_outcomes.length}
+                    <td className="px-3 py-2">
+                      <OutcomeBadge status={decision.outcome_status} />
                     </td>
                     <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
                       {shortId(decision.recommendation_id)}

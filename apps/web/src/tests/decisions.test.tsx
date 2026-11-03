@@ -39,6 +39,7 @@ const decisionPage = {
       committed_at: '2026-08-19T18:00:00Z',
       executed_at: null,
       actual_outcomes: null,
+      outcome_status: 'pending',
     },
     {
       id: 'd2',
@@ -53,6 +54,7 @@ const decisionPage = {
       committed_at: '2026-08-19T18:30:00Z',
       executed_at: null,
       actual_outcomes: null,
+      outcome_status: 'corroborated',
     },
   ],
   total: 2,
