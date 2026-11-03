@@ -38,6 +38,21 @@ const summaryResponse = {
   },
 }
 
+const confidenceSummaryResponse = {
+  tenant_id: '00000000-0000-0000-0000-000000000001',
+  total: 0,
+  by_target_type: {},
+  averages: {
+    confidence: 0,
+    support: 0,
+    coherence: 0,
+    historical_calibration: 1,
+    ece: 0,
+    alpha: 0.5,
+  },
+  range: { min_confidence: 0, max_confidence: 0 },
+}
+
 const healthResponse = {
   services: [
     { service: 'collector', url: 'http://x', status: 200, healthy: true },
@@ -51,6 +66,9 @@ function mockApi() {
     vi.fn().mockImplementation(async (input: string) => {
       if (input.includes('/cognitive/summary')) {
         return { ok: true, status: 200, json: async () => summaryResponse }
+      }
+      if (input.includes('/confidence/summary')) {
+        return { ok: true, status: 200, json: async () => confidenceSummaryResponse }
       }
       return { ok: true, status: 200, json: async () => healthResponse }
     }),
@@ -105,6 +123,9 @@ describe('DashboardPage', () => {
       vi.fn().mockImplementation(async (input: string) => {
         if (input.includes('/cognitive/summary')) {
           return { ok: false, status: 403, json: async () => ({ error: 'forbidden' }) }
+        }
+        if (input.includes('/confidence/summary')) {
+          return { ok: true, status: 200, json: async () => confidenceSummaryResponse }
         }
         return { ok: true, status: 200, json: async () => healthResponse }
       }),
