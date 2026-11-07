@@ -1,6 +1,7 @@
 """Health endpoint for metacognitive monitoring of the Confidence Calibrator."""
 from aiohttp import web
 from libs.learning.confidence import ConfidenceStore
+from libs.shared.security_headers import security_headers_middleware
 
 from src.service import ConfidenceService
 
@@ -10,6 +11,7 @@ class HealthServer:
         self.service = service
         self.confidence_store = confidence_store
         self.app = web.Application()
+        self.app.middlewares.append(security_headers_middleware())
         self.app.router.add_get("/health", self.health_handler)
         self.app.router.add_get("/metrics", self.metrics_handler)
         self.runner = None

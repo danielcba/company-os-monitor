@@ -1,5 +1,6 @@
 """Health endpoint for metacognitive monitoring of the Anomaly Detector."""
 from aiohttp import web
+from libs.shared.security_headers import security_headers_middleware
 
 from src.service import AnomalyService
 
@@ -8,6 +9,7 @@ class HealthServer:
     def __init__(self, service: AnomalyService):
         self.service = service
         self.app = web.Application()
+        self.app.middlewares.append(security_headers_middleware())
         self.app.router.add_get("/health", self.health_handler)
         self.app.router.add_get("/metrics", self.metrics_handler)
         self.runner = None

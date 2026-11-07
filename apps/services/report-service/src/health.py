@@ -19,6 +19,7 @@ from aiohttp import web
 from libs.access.errors import AccessError, InvalidTokenError
 from libs.access.rbac import cross_tenant_allowed
 from libs.access.security import JwtService, TokenPayload
+from libs.shared.security_headers import security_headers_middleware
 
 from src.service import RENDERABLE_TYPES, ReportService
 
@@ -28,6 +29,7 @@ class ReportServer:
         self.service = service
         self.jwt = jwt
         self.app = web.Application()
+        self.app.middlewares.append(security_headers_middleware())
         self.app.router.add_get("/health", self.health_handler)
         self.app.router.add_get("/metrics", self.metrics_handler)
         self.app.router.add_post("/api/v1/reports/generate", self.generate_handler)
