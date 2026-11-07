@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import time
 
+import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-import jwt
 
 from libs.access.errors import InvalidTokenError
 from libs.access.security import (
