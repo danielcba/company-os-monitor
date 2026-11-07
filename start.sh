@@ -102,12 +102,25 @@ source "$ROOT/.env" || die "failed to parse $ROOT/.env (check for invalid syntax
 set +a
 
 # Fail closed on .env.example placeholders: a template value is public and
-# forgeable, so the stack must not start with it (JwtService rejects it too,
-# this stops everything before containers are created).
-case "${JWT_SECRET_KEY:-}${JWT_PRIVATE_KEY:-}${JWT_PUBLIC_KEY:-}" in
-  *REPLACE-WITH*|*replace-with*|*CHANGE-ME*|*change-me*|*"..."*)
-    die "ERROR: JWT_SECRET_KEY/JWT_PRIVATE_KEY/JWT_PUBLIC_KEY in .env is still a .env.example placeholder. Generate a real secret (openssl rand -hex 32) and retry." ;;
-esac
+# forgeable, so the stack must not start with it. JwtService rejects JWT
+# placeholders too; we stop even earlier for the datastore credentials.
+_placeholder_case() {
+  case "$1" in
+    *REPLACE-WITH*|*replace-with*|*CHANGE-ME*|*change-me*|*YOUR-SECRET*|*"..."*)
+      return 0 ;;
+    esac
+  return 1
+}
+
+if _placeholder_case "${JWT_SECRET_KEY:-}" || _placeholder_case "${JWT_PRIVATE_KEY:-}" || _placeholder_case "${JWT_PUBLIC_KEY:-}"; then
+  die "ERROR: JWT_SECRET_KEY/JWT_PRIVATE_KEY/JWT_PUBLIC_KEY in .env is still a .env.example placeholder. Generate a real secret (openssl rand -hex 32) and retry."
+fi
+if _placeholder_case "${POSTGRES_PASSWORD:-}"; then
+  die "ERROR: POSTGRES_PASSWORD in .env is still a .env.example placeholder. Generate a strong password and retry."
+fi
+if _placeholder_case "${REDIS_PASSWORD:-}"; then
+  die "ERROR: REDIS_PASSWORD in .env is still a .env.example placeholder. Generate a strong password and retry."
+fi
 
 # Host-side processes reach the containers through the published ports. If the
 # env points at container-internal hostnames (redis://redis:6379 or
