@@ -10,6 +10,7 @@ from libs.learning.confidence import ConfidenceStore
 from libs.perception.evidence import EvidenceStore
 from libs.reasoning.evaluation import EvaluationStore
 from libs.reasoning.hypothesis import HypothesisStore
+from libs.shared.security_headers import security_headers_middleware
 
 from src.health import HealthServer
 from src.service import EvaluationService
@@ -51,6 +52,7 @@ async def run_service() -> None:
 
     health = HealthServer(service)
     app = web.Application()
+    app.middlewares.append(security_headers_middleware())
     health.add_routes(app)
 
     runner = web.AppRunner(app)

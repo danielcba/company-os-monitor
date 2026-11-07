@@ -3,6 +3,7 @@ import os
 from datetime import UTC, datetime
 
 from aiohttp import web
+from libs.shared.security_headers import security_headers_middleware
 
 from src.collector import WindowsCollector
 
@@ -14,6 +15,7 @@ class HealthServer:
         self.error_count = 0
         self.capture_count = 0
         self.app = web.Application()
+        self.app.middlewares.append(security_headers_middleware())
         self.app.router.add_get("/health", self.health_handler)
         self.app.router.add_get("/metrics", self.metrics_handler)
         self.runner = None
