@@ -13,7 +13,7 @@ import time
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from jose import jwt
+import jwt
 
 from libs.access.errors import InvalidTokenError
 from libs.access.security import (

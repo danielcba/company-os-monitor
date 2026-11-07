@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from jose import jwt as jose_jwt
+import jwt as jose_jwt
 
 from libs.access.errors import InvalidTokenError
 
