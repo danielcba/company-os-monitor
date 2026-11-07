@@ -177,17 +177,13 @@ jobs:
 
       - name: Dependency audit (SCA)
         # Policy: fail the job on any known vulnerability in the installed
-        # environment. Documented exceptions (no fixed release available):
-        # - PYSEC-2026-1325 (ecdsa 0.19.2, transitive via python-jose),
-        #   as of 2026-10-02.
-        # - PYSEC-2026-4298 (python-jose 3.5.0, algorithm confusion guard
-        #   bypassed by DER-encoded public keys); 3.5.0 is the latest release
-        #   and has no patched version as of 2026-11-06.
-        # Remove each exception when a fix ships. Complements Dependabot
-        # (alerts + update PRs) with an execution gate.
+        # environment. No exceptions currently required: python-jose and its
+        # transitive ecdsa were removed by the PyJWT migration (2.15.1 is
+        # clean per pip-audit). Re-add a documented exception here only when a
+        # vulnerability has no fixed release.
         run: |
           pip install "pip-audit==2.10.1"
-          pip-audit --ignore-vuln PYSEC-2026-1325 --ignore-vuln PYSEC-2026-4298
+          pip-audit
 
       - name: Upload coverage
         # Informational only: coverage upload is NOT a release gate.
