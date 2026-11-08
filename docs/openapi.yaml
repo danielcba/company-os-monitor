@@ -1,0 +1,822 @@
+openapi: 3.1.0
+info:
+  title: COS-Monitor API
+  version: 0.1.2
+  description: |
+    API del gateway de COS-Monitor (Company OS Monitor). Expone las capacidades
+    cognitivas de la plataforma (Perception → Reasoning → Confidence → Action)
+    como un conjunto de recursos REST, tenant-scoped, protegidos por JWT.
+
+    Esta especificación sigue OpenAPI 3.1.0. Todos los endpoints bajo
+    `/api/v1` requieren autenticación Bearer JWT salvo los de bootstrap de
+    agentes (register/heartbeat) y `/health`.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+  contact:
+    name: Daniel Córdoba
+    email: daniel.e.cordoba@gmail.com
+tags:
+  - name: Health
+    description: Sondeo operativo (loopback) del gateway.
+  - name: Auth
+    description: Autenticación y emisión de tokens (humano y máquina).
+  - name: Agents
+    description: Ciclo de vida de agentes de observación (ADR-0005).
+  - name: Telemetry
+    description: Ingesta de telemetría (observaciones) desde agentes.
+  - name: Cognitive
+    description: Recursos cognitivos del pipeline (observations, evidence, contexts, patterns, anomalies, hypotheses, confidence, recommendations, decisions, reports, insights, memory).
+  - name: Actions
+    description: Acciones administrativas de seguridad/reset.
+servers:
+  - url: http://localhost:8100
+    description: Gateway local (loopback)
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: Sondeo de salud del gateway
+      responses:
+        "200":
+          description: Gateway operativo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [Health]
+      summary: Métricas operativas del gateway
+      responses:
+        "200":
+          description: Métricas en formato texto
+          content:
+            text/plain:
+              schema:
+                type: string
+  /api/v1/services/health:
+    get:
+      operationId: getServicesHealth
+      tags: [Health]
+      summary: Salud de todos los servicios del pipeline
+      responses:
+        "200":
+          description: Estado de servicios
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicesHealthResponse'
+  /api/v1/auth/machine/token:
+    post:
+      operationId: machineToken
+      tags: [Auth]
+      summary: Intercambia token de registro/refresh por access+refresh (ADR-0005)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MachineTokenRequest'
+      responses:
+        "200":
+          description: Tokens emitidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/agents/instance/register:
+    post:
+      operationId: agentRegister
+      tags: [Agents]
+      summary: Registra una instalación de agente (ADR-0005)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRegisterRequest'
+      responses:
+        "201":
+          description: Instalación registrada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  installation_id:
+                    type: string
+                    format: uuid
+                  registration_token:
+                    type: string
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/agents/instance/heartbeat:
+    post:
+      operationId: agentHeartbeat
+      tags: [Agents]
+      summary: Heartbeat de agente (ADR-0005)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                installation_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Heartbeat aceptado
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/agents/instance/{instance_id}:
+    delete:
+      operationId: agentStop
+      tags: [Agents]
+      summary: Detiene una instancia de agente
+      parameters:
+        - $ref: '#/components/parameters/InstanceId'
+      responses:
+        "204":
+          description: Instancia detenida
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+  /api/v1/telemetry/ingest:
+    post:
+      operationId: telemetryIngest
+      tags: [Telemetry]
+      summary: Ingesta de telemetría (observaciones) desde agentes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryIngestRequest'
+      responses:
+        "200":
+          description: Ingesta aceptada (idempotente)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: boolean
+                    example: true
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/observations:
+    get:
+      operationId: listObservations
+      tags: [Cognitive]
+      summary: Lista observaciones de un tenant
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: fact_type
+          in: query
+          schema: { type: string }
+        - name: source_type
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Página de observaciones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservationsPage'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/tenants/{tenant_id}/decisions:
+    get:
+      operationId: listDecisions
+      tags: [Cognitive]
+      summary: Lista decisiones commiteadas de un tenant
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Página de decisiones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionsPage'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/tenants/{tenant_id}/decisions/{decision_id}:
+    get:
+      operationId: getDecisionDetail
+      tags: [Cognitive]
+      summary: Detalle de una decisión (con desglose)
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/DecisionId'
+      responses:
+        "200":
+          description: Detalle de decisión
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionDetail'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+  /api/v1/tenants/{tenant_id}/decisions/{decision_id}/outcomes:
+    post:
+      operationId: submitDecisionOutcomes
+      tags: [Cognitive]
+      summary: Registra outcomes reales de una decisión (P7)
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/DecisionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actual_outcomes:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        "200":
+          description: Outcomes registrados
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/decisions/{decision_id}/execution:
+    post:
+      operationId: executeDecision
+      tags: [Cognitive]
+      summary: Marca la ejecución de una decisión
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/DecisionId'
+      responses:
+        "200":
+          description: Ejecución registrada
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/reports:
+    get:
+      operationId: listReports
+      tags: [Cognitive]
+      summary: Lista reportes de un tenant
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        "200":
+          description: Página de reportes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Report'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/cognitive/summary:
+    get:
+      operationId: cognitiveSummary
+      tags: [Cognitive]
+      summary: Resumen de conteos cognitivos por tenant
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        "200":
+          description: Resumen cognitivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CognitiveSummary'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/audit:
+    get:
+      operationId: listAudit
+      tags: [Cognitive]
+      summary: Traza de auditoría (Episodic Memory)
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        "200":
+          description: Eventos de auditoría
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/insights:
+    get:
+      operationId: listInsights
+      tags: [Cognitive]
+      summary: Lista insights de un tenant
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        "200":
+          description: Insights
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/insights/{insight_id}:
+    get:
+      operationId: getInsightDetail
+      tags: [Cognitive]
+      summary: Detalle de un insight
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: insight_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detalle de insight
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/recommendations/{recommendation_id}:
+    get:
+      operationId: getRecommendationDetail
+      tags: [Cognitive]
+      summary: Detalle de una recomendación
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: recommendation_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Detalle de recomendación
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/cognitive-trace/report/{report_id}:
+    get:
+      operationId: cognitiveTraceReport
+      tags: [Cognitive]
+      summary: Traza cognitiva de un reporte
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: report_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Traza cognitiva
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/cognitive-timeline:
+    get:
+      operationId: cognitiveTimeline
+      tags: [Cognitive]
+      summary: Timeline de eventos cognitivos
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        "200":
+          description: Timeline
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/memory:
+    get:
+      operationId: learningMemory
+      tags: [Cognitive]
+      summary: Libro mayor de memoria (learning memory ledger)
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        "200":
+          description: Ledger de memoria
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: learningMemoryPersist
+      tags: [Cognitive]
+      summary: Persiste una señal de aprendizaje (append-only, P7)
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Señal persistida
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/memory/consolidation:
+    get:
+      operationId: consolidation
+      tags: [Cognitive]
+      summary: Señales de consolidación de memoria
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        "200":
+          description: Consolidación
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/patterns/refinement:
+    get:
+      operationId: patternRefinement
+      tags: [Cognitive]
+      summary: Recomendaciones de refinamiento de patrones (P4)
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        "200":
+          description: Refinamiento
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/contexts/revision:
+    get:
+      operationId: contextRevision
+      tags: [Cognitive]
+      summary: Recomendaciones de revisión de contextos (P2)
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        "200":
+          description: Revisión de contextos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/tenants/{tenant_id}/insights/transformations:
+    get:
+      operationId: insightTransformations
+      tags: [Cognitive]
+      summary: Journal de transformaciones de insights (P4)
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      responses:
+        "200":
+          description: Transformaciones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/actions/{action}:
+    post:
+      operationId: adminAction
+      tags: [Actions]
+      summary: Acción administrativa (reset_credentials, revoke_sessions, etc.)
+      parameters:
+        - $ref: '#/components/parameters/Action'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Acción ejecutada
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantId:
+      name: tenant_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    DecisionId:
+      name: decision_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InstanceId:
+      name: instance_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Action:
+      name: action
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [reset_credentials, revoke_sessions, enable_mfa, block_ip, isolate_host, rotate_keys]
+  responses:
+    Unauthorized:
+      description: Token inválido, vencido o ausente
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: invalid token
+    Forbidden:
+      description: Acceso denegado (tenant/rol no autorizado)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: forbidden
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: not found
+  schemas:
+    ServicesHealthResponse:
+      type: object
+      properties:
+        services:
+          type: array
+          items:
+            type: object
+            properties:
+              service:
+                type: string
+              url:
+                type: string
+              status:
+                type: integer
+              healthy:
+                type: boolean
+    MachineTokenRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+        credential_id:
+          type: string
+        installation_id:
+          type: string
+      required: [refresh_token]
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+    AgentRegisterRequest:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        credential_id:
+          type: string
+        hostname:
+          type: string
+        agent_type:
+          type: string
+      required: [tenant_id, credential_id]
+    TelemetryIngestRequest:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          format: uuid
+        source_id:
+          type: string
+          format: uuid
+        batch_id:
+          type: string
+        samples:
+          type: array
+          items:
+            type: object
+      required: [tenant_id, source_id, samples]
+    ObservationsPage:
+      type: object
+      properties:
+        observations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Observation'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        facets:
+          type: object
+    Observation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        source_id:
+          type: string
+          format: uuid
+        source_type:
+          type: string
+        fact_type:
+          type: string
+        fact_value:
+          type: object
+        unit:
+          type: string
+        captured_at:
+          type: string
+          format: date-time
+        quality_class:
+          type: string
+          enum: [Q1, Q2, Q3, Q4]
+    DecisionsPage:
+      type: object
+      properties:
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Decision'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        facets:
+          type: object
+    Decision:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        commitment:
+          type: string
+        expected_outcomes:
+          type: array
+          items:
+            type: object
+        risk_tolerance:
+          type: string
+        status:
+          type: string
+        outcome_status:
+          type: string
+          enum: [pending, corroborated, contradicted, inconclusive]
+        committed_at:
+          type: string
+          format: date-time
+    DecisionDetail:
+      type: object
+      properties:
+        decision:
+          $ref: '#/components/schemas/Decision'
+        recommendation:
+          type: object
+          nullable: true
+        confidence:
+          type: object
+          nullable: true
+    CognitiveSummary:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        totals:
+          type: object
+        status:
+          type: object
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        report_type:
+          type: string
+          enum: [executive, technical, json]
+        title:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        file_path:
+          type: string
+          nullable: true
