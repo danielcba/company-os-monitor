@@ -110,3 +110,27 @@ python3 scripts/backup/verify_restore.py \
   ya soporta el basebackup físico, listo para ese paso.
 - El cifrado depende de la **passphrase**; si se pierde, los backups son
   irrecuperables. Guardarla en un gestor de secretos.
+
+---
+
+## 9. Alineación con ISO/IEC 27001 / 27002
+
+El módulo de backup implementa, a nivel técnico, los controles de seguridad de
+la información de ISO/IEC 27001/27002 relevantes al respaldo. Esta alineación
+es una base para el camino hacia la certificación (item #29 del roadmap del
+proyecto), que además requiere un SGSI formal y auditoría externa.
+
+| Control ISO/IEC 27002 | Requisito | Implementación en este módulo |
+|---|---|---|
+| **A.12.3.1** | Respaldo de la información; restauración probada | `run_backup.py` + `verify_restore.py` (verifica que el backup es restorable) |
+| **A.10.1.1** | Cifrado de la información en reposo | AES-256 (`openssl enc -aes-256-cbc -pbkdf2`) sobre cada artefacto |
+| **A.12.4.1** | Registro de eventos / trazabilidad | Manifiesto SHA-256 por corrida + registro de artefactos |
+| **A.17.1.2** | Disponibilidad y continuidad | Regla 3-2-1, retención, y procedimiento de DRP (sección 7) |
+| **A.8.2** | Clasificación y manejo de la información | Integración con `docs/secrets-management.md` (passphrases, secretos) |
+| **A.12.3.1 / A.17.1.3** | Recuperación verificada | `verify_restore.py` (prueba real de descifrado + legibilidad) |
+
+**Nota sobre certificación:** la compatibilidad técnica de este módulo no
+constituye por sí sola una certificación ISO 27001. La certificación requiere
+un Sistema de Gestión de Seguridad de la Información (SGSI) documentado,
+auditoría externa por un organismo certificador, evidencia de operación
+consistente y mejora continua. Este documento es el punto de partida técnico.
