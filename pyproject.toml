@@ -44,7 +44,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["libs"]
-include = ["cognitive_core*", "perception*", "reasoning*", "learning*", "action*", "procedural_memory*", "access*"]
+include = ["cognitive_core*", "perception*", "reasoning*", "learning*", "action*", "procedural_memory*", "access*", "storage*"]
 
 [tool.ruff]
 line-length = 100
@@ -61,6 +61,9 @@ select = ["E", "F", "I", "UP", "B", "BLE", "C4", "SIM", "T20", "PTH", "ERA", "PL
 "apps/gateway/api-gateway/src/service.py" = ["BLE001", "S110"]
 "tests/telemetry/*" = ["PLC0415", "PLR2004", "I001"]
 "libs/telemetry/ingest_service.py" = ["TRY003"]
+"libs/storage/backup/*" = ["TRY003", "PTH118", "E731", "E501"]
+"scripts/backup/*" = ["T201", "TRY003", "PTH118"]
+"tests/shared/test_backup.py" = ["T201"]
 
 [tool.mypy]
 python_version = "3.11"
