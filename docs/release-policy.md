@@ -73,11 +73,13 @@ tag is never created before CI passes on the final release commit.
 
 ## Licensing
 
-`LICENSE STATUS = OWNER DECISION REQUIRED`. No license file exists in this
-repository, and selecting a license is an owner (legal) decision — this policy
-does not select one and does not create one. The release policy above does not
-mandate a license file; a license decision remains an owner requirement before
-any external distribution that requires one.
+`LICENSE STATUS = DECIDED`. El repositorio está licenciado bajo
+**Apache License 2.0** (`Apache-2.0`, archivo `LICENSE`). La elección fue una
+decisión del dueño (journal D45 / `docs/license-executive-summary.md`). Esta
+política no impone cambios; únicamente registra el identificador SPDX decidido
+(`Apache-2.0`). Un cambio futuro de licencia sería una nueva decisión del dueño
+que debe quedar documentada, y requiere actualizar el archivo `LICENSE` y los
+avisos de copyright en el código.
 
 ## Related documents
 
