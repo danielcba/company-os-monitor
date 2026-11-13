@@ -39,6 +39,7 @@ async def main():
     from libs.access.token_blacklist import TokenBlacklist
     from libs.action.decision import DecisionStore
     from libs.action.report import ReportStore
+    from libs.integrations.sap.finance import AssetFinanceStore
     from libs.memory.cognitive_timeline import CognitiveTimelineStore
     from libs.memory.consolidation import ConsolidationStore
     from libs.memory.context_revision import ContextRevisionStore
@@ -241,6 +242,44 @@ async def main():
     )
     await learning_loop_store.verify_connection()
 
+    # SAP R/3 integration (Fase 4): orchestrator + posting log store wired to
+    # the gateway. External non-canonical capability (ADR-0002). The gateway is
+    # configured with the mock gateway unless a real RFC config is present — in
+    # production the mock is never used (factory fail-closed).
+    from libs.integrations.sap.sap_bridge import SapBridge, SapPostingLogStore
+    from libs.integrations.sap.sap_gateway import (
+        SapConfig,
+        build_sap_gateway,
+    )
+    from libs.integrations.sap.sap_orchestrator import SapOrchestrator
+
+    _env = os.getenv("APP_ENV", "production")
+    _sap_mock = os.getenv("SAP_MOCK", "").lower() in ("1", "true", "yes")
+    _sap_config = SapConfig(
+        rfc_destination=os.getenv("SAP_RFC_DESTINATION", ""),
+        ashost=os.getenv("SAP_ASHOST", ""),
+        sysnr=os.getenv("SAP_SYSNR", "00"),
+        client=os.getenv("SAP_CLIENT", "000"),
+        posting_user=os.getenv("SAP_POSTING_USER", ""),
+        request_timeout_s=float(os.getenv("SAP_TIMEOUT_S", "30")),
+    )
+    _sap_gateway = build_sap_gateway(
+        config=_sap_config, environment=_env, mock=_sap_mock
+    )
+    _sap_posting_log_store = SapPostingLogStore(dsn)
+    _sap_bridge = SapBridge(
+        gateway=_sap_gateway,
+        finance_store=AssetFinanceStore(dsn),
+        posting_log_store=_sap_posting_log_store,
+        gateway_kind="mock" if _sap_mock else "rfc",
+    )
+    _sap_orchestrator = SapOrchestrator(
+        decision_store=decision_store,
+        bridge=_sap_bridge,
+        posting_log_store=_sap_posting_log_store,
+    )
+    await _sap_posting_log_store.verify_connection()
+
     service = GatewayService(
         jwt,
         decision_store=decision_store,
@@ -264,6 +303,8 @@ async def main():
         blacklist=blacklist,
         confidence_store=confidence_store,
         machine_jwt=machine_jwt,
+        sap_orchestrator=_sap_orchestrator,
+        sap_posting_log_store=_sap_posting_log_store,
     )
     server = GatewayServer(service, jwt, machine_jwt=machine_jwt)
 

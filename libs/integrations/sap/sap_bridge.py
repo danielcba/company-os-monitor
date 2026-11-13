@@ -147,6 +147,16 @@ SELECT_POSTING_BY_KEY = text(
     """
 )
 
+SELECT_POSTINGS_FOR_TENANT = text(
+    """
+    SELECT id, tenant_id, posting_key, decision_id, gateway_kind, outcome,
+           reference, message, posted_at
+    FROM sap_posting_log
+    WHERE tenant_id = :tenant_id
+    ORDER BY posted_at, id
+    """
+)
+
 
 class SapPostingLogStore:
     """Append-only store for ``sap_posting_log`` (idempotent, tenant-scoped).
@@ -225,6 +235,16 @@ class SapPostingLogStore:
                 {"tenant_id": tenant_id, "posting_key": posting_key},
             )
             return result.mappings().one_or_none() is not None
+
+    async def list_for_tenant(
+        self, *, tenant_id: uuid.UUID
+    ) -> list[dict[str, Any]]:
+        """Read the posting log for a tenant (audit, read-only)."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                SELECT_POSTINGS_FOR_TENANT, {"tenant_id": tenant_id}
+            )
+            return [dict(row) for row in result.mappings()]
 
     async def verify_connection(self) -> None:
         async with self._engine.connect() as conn:

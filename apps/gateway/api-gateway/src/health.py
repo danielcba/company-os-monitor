@@ -34,6 +34,7 @@ from libs.access.errors import (
 )
 from libs.access.rbac import RISK_TOLERANCES
 from libs.access.security import JwtService, MachineJwtService, TokenPayload
+from pydantic import ValidationError
 
 from src.boundary import BoundaryViolationError
 from src.constants import VALID_ACTIONS, VALID_COGNITIVE_CONCEPTS, VALID_COGNITIVE_LAYERS
@@ -134,6 +135,14 @@ class GatewayServer:
         self.app.router.add_post(
             "/api/v1/tenants/{tenant_id}/decisions/{decision_id}/execution",
             self.decision_execution_handler,
+        )
+        self.app.router.add_post(
+            "/api/v1/tenants/{tenant_id}/sap/postings",
+            self.sap_postings_handler,
+        )
+        self.app.router.add_get(
+            "/api/v1/tenants/{tenant_id}/sap/postings",
+            self.sap_postings_list_handler,
         )
         self.app.router.add_post(
             "/api/v1/auth/machine/token", self.machine_token_handler
@@ -689,6 +698,39 @@ class GatewayServer:
             )
             decisions = await self.service.list_decisions(token, tenant_id)
             return web.json_response({"decisions": decisions})
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        except AccessError as exc:
+            return web.json_response({"error": str(exc)}, status=403)
+        except Exception:  # noqa: BLE001 - surface as API error
+            self.service.total_errors += 1
+            return web.json_response({"error": "Internal server error"}, status=500)
+
+    async def sap_postings_handler(self, request):
+        try:
+            token = await self._authenticate(request)
+            self.service.record(action="execute:sap_postings")
+            tenant_id = await self._validate_tenant_id(request.match_info["tenant_id"])
+            body = await request.json()
+            result = await self.service.post_sap_postings(token, tenant_id, body)
+            return web.json_response(result)
+        except InvalidTokenError as exc:
+            return web.json_response({"error": str(exc)}, status=401)
+        except AccessError as exc:
+            return web.json_response({"error": str(exc)}, status=403)
+        except ValidationError as exc:
+            return web.json_response({"error": "Invalid request payload", "details": exc.errors()}, status=422)
+        except Exception:  # noqa: BLE001 - surface as API error
+            self.service.total_errors += 1
+            return web.json_response({"error": "Internal server error"}, status=500)
+
+    async def sap_postings_list_handler(self, request):
+        try:
+            token = await self._authenticate(request)
+            self.service.record(action="read:sap_postings")
+            tenant_id = await self._validate_tenant_id(request.match_info["tenant_id"])
+            rows = await self.service.list_sap_postings(token, tenant_id)
+            return web.json_response({"postings": rows})
         except InvalidTokenError as exc:
             return web.json_response({"error": str(exc)}, status=401)
         except AccessError as exc:

@@ -125,6 +125,8 @@ class GatewayService:
         learning_loop_store: LearningLoopStoreProtocol | None = None,
         execution_store: LearningExecutionStore | None = None,
         machine_jwt: MachineJwtService | None = None,
+        sap_orchestrator: Any | None = None,
+        sap_posting_log_store: Any | None = None,
     ):
         self.jwt = jwt
         self.machine_jwt = machine_jwt
@@ -157,6 +159,8 @@ class GatewayService:
             learning_loop_store
         )
         self._execution_store: LearningExecutionStore | None = execution_store
+        self._sap_orchestrator = sap_orchestrator
+        self._sap_posting_log_store = sap_posting_log_store
         self._dsn = dsn
         self.service_health = service_health or dict(DEFAULT_SERVICE_HEALTH)
         self.blacklist = blacklist
@@ -334,6 +338,45 @@ class GatewayService:
             tenant_id=uuid.UUID(ctx.effective_tenant_id)
         )
         return [_report_payload(r) for r in reports]
+
+    async def post_sap_postings(
+        self, token: TokenPayload, tenant_id: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Authorize and orchestrate a batch of SAP postings (execute, R5)."""
+        if self._sap_orchestrator is None:
+            raise RuntimeError("sap orchestrator not configured in gateway")
+        # R5: execution requires the `execute` permission + tenant scope.
+        self.require_authorized(
+            token=token, action="execute", requested_tenant_id=tenant_id
+        )
+        ctx = self._resolve_tenant(token, tenant_id)
+        effective_tenant = uuid.UUID(ctx.effective_tenant_id)
+
+        from libs.integrations.sap.sap_orchestrator import (
+            SapPostRequestBatch,
+        )
+
+        batch = SapPostRequestBatch.model_validate(body)
+        # authority for audit = the authenticated user identity (TokenPayload).
+        authority_id = uuid.UUID(str(token.user_id)) if token.user_id else uuid.uuid4()
+        return await self._sap_orchestrator.process(
+            tenant_id=effective_tenant,
+            requests=batch.requests,
+            authority_id=authority_id,
+        )
+
+    async def list_sap_postings(
+        self, token: TokenPayload, tenant_id: str
+    ) -> list[Any]:
+        """Read SAP posting log within tenant scope (read, R5)."""
+        if self._sap_orchestrator is None:
+            raise RuntimeError("sap orchestrator not configured in gateway")
+        self.require_authorized(
+            token=token, action="read", requested_tenant_id=tenant_id
+        )
+        ctx = self._resolve_tenant(token, tenant_id)
+        effective_tenant = uuid.UUID(ctx.effective_tenant_id)
+        return await self._sap_orchestrator.list_postings(tenant_id=effective_tenant)
 
     async def list_audit_logs(
         self,

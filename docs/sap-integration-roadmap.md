@@ -89,6 +89,19 @@ La fuente de verdad ya existe en `company-os/decisions/decisions.md`:
 
 **Verificación:** 8 tests del bridge (ActionExecutor conformance, fail-closed sin contexto/rate, post+commit, rollback en fallo, idempotencia). Suite SAP completa **46/46 PASSED** (con DB). Corrida amplia **652 PASSED 0 fallos**. ruff/mypy/bandit limpios. Migración `sap-posting-log.sql` idempotente real.
 
+### Fase 4 — Orquestador + Endpoint (diseño aprobado e implementado, 2026-11-12)
+
+**Qué:** `SapOrchestrator` + endpoints seguros en el gateway.
+
+- `SapOrchestrator` (`libs/integrations/sap/sap_orchestrator.py`): lee Decisions `committed` (R4), valida, arma `SapPostContext` explícito, invoca `SapBridge`, recolecta resultados por request.
+- Endpoints en el gateway:
+  - `POST /api/v1/tenants/{tenant_id}/sap/postings` — dispara el procesamiento (autorización `execute`, R5).
+  - `GET /api/v1/tenants/{tenant_id}/sap/postings` — auditoría (lectura).
+- Instanciación en `main.py` con factory fail-closed (`APP_ENV`/`SAP_MOCK`).
+- `SapPostingLogStore.list_for_tenant` agregado.
+
+**Verificación:** 2 tests orquestador + gateway. Suite SAP+gateway **56/56 PASSED**; corrida amplia **662 PASSED 0 fallos**; ruff/mypy/bandit limpios.
+
 ### Fase 4 — Configuración, seguridad y calidad
 
 - Secretos SAP (`RFC_CLIENT`, `RFC_USER`, `RFC_PASSWD`, destination) solo vía `.env` → secretos (fail-closed, patrón existente).

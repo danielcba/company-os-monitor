@@ -33,6 +33,11 @@ from libs.integrations.sap.sap_gateway import (
     SapResult,
     build_sap_gateway,
 )
+from libs.integrations.sap.sap_orchestrator import (
+    SapOrchestrator,
+    SapPostRequest,
+    SapPostRequestBatch,
+)
 
 __all__ = [
     "AssetFinanceCreate",
@@ -45,8 +50,11 @@ __all__ = [
     "SapBridge",
     "SapConfig",
     "SapGateway",
+    "SapOrchestrator",
     "SapOutcome",
     "SapPostContext",
+    "SapPostRequest",
+    "SapPostRequestBatch",
     "SapPostingLogRecord",
     "SapPostingLogStore",
     "SapResult",
